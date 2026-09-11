@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- ĐỔI: tên trang (ngắn, cụ thể) và mô tả 1 câu -->
+<title>Tên trang</title>
+<meta name="description" content="Mô tả một câu về trang.">
+<meta property="og:title" content="Tên trang">
+<meta property="og:description" content="Mô tả một câu về trang.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📘</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;1,400&family=Literata:ital,opsz,wght@0,7..72,500;0,7..72,600;1,7..72,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* ===== DESIGN TOKENS: giữ nguyên, xem AI-HANDOFF.md mục 4 ===== */
+:root{
+  --ground:#F3F5F9; --surface:#FFFFFF; --ink:#141B2D; --muted:#586174; --faint:#7A8398;
+  --rule:#DCE1EB; --rule-strong:#B8C1D3;
+  --accent:#2346B0; --accent-soft:#E7ECFA; --on-accent:#FFFFFF;
+  --red:#C0302F; --red-soft:#FBEBEA; --green:#1B7A4B; --green-soft:#E2F2E9;
+  --hl:#FFE594;
+  --f-body:"Be Vietnam Pro","Segoe UI",system-ui,sans-serif;
+  --f-disp:"Literata","Cambria",Georgia,serif;
+  --f-mono:"JetBrains Mono","Cascadia Mono",Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E121A; --surface:#161B26; --ink:#E4E8F1; --muted:#9BA4B6; --faint:#7D869A;
+    --rule:#262E3F; --rule-strong:#3A4458;
+    --accent:#95ABFF; --accent-soft:#1C2542; --on-accent:#0E121A;
+    --red:#FF8B80; --red-soft:#3A1F23; --green:#6ED29B; --green-soft:#15302A;
+    --hl:#5A4912; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E121A; --surface:#161B26; --ink:#E4E8F1; --muted:#9BA4B6; --faint:#7D869A;
+  --rule:#262E3F; --rule-strong:#3A4458;
+  --accent:#95ABFF; --accent-soft:#1C2542; --on-accent:#0E121A;
+  --red:#FF8B80; --red-soft:#3A1F23; --green:#6ED29B; --green-soft:#15302A;
+  --hl:#5A4912; color-scheme:dark;
+}
+
+/* ===== NỀN TẢNG ===== */
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.65;padding-inline:20px;padding-block:0 64px}
+i{font-family:var(--f-disp);font-style:italic}
+sub{font-size:.7em;line-height:0}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+main{max-width:780px;margin:0 auto}
+header{padding-block:48px 8px}
+.eyebrow{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+.eyebrow a{color:inherit;text-underline-offset:3px}
+h1{font-family:var(--f-disp);font-weight:600;font-size:clamp(34px,6vw,46px);line-height:1.1;margin:0 0 16px;text-wrap:balance}
+.lede{font-size:18px;color:var(--muted);max-width:62ch;margin:0}
+h2{font-family:var(--f-disp);font-weight:600;font-size:28px;line-height:1.2;margin:0 0 6px;text-wrap:balance}
+h3{font-size:17px;font-weight:600;margin:28px 0 8px}
+section{padding-top:56px}
+section > p{max-width:66ch}
+p{margin:0 0 12px}
+
+/* ===== COMPONENT CƠ BẢN ===== */
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:18px 20px;overflow-x:auto}
+.callout{border-left:3px solid var(--red);background:var(--red-soft);padding:12px 16px;border-radius:0 8px 8px 0;margin:18px 0;font-size:15px;max-width:66ch}
+.callout.info{border-color:var(--accent);background:var(--accent-soft)}
+.scroll{overflow-x:auto}
+table.data{border-collapse:collapse;width:100%;font-size:15px;background:var(--surface);border:1px solid var(--rule)}
+table.data th,table.data td{padding:9px 14px;text-align:left;border-bottom:1px solid var(--rule)}
+table.data th{font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--ground)}
+footer{margin-top:64px;padding-top:18px;border-top:1px solid var(--rule);font-size:13.5px;color:var(--faint)}
+footer p{margin:0 0 6px}
+@media (max-width:680px){ body{padding-inline:16px} }
+/* Cần hệ ràng buộc, bảng đơn hình, bài tập có lời giải… thì copy CSS tương ứng
+   từ toi-uu-hoa/doi-ngau/index.html (xem AI-HANDOFF.md mục 4). */
+</style>
+</head>
+<body>
+<main>
+<header>
+  <!-- ĐỔI: đường dẫn "../../" trỏ về trang chủ hub (2 cấp thư mục) -->
+  <p class="eyebrow"><a href="../../">Lơpie Hub</a> / Nhóm · Môn · Chương</p>
+  <h1>Tên trang</h1>
+  <p class="lede">Một đến hai câu: trang này giúp làm được gì.</p>
+</header>
+
+<section id="phan-1">
+  <h2>Phần 1</h2>
+  <p>Nội dung…</p>
+  <div class="callout info"><b>Lưu ý.</b> Hộp nhấn mạnh thông tin quan trọng.</div>
+</section>
+
+<footer>
+  <!-- ĐỔI: nguồn nội dung, AI đã làm, ngày -->
+  <p>Nguồn: …</p>
+  <p>Làm bởi [Tên AI] · cập nhật [dd/mm/yyyy]</p>
+</footer>
+</main>
+</body>
+</html>
