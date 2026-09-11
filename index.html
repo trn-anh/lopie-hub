@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lơpie Hub</title>
+<meta name="description" content="Kho trang học tập và dự án của Lơpie, làm cùng nhiều AI, có lịch sử sửa trên GitHub.">
+<meta property="og:title" content="Lơpie Hub">
+<meta property="og:description" content="Kho trang học tập và dự án của Lơpie, làm cùng nhiều AI.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Literata:opsz,wght@7..72,500;7..72,600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* ===== Design tokens: dùng chung cho mọi trang trong hub (xem AI-HANDOFF.md) ===== */
+:root{
+  --ground:#F3F5F9; --surface:#FFFFFF; --ink:#141B2D; --muted:#586174; --faint:#7A8398;
+  --rule:#DCE1EB; --rule-strong:#B8C1D3;
+  --accent:#2346B0; --accent-soft:#E7ECFA; --on-accent:#FFFFFF;
+  --red:#C0302F; --green:#1B7A4B;
+  --f-body:"Be Vietnam Pro","Segoe UI",system-ui,sans-serif;
+  --f-disp:"Literata","Cambria",Georgia,serif;
+  --f-mono:"JetBrains Mono","Cascadia Mono",Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E121A; --surface:#161B26; --ink:#E4E8F1; --muted:#9BA4B6; --faint:#7D869A;
+    --rule:#262E3F; --rule-strong:#3A4458;
+    --accent:#95ABFF; --accent-soft:#1C2542; --on-accent:#0E121A;
+    --red:#FF8B80; --green:#6ED29B; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E121A; --surface:#161B26; --ink:#E4E8F1; --muted:#9BA4B6; --faint:#7D869A;
+  --rule:#262E3F; --rule-strong:#3A4458;
+  --accent:#95ABFF; --accent-soft:#1C2542; --on-accent:#0E121A;
+  --red:#FF8B80; --green:#6ED29B; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.6;padding-inline:20px;padding-block:0 64px}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:860px;margin:0 auto}
+header{padding-block:64px 12px;display:grid;gap:14px}
+.eyebrow{font-family:var(--f-mono);font-size:12.5px;letter-spacing:.04em;color:var(--muted);margin:0}
+h1{font-family:var(--f-disp);font-weight:600;font-size:clamp(38px,7vw,56px);line-height:1.05;margin:0;letter-spacing:-.015em}
+.lede{font-size:18px;color:var(--muted);max-width:60ch;margin:0}
+.stats{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:14px;color:var(--muted);margin-top:4px}
+.stats b{font-family:var(--f-mono);color:var(--ink);font-weight:600}
+h2{font-family:var(--f-disp);font-weight:600;font-size:24px;margin:0 0 4px}
+section{padding-top:48px}
+.sub{color:var(--muted);margin:0 0 16px;font-size:15px}
+
+.pages{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--rule);border-radius:12px;overflow:hidden}
+.page{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 24px;padding:18px 20px;border-bottom:1px solid var(--rule)}
+.page:last-child{border-bottom:none}
+.page.soon{background:var(--ground)}
+.page-group{font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);font-weight:600}
+.page h3{margin:2px 0 4px;font-size:19px;font-weight:600;line-height:1.3}
+.page h3 a{color:var(--ink);text-decoration:none;background-image:linear-gradient(var(--accent),var(--accent));background-size:0 1.5px;background-position:0 100%;background-repeat:no-repeat;transition:background-size .2s}
+.page h3 a:hover{background-size:100% 1.5px}
+.page.soon h3{color:var(--muted)}
+.page p{margin:0;color:var(--muted);font-size:15px;max-width:58ch}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.tag{font-size:12.5px;padding:2px 8px;border-radius:999px;background:var(--accent-soft);color:var(--ink)}
+.meta{text-align:right;font-family:var(--f-mono);font-size:12.5px;color:var(--muted);white-space:nowrap;display:grid;gap:4px;align-content:start}
+.who{display:inline-flex;align-items:center;gap:6px;justify-self:end}
+.who::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.page.soon .who::before{background:var(--rule-strong)}
+.links{font-family:var(--f-body);font-size:13px}
+@media (prefers-reduced-motion: reduce){.page h3 a{transition:none}}
+
+ol.flow{list-style:none;margin:0;padding:0;counter-reset:f;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+ol.flow li{counter-increment:f;background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:16px 18px;font-size:15px}
+ol.flow li::before{content:counter(f);display:grid;place-items:center;width:26px;height:26px;border-radius:6px;background:var(--accent-soft);color:var(--accent);font-family:var(--f-mono);font-weight:600;font-size:13px;margin-bottom:10px}
+ol.flow b{display:block;margin-bottom:4px}
+ol.flow span{color:var(--muted)}
+code{font-family:var(--f-mono);font-size:.88em;background:var(--accent-soft);padding:1px 5px;border-radius:4px}
+
+footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);font-size:14px;color:var(--faint);display:flex;flex-wrap:wrap;gap:8px 20px;justify-content:space-between}
+@media (max-width:680px){
+  body{padding-inline:16px}
+  header{padding-top:40px}
+  .page{grid-template-columns:minmax(0,1fr)}
+  .meta{text-align:left;grid-auto-flow:column;justify-content:start;gap:14px}
+  .who{justify-self:start}
+  ol.flow{grid-template-columns:minmax(0,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <p class="eyebrow">trn-anh.github.io/lopie-hub</p>
+  <h1>Lơpie Hub</h1>
+  <p class="lede">Kho trang học tập và dự án làm cùng nhiều AI. Mỗi trang là một file HTML tự chạy; mọi lần sửa đều được lưu kèm tên AI đã làm trong lịch sử GitHub.</p>
+  <div class="stats"><span><b>1</b> trang đang có</span><span>Cập nhật gần nhất <b>11/09/2026</b></span><span><a href="https://github.com/trn-anh/lopie-hub/blob/main/CHANGELOG.md">Nhật ký thay đổi</a></span></div>
+</header>
+
+<section aria-labelledby="h-pages">
+  <h2 id="h-pages">Các trang</h2>
+  <p class="sub">Chấm xanh là trang đã có. Chấm xám là trang dự kiến làm tiếp.</p>
+  <ul class="pages">
+    <li class="page">
+      <div>
+        <div class="page-group">Học tập · Tối ưu hóa</div>
+        <h3><a href="toi-uu-hoa/doi-ngau/">Sổ tay Bài toán đối ngẫu</a></h3>
+        <p>Quy tắc dấu khi lập (D), định lý độ lệch bù, giải mẫu Câu 1 đề cuối kỳ, bẫy mất điểm và máy tập lập (D) có chấm tự động.</p>
+        <div class="tags"><span class="tag">Chương 2</span><span class="tag">Máy tập</span><span class="tag">3 đề có lời giải</span></div>
+      </div>
+      <div class="meta">
+        <span class="who">Claude</span>
+        <span>11/09/2026</span>
+        <span class="links"><a href="https://github.com/trn-anh/lopie-hub/commits/main/toi-uu-hoa/doi-ngau">Lịch sử sửa</a></span>
+      </div>
+    </li>
+    <li class="page soon">
+      <div>
+        <div class="page-group">Học tập · Tối ưu hóa</div>
+        <h3>Bài toán vận tải</h3>
+        <p>Cân bằng thu phát, ô giả, ô cấm, thuật toán thế vị. Câu 2 của đề cuối kỳ.</p>
+      </div>
+      <div class="meta"><span class="who">Dự kiến</span></div>
+    </li>
+    <li class="page soon">
+      <div>
+        <div class="page-group">Học tập · Tối ưu hóa</div>
+        <h3>Bài toán sản xuất đồng bộ</h3>
+        <p>Thuật toán điều chỉnh nhân tử, lấy 2 chữ số thập phân. Câu 3 của đề cuối kỳ.</p>
+      </div>
+      <div class="meta"><span class="who">Dự kiến</span></div>
+    </li>
+  </ul>
+</section>
+
+<section aria-labelledby="h-flow">
+  <h2 id="h-flow">Nhờ AI sửa hoặc thêm trang</h2>
+  <p class="sub">Áp dụng cho Claude, Gemini, ChatGPT hay bất kỳ AI nào.</p>
+  <ol class="flow">
+    <li><b>Đưa bối cảnh trước</b><span>Gửi AI file <code>AI-HANDOFF.md</code> cùng file trang cần sửa, lấy bản mới nhất từ repo.</span></li>
+    <li><b>Lưu kèm tên AI</b><span>Commit theo mẫu <code>[Gemini] sửa: …</code> để lịch sử ghi rõ ai làm gì.</span></li>
+    <li><b>Ghi nhật ký</b><span>Thêm một dòng vào <code>CHANGELOG.md</code>. Trang mới thì thêm vào danh sách trên trang chủ.</span></li>
+  </ol>
+</section>
+
+<footer>
+  <span>Lơpie · HCMUTE</span>
+  <span><a href="https://github.com/trn-anh/lopie-hub">Mã nguồn trên GitHub</a></span>
+</footer>
+</div>
+</body>
+</html>
