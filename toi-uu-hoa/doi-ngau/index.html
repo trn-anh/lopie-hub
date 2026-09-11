@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sổ tay Bài toán Đối ngẫu</title>
+<meta name="description" content="Sổ tay học bài toán đối ngẫu môn Tối ưu hóa: quy tắc dấu, định lý độ lệch bù, giải đề mẫu, bẫy mất điểm và máy tập lập (D).">
+<meta property="og:title" content="Sổ tay Bài toán Đối ngẫu">
+<meta property="og:description" content="Quy tắc dấu, định lý độ lệch bù, giải đề mẫu và máy tập lập bài toán đối ngẫu.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔁</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Literata:ital,opsz,wght@0,7..72,500;0,7..72,600;1,7..72,400;1,7..72,500&family=JetBrains+Mono:wght@400;600&family=Caveat:wght@600&display=swap">
+<style>
+:root{
+  --ground:#F3F5F9; --surface:#FFFFFF; --ink:#141B2D; --muted:#586174; --faint:#7A8398;
+  --rule:#DCE1EB; --rule-strong:#B8C1D3;
+  --accent:#2346B0; --accent-soft:#E7ECFA; --on-accent:#FFFFFF;
+  --red:#C0302F; --red-soft:#FBEBEA; --green:#1B7A4B; --green-soft:#E2F2E9;
+  --hl:#FFE594; --grid:rgba(35,70,176,.075);
+  --f-body:"Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+  --f-disp:"Literata", "Cambria", Georgia, serif;
+  --f-mono:"JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+  --f-pen:"Caveat", "Comic Sans MS", cursive;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E121A; --surface:#161B26; --ink:#E4E8F1; --muted:#9BA4B6; --faint:#7D869A;
+    --rule:#262E3F; --rule-strong:#3A4458;
+    --accent:#95ABFF; --accent-soft:#1C2542; --on-accent:#0E121A;
+    --red:#FF8B80; --red-soft:#3A1F23; --green:#6ED29B; --green-soft:#15302A;
+    --hl:#5A4912; --grid:rgba(149,171,255,.06);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E121A; --surface:#161B26; --ink:#E4E8F1; --muted:#9BA4B6; --faint:#7D869A;
+  --rule:#262E3F; --rule-strong:#3A4458;
+  --accent:#95ABFF; --accent-soft:#1C2542; --on-accent:#0E121A;
+  --red:#FF8B80; --red-soft:#3A1F23; --green:#6ED29B; --green-soft:#15302A;
+  --hl:#5A4912; --grid:rgba(149,171,255,.06);
+}
+*{box-sizing:border-box}
+body{margin:0}
+img{max-width:100%}
+.crumb{color:inherit;text-underline-offset:3px}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{background:var(--ground);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.65;padding-inline:20px;padding-block:0 64px}
+i{font-family:var(--f-disp);font-style:italic}
+sub{font-size:.7em;line-height:0}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.wrap{max-width:1120px;margin:0 auto;display:grid;grid-template-columns:190px minmax(0,1fr);gap:56px}
+.toc{position:sticky;top:0;align-self:start;padding-top:48px}
+.toc p{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin:0 0 10px}
+.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:2px;counter-reset:t}
+.toc li{counter-increment:t}
+.toc a{display:flex;gap:10px;text-decoration:none;color:var(--muted);font-size:14px;padding:5px 8px;border-radius:6px}
+.toc a::before{content:counter(t);font-family:var(--f-mono);font-size:12px;color:var(--faint);width:12px;padding-top:2px}
+.toc a:hover{background:var(--accent-soft);color:var(--ink)}
+main{max-width:780px;min-width:0}
+
+header{padding-block:48px 8px}
+.eyebrow{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+h1{font-family:var(--f-disp);font-weight:600;font-size:clamp(34px,6vw,46px);line-height:1.1;margin:0 0 16px;text-wrap:balance;letter-spacing:-.01em}
+.lede{font-size:18px;color:var(--muted);max-width:62ch;margin:0}
+h2{font-family:var(--f-disp);font-weight:600;font-size:28px;line-height:1.2;margin:0 0 6px;text-wrap:balance;display:flex;gap:14px;align-items:baseline}
+h2 .n{font-family:var(--f-mono);font-size:14px;color:var(--accent);font-weight:600;border:1px solid var(--rule-strong);border-radius:50%;width:28px;height:28px;display:inline-grid;place-items:center;flex:none;transform:translateY(-4px)}
+h3{font-size:17px;font-weight:600;margin:28px 0 8px}
+section{padding-top:56px;scroll-margin-top:8px}
+section > p, .prose{max-width:66ch}
+.sub{color:var(--muted);margin-top:0}
+p{margin:0 0 12px}
+ul,ol{padding-left:1.3em;margin:0 0 12px}
+li{margin-bottom:4px}
+strong{font-weight:600}
+
+/* points bar */
+.points{margin-top:32px;background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:18px 20px}
+.points-head{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:14px;margin-bottom:12px}
+.points-head span:last-child{color:var(--faint)}
+.bar{display:grid;grid-template-columns:1fr 2fr 1fr;gap:4px}
+.seg-b{border-radius:6px;padding:10px 12px;font-size:13.5px;line-height:1.35;background:var(--ground);color:var(--muted);border:1px solid var(--rule)}
+.seg-b b{display:block;font-family:var(--f-mono);font-size:15px;color:var(--ink);font-weight:600}
+.seg-b.dual{background:var(--accent-soft);border-color:transparent;color:var(--ink)}
+.seg-b.dual b{color:var(--accent)}
+.points p{font-size:14px;color:var(--muted);margin:12px 0 0}
+
+/* LP display */
+.lp{display:flex;gap:14px;align-items:flex-start;font-size:17px;line-height:1.5}
+.lp-label{font-family:var(--f-disp);font-weight:600;color:var(--muted);padding-top:1px;min-width:2.2em}
+.lp-main{min-width:0}
+.lp-body{display:flex;align-items:stretch;gap:4px;margin:4px 0}
+.brace{position:relative;width:10px;flex:none;color:var(--ink)}
+.brace svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.sys{border-collapse:collapse}
+.sys td{padding:1px 2px;white-space:nowrap}
+.sys td.op{text-align:center;min-width:1.1em;color:var(--ink)}
+.sys td.tm{text-align:right}
+.sys td.rl{padding-inline:8px;text-align:center}
+.sys td.rh{text-align:left}
+.lp-signs{color:var(--ink)}
+.lp-row{display:flex;flex-wrap:wrap;gap:20px 44px;align-items:flex-start}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:18px 20px;overflow-x:auto}
+.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:18px 0}
+.pair .card p{font-size:14.5px;color:var(--muted);margin-bottom:12px}
+.pair .card h4{margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:600}
+
+.facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:10px;overflow:hidden;margin:18px 0}
+.facts div{background:var(--surface);padding:14px 16px;font-size:15px}
+.facts b{display:block;font-family:var(--f-mono);font-size:13px;color:var(--accent);font-weight:600;margin-bottom:2px}
+
+dl.terms{display:grid;grid-template-columns:max-content 1fr;gap:6px 18px;margin:16px 0;font-size:15px}
+dl.terms dt{font-weight:600}
+dl.terms dd{margin:0;color:var(--muted)}
+
+/* rule table */
+.scroll{overflow-x:auto}
+table.rules{border-collapse:collapse;width:100%;font-size:15px;background:var(--surface);border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+table.rules th,table.rules td{padding:9px 14px;text-align:left;border-bottom:1px solid var(--rule)}
+table.rules thead th{font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--ground)}
+table.rules td.k{font-weight:600;white-space:nowrap}
+table.rules tr.split td{border-top:2px solid var(--rule-strong)}
+table.rules .grp{color:var(--faint);font-size:13px;font-weight:400;display:block}
+table.rules td.s{font-family:var(--f-mono);font-size:14.5px;white-space:nowrap}
+.mnemo{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
+.mnemo div{border:1px dashed var(--rule-strong);border-radius:10px;padding:12px 16px}
+.mnemo b{font-family:var(--f-disp);font-size:20px;font-weight:600;display:block;letter-spacing:.01em}
+.mnemo span{font-size:14px;color:var(--muted)}
+
+ol.steps{list-style:none;padding:0;counter-reset:s;display:grid;gap:10px;margin:16px 0}
+ol.steps > li{counter-increment:s;display:grid;grid-template-columns:30px 1fr;gap:10px;margin:0}
+ol.steps > li::before{content:counter(s);font-family:var(--f-mono);font-size:13px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:6px;height:26px;display:grid;place-items:center}
+
+table.map{border-collapse:collapse;width:100%;font-size:15px;min-width:560px}
+table.map th,table.map td{padding:8px 10px;border-bottom:1px solid var(--rule);text-align:left;vertical-align:top}
+table.map th{font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+table.map td.r{color:var(--muted);font-size:14px}
+table.map td.o{font-weight:500;white-space:nowrap}
+
+.callout{border-left:3px solid var(--red);background:var(--red-soft);padding:12px 16px;border-radius:0 8px 8px 0;margin:18px 0;font-size:15px;max-width:66ch}
+.callout.info{border-color:var(--accent);background:var(--accent-soft)}
+.callout b{font-weight:600}
+
+.thm{display:grid;gap:14px;margin:18px 0}
+.thm .card h3{margin:0 0 6px;font-family:var(--f-disp);font-size:19px}
+.thm .use{font-size:14.5px;color:var(--muted);margin:10px 0 0;padding-top:10px;border-top:1px solid var(--rule)}
+.arrows{display:grid;gap:8px;margin:12px 0 0}
+.arrow{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:baseline;background:var(--ground);border-radius:8px;padding:10px 14px}
+.arrow .tag{font-family:var(--f-mono);font-size:12px;font-weight:600;color:var(--accent)}
+.arrow.no .tag{color:var(--faint)}
+
+/* worked writing */
+.work{font-size:16.5px;line-height:1.8}
+.work .ln{display:block}
+.work .why{color:var(--muted);font-size:14px;font-family:var(--f-body)}
+.work .res{display:inline-block;margin-top:6px;padding:4px 10px;border-radius:6px;background:var(--accent-soft);font-weight:500}
+
+/* exam paper */
+.paper{position:relative;background-color:var(--surface);background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:24px 24px;border:1px solid var(--rule);border-radius:4px;padding:26px 24px;margin:18px 0}
+.paper .q{padding-bottom:18px;margin-bottom:18px;border-bottom:1px solid var(--rule)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) 64px;gap:12px;padding:12px 0}
+.step + .step{border-top:1px dashed var(--rule)}
+.step h4{margin:0 0 8px;font-size:14px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.pts{font-family:var(--f-pen);font-weight:600;color:var(--red);font-size:24px;line-height:1;text-align:right;transform:rotate(-5deg);padding-top:2px}
+.note-s{font-size:14px;color:var(--muted)}
+
+figure.tab{margin:12px 0 16px}
+figure.tab figcaption{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;font-size:13.5px;margin-bottom:6px}
+figure.tab figcaption span:first-child{font-weight:600}
+figure.tab .cap{color:var(--muted)}
+table.tableau{border-collapse:collapse;font-family:var(--f-mono);font-size:13.5px;font-variant-numeric:tabular-nums;background:var(--surface)}
+table.tableau i{font-family:var(--f-disp)}
+table.tableau th,table.tableau td{padding:4px 10px;text-align:center;border:1px solid var(--rule);white-space:nowrap}
+table.tableau th{font-weight:600;background:var(--ground)}
+table.tableau th.enter{color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
+table.tableau tr.cj td{font-size:12px;color:var(--faint);border-top:none}
+table.tableau tr.leave td:nth-child(2){color:var(--accent);font-weight:600}
+table.tableau td.pivot{background:var(--hl);font-weight:600}
+table.tableau tr.delta td{background:var(--ground)}
+table.tableau tr.delta:not(.m) td{border-top:2px solid var(--rule-strong)}
+table.tableau td.lam{color:var(--muted)}
+
+/* traps */
+.traps{display:grid;gap:0;margin:16px 0;background:var(--surface);border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+.traps h3{margin:0;padding:12px 16px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:var(--ground);border-bottom:1px solid var(--rule)}
+.trap{display:grid;grid-template-columns:62px 1fr;gap:12px;padding:11px 16px;border-bottom:1px solid var(--rule);align-items:baseline;font-size:15px}
+.trap:last-child{border-bottom:none}
+.stamp{font-family:var(--f-pen);font-weight:600;font-size:22px;line-height:1;color:var(--red);border:1.5px solid var(--red);border-radius:6px;text-align:center;padding:2px 0 1px;transform:rotate(-4deg)}
+.stamp.minus{color:var(--muted);border-color:var(--rule-strong)}
+.stamp.tip{color:var(--accent);border-color:var(--accent);font-size:18px;padding:4px 0 3px}
+
+/* trainer */
+.trainer{background:var(--surface);border:1px solid var(--rule-strong);border-radius:12px;margin:18px 0;overflow:hidden}
+.tr-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid var(--rule);background:var(--ground)}
+.tr-head strong{font-size:15px}
+.score{font-family:var(--f-mono);font-size:13px;color:var(--muted)}
+.tr-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:0}
+.tr-prob{padding:20px 18px;border-right:1px solid var(--rule);overflow-x:auto}
+.tr-prob .from{font-size:12.5px;color:var(--faint);margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em}
+.tr-form{padding:16px 18px;display:grid;gap:14px;align-content:start}
+.grp{display:grid;gap:6px}
+.grp-title{font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.q-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:15px}
+.q-row .lbl{min-width:112px}
+.q-row .lbl small{color:var(--faint);font-size:12.5px}
+.segs{display:inline-flex;border:1px solid var(--rule-strong);border-radius:8px;overflow:hidden}
+.segs button{font:inherit;font-family:var(--f-mono);font-size:14px;background:var(--surface);color:var(--ink);border:none;border-right:1px solid var(--rule-strong);padding:5px 12px;cursor:pointer;min-width:52px}
+.segs button:last-child{border-right:none}
+.segs button:hover{background:var(--accent-soft)}
+.segs button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+.mark{font-size:13.5px;font-weight:600}
+.q-row.ok .mark{color:var(--green)}
+.q-row.bad .mark{color:var(--red)}
+.q-row.bad .segs{border-color:var(--red)}
+.q-row.ok .segs{border-color:var(--green)}
+.tr-actions{display:flex;gap:10px;flex-wrap:wrap;padding-top:4px}
+.btn{font:inherit;font-size:15px;font-weight:600;padding:8px 16px;border-radius:8px;cursor:pointer;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent)}
+.btn.ghost{background:transparent;color:var(--accent)}
+.tr-result{border-top:1px solid var(--rule);padding:16px 18px;display:none}
+.tr-result.show{display:block}
+.verdict{font-weight:600;margin-bottom:10px}
+.verdict.ok{color:var(--green)}
+.verdict.bad{color:var(--red)}
+
+details.ex{background:var(--surface);border:1px solid var(--rule);border-radius:10px;margin:12px 0}
+details.ex > summary{cursor:pointer;padding:14px 18px;font-weight:600;list-style:none;display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+details.ex > summary::-webkit-details-marker{display:none}
+details.ex > summary .meta{font-weight:400;font-size:13.5px;color:var(--faint)}
+details.ex > summary::after{content:"+";font-family:var(--f-mono);color:var(--accent);font-size:18px}
+details.ex[open] > summary::after{content:"−"}
+.ex-body{padding:0 18px 18px;display:grid;gap:14px;overflow-x:auto}
+details.ans{border-top:1px dashed var(--rule-strong);padding-top:10px}
+details.ans > summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:15px}
+details.ans > div{padding-top:12px;display:grid;gap:12px}
+.ex-body h5{margin:6px 0 0;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+
+footer{margin-top:64px;padding-top:18px;border-top:1px solid var(--rule);font-size:13.5px;color:var(--faint);max-width:70ch}
+
+@media (max-width: 960px){
+  .wrap{grid-template-columns:minmax(0,1fr);gap:0}
+  .toc{position:static;padding-top:24px}
+  .toc ol{display:flex;flex-wrap:wrap;gap:4px}
+  .toc a{border:1px solid var(--rule);background:var(--surface)}
+  header{padding-top:28px}
+}
+@media (max-width: 680px){
+  body{padding-inline:16px}
+  .pair,.facts,.mnemo{grid-template-columns:minmax(0,1fr)}
+  .bar{grid-template-columns:minmax(0,1fr)}
+  .tr-body{grid-template-columns:minmax(0,1fr)}
+  .tr-prob{border-right:none;border-bottom:1px solid var(--rule)}
+  .step{grid-template-columns:minmax(0,1fr) 44px}
+  .paper{padding:18px 14px}
+  .lp{font-size:16px}
+  dl.terms{grid-template-columns:minmax(0,1fr)}
+  dl.terms dd{margin-bottom:8px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="Mục lục">
+  <p>Học theo thứ tự</p>
+  <ol>
+    <li><a href="#hieu">Đối ngẫu là gì</a></li>
+    <li><a href="#lap">Lập bài toán (D)</a></li>
+    <li><a href="#dinhly">Hai định lý</a></li>
+    <li><a href="#suy">Suy PATƯ</a></li>
+    <li><a href="#demau">Giải đề mẫu</a></li>
+    <li><a href="#bay">Bẫy mất điểm</a></li>
+    <li><a href="#luyen">Luyện tập</a></li>
+  </ol>
+</nav>
+
+<main>
+<header>
+  <p class="eyebrow"><a class="crumb" href="../../">Lơpie Hub</a> / Tối ưu hóa · MAOP230706 · Chương 2</p>
+  <h1>Bài toán đối ngẫu</h1>
+  <p class="lede">Lập (D) đúng từng dấu, dùng định lý độ lệch bù để suy nghiệm, rồi tự kiểm tra trước khi nộp. Ví dụ lấy từ bài giảng Chương 2 và các đề cuối kỳ có đáp án của môn.</p>
+
+  <div class="points">
+    <div class="points-head"><strong>Câu 1 đề cuối kỳ · 4 điểm</strong><span>theo đáp án HK2 2022–23</span></div>
+    <div class="bar">
+      <div class="seg-b dual"><b>1đ</b>a) Lập bài toán (D)</div>
+      <div class="seg-b"><b>2đ</b>Dạng chuẩn · bảng đơn hình · kết luận (P)</div>
+      <div class="seg-b dual"><b>1đ</b>Suy PATƯ của (D) · kết luận</div>
+    </div>
+    <p>Phần tô xanh là đối ngẫu: một nửa số điểm của câu, và toàn là quy tắc cố định. Đề HK1 25–26 chia khác một chút (0,5 + 0,5 + 0,5) nhưng vẫn giữ nguyên các bước này.</p>
+  </div>
+</header>
+
+<!-- 1 -->
+<section id="hieu">
+  <h2><span class="n">1</span>Đối ngẫu là gì</h2>
+  <p>Mỗi bài toán quy hoạch tuyến tính (P) có một bài toán “soi gương” (D). Hai bài dùng chung bộ số nhưng đảo vai cho nhau, nên <strong>giải xong một bài là suy ra được bài kia</strong>. Ví dụ trong bài giảng:</p>
+
+  <div class="pair">
+    <div class="card">
+      <h4>(P) · Xí nghiệp</h4>
+      <p>Có 1.970 tấn cà phê nguyên chất và 88.000 ml phụ liệu. Sản xuất cà phê A, B, C, bán 9, 11, 13 triệu/tấn. Muốn doanh thu lớn nhất.</p>
+      <div class="lp"><div class="lp-label">(P)</div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = 9<i>x</i><sub>1</sub> + 11<i>x</i><sub>2</sub> + 13<i>x</i><sub>3</sub> → max</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm">3<i>x</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">1970</td></tr><tr><td class="op"></td><td class="tm">10<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">24<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm">31<i>x</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">88000</td></tr></tbody></table></div><div class="lp-signs"><i>x</i><sub>1</sub>, <i>x</i><sub>2</sub>, <i>x</i><sub>3</sub> ≥ 0</div></div></div>
+    </div>
+    <div class="card">
+      <h4>(D) · Người mua lại nguyên liệu</h4>
+      <p>Đặt <i>y</i><sub>1</sub>, <i>y</i><sub>2</sub> là giá 1 đơn vị mỗi nguyên liệu. Người mua muốn trả ít nhất, nhưng nguyên liệu đủ làm 1 tấn A phải bán được ít nhất 9 triệu, nếu không xí nghiệp tự sản xuất sẽ lời hơn.</p>
+      <div class="lp"><div class="lp-label">(D)</div><div class="lp-main"><div class="lp-obj"><i>G</i>(<i>y</i>) = 1970<i>y</i><sub>1</sub> + 88000<i>y</i><sub>2</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">10<i>y</i><sub>2</sub></td><td class="rl">≥</td><td class="rh">9</td></tr><tr><td class="op"></td><td class="tm">2<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">24<i>y</i><sub>2</sub></td><td class="rl">≥</td><td class="rh">11</td></tr><tr><td class="op"></td><td class="tm">3<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">31<i>y</i><sub>2</sub></td><td class="rl">≥</td><td class="rh">13</td></tr></tbody></table></div><div class="lp-signs"><i>y</i><sub>1</sub>, <i>y</i><sub>2</sub> ≥ 0</div></div></div>
+    </div>
+  </div>
+
+  <p>Nhìn hai bài cạnh nhau sẽ thấy 4 điều luôn đúng:</p>
+  <div class="facts">
+    <div><b>min ⇄ max</b>(P) tìm max thì (D) tìm min, và ngược lại.</div>
+    <div><b>số ẩn ⇄ số ràng buộc</b>(P) có 2 ràng buộc chung nên (D) có 2 ẩn. (P) có 3 ẩn nên (D) có 3 ràng buộc chung.</div>
+    <div><b>hệ số mục tiêu ⇄ vế phải</b>Vế phải 1970, 88000 của (P) thành hệ số hàm mục tiêu của (D). Giá bán 9, 11, 13 thành vế phải của (D).</div>
+    <div><b>hàng ⇄ cột</b>Ma trận hệ số của (D) là chuyển vị của (P): đọc <em>cột</em> của (P) để viết <em>hàng</em> của (D).</div>
+  </div>
+
+  <dl class="terms">
+    <dt>Ràng buộc chung</dt><dd>Các dòng nằm trong dấu ngoặc {.</dd>
+    <dt>Ràng buộc biến</dt><dd>Dấu của ẩn: <i>x<sub>j</sub></i> ≥ 0, ≤ 0 hoặc k.h.c (không hạn chế).</dd>
+    <dt>Cặp ràng buộc</dt><dd>Ràng buộc chung thứ <i>i</i> của bài này đi cặp với ràng buộc biến của ẩn thứ <i>i</i> ở bài kia.</dd>
+    <dt>Lỏng / chặt</dt><dd>Thay nghiệm vào, ra bất đẳng thức thực sự (&lt; hoặc &gt;) là <strong>lỏng</strong>, ra dấu = là <strong>chặt</strong>. Áp dụng cho cả ràng buộc chung lẫn ràng buộc biến.</dd>
+  </dl>
+</section>
+
+<!-- 2 -->
+<section id="lap">
+  <h2><span class="n">2</span>Lập bài toán (D)</h2>
+  <p class="sub">Phần này sai một dấu là mất trắng điểm câu a), nên cần làm như máy.</p>
+
+  <h3>Bảng quy tắc dấu</h3>
+  <div class="scroll">
+  <table class="rules">
+    <thead><tr><th>Trong (P)</th><th>(P) min → (D) max</th><th>(P) max → (D) min</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><span class="grp">Ràng buộc chung thứ i</span>≥</td><td class="s"><i>y<sub>i</sub></i> ≥ 0</td><td class="s"><i>y<sub>i</sub></i> ≤ 0</td></tr>
+      <tr><td class="k">≤</td><td class="s"><i>y<sub>i</sub></i> ≤ 0</td><td class="s"><i>y<sub>i</sub></i> ≥ 0</td></tr>
+      <tr><td class="k">=</td><td class="s"><i>y<sub>i</sub></i> k.h.c</td><td class="s"><i>y<sub>i</sub></i> k.h.c</td></tr>
+      <tr class="split"><td class="k"><span class="grp">Ẩn thứ j</span><i>x<sub>j</sub></i> ≥ 0</td><td class="s">RB chung j: ≤</td><td class="s">RB chung j: ≥</td></tr>
+      <tr><td class="k"><i>x<sub>j</sub></i> ≤ 0</td><td class="s">RB chung j: ≥</td><td class="s">RB chung j: ≤</td></tr>
+      <tr><td class="k"><i>x<sub>j</sub></i> k.h.c</td><td class="s">RB chung j: =</td><td class="s">RB chung j: =</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="mnemo">
+    <div><b>MIN: chung cùng, biến trái</b><span>(P) min: RB chung ≥ cho <i>y</i> ≥ 0 (cùng chiều). Ẩn <i>x</i> ≥ 0 cho RB ≤ (trái chiều).</span></div>
+    <div><b>MAX: chung trái, biến cùng</b><span>(P) max: RB chung ≤ cho <i>y</i> ≥ 0 (trái chiều). Ẩn <i>x</i> ≥ 0 cho RB ≥ (cùng chiều).</span></div>
+  </div>
+  <p class="note-s">Cách nhớ thứ hai: dạng “tự nhiên” là <strong>min đi với ≥</strong> và <strong>max đi với ≤</strong>, mọi ẩn ≥ 0. Chỗ nào ở (P) ngược dạng tự nhiên thì chỗ tương ứng ở (D) cũng ngược. Dấu = luôn đi với k.h.c, không cần nhớ.</p>
+
+  <h3>Quy trình 5 bước</h3>
+  <ol class="steps">
+    <li><div><strong>Hàm mục tiêu.</strong> Đảo min ⇄ max. Hệ số là vế phải <i>b</i><sub>1</sub>, <i>b</i><sub>2</sub>, … của (P), giữ nguyên dấu.</div></li>
+    <li><div><strong>Dấu của ẩn <i>y<sub>i</sub></i>.</strong> Mỗi ràng buộc chung của (P) sinh một ẩn <i>y<sub>i</sub></i>. Tra dấu theo bảng.</div></li>
+    <li><div><strong>Vế trái ràng buộc thứ j của (D).</strong> Đọc <em>dọc</em> cột hệ số của <i>x<sub>j</sub></i> trong (P). Ô trống tính là 0. Vế phải là <i>c<sub>j</sub></i>.</div></li>
+    <li><div><strong>Chiều ràng buộc thứ j.</strong> Tra theo dấu của <i>x<sub>j</sub></i>.</div></li>
+    <li><div><strong>Soát.</strong> Đếm lại: số ẩn của (D) bằng số RB chung của (P), số RB của (D) bằng số ẩn của (P). Soát từng dấu âm trong cột.</div></li>
+  </ol>
+
+  <h3>Ví dụ 2.2 trong bài giảng</h3>
+  <div class="card"><div class="lp"><div class="lp-label">(P)</div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = 17<i>x</i><sub>1</sub> + 10<i>x</i><sub>2</sub> + 4<i>x</i><sub>3</sub> → max</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm">3<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm">7<i>x</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">20</td></tr><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">5<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="rl">≥</td><td class="rh">0</td></tr><tr><td class="op"></td><td class="tm">4<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">3<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="rl">=</td><td class="rh">40</td></tr></tbody></table></div><div class="lp-signs"><i>x</i><sub>1</sub> ≤ 0; <i>x</i><sub>2</sub> k.h.c; <i>x</i><sub>3</sub> ≥ 0</div></div></div></div>
+  <div class="scroll" style="margin-top:12px">
+  <table class="map">
+    <thead><tr><th>Trong (P) max</th><th>Quy tắc</th><th>Ra trong (D) min</th></tr></thead>
+    <tbody>
+      <tr><td>RB 1: … ≤ 20</td><td class="r">chung trái dấu</td><td class="o"><i>y</i><sub>1</sub> ≥ 0</td></tr>
+      <tr><td>RB 2: … ≥ 0</td><td class="r">chung trái dấu</td><td class="o"><i>y</i><sub>2</sub> ≤ 0</td></tr>
+      <tr><td>RB 3: … = 40</td><td class="r">= đi với k.h.c</td><td class="o"><i>y</i><sub>3</sub> k.h.c</td></tr>
+      <tr><td><i>x</i><sub>1</sub> ≤ 0 · cột (3, 1, 4) · <i>c</i><sub>1</sub> = 17</td><td class="r">biến cùng dấu</td><td class="o">3<i>y</i><sub>1</sub> + <i>y</i><sub>2</sub> + 4<i>y</i><sub>3</sub> ≤ 17</td></tr>
+      <tr><td><i>x</i><sub>2</sub> k.h.c · cột (1, 5, 3) · <i>c</i><sub>2</sub> = 10</td><td class="r">k.h.c đi với =</td><td class="o"><i>y</i><sub>1</sub> + 5<i>y</i><sub>2</sub> + 3<i>y</i><sub>3</sub> = 10</td></tr>
+      <tr><td><i>x</i><sub>3</sub> ≥ 0 · cột (7, 1, 1) · <i>c</i><sub>3</sub> = 4</td><td class="r">biến cùng dấu</td><td class="o">7<i>y</i><sub>1</sub> + <i>y</i><sub>2</sub> + <i>y</i><sub>3</sub> ≥ 4</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="card" style="margin-top:12px"><div class="lp"><div class="lp-label">(D)</div><div class="lp-main"><div class="lp-obj"><i>G</i>(<i>y</i>) = 20<i>y</i><sub>1</sub> + 40<i>y</i><sub>3</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm">3<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm">4<i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">17</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">5<i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm">3<i>y</i><sub>3</sub></td><td class="rl">=</td><td class="rh">10</td></tr><tr><td class="op"></td><td class="tm">7<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>3</sub></td><td class="rl">≥</td><td class="rh">4</td></tr></tbody></table></div><div class="lp-signs"><i>y</i><sub>1</sub> ≥ 0; <i>y</i><sub>2</sub> ≤ 0; <i>y</i><sub>3</sub> k.h.c</div></div></div></div>
+  <p class="note-s" style="margin-top:8px">Vế phải RB 2 bằng 0 nên <i>y</i><sub>2</sub> không có mặt trong hàm mục tiêu. Viết thêm “+ 0<i>y</i><sub>2</sub>” cũng không sai.</p>
+
+  <div class="callout"><b>Luôn lập (D) từ đề gốc (P).</b> Không lập từ dạng chuẩn, tức là sau khi đã nhân −1 hay thêm ẩn phụ, ẩn giả. Nhân −1 làm đổi dấu cả hàng, kéo theo sai hết phần suy nghiệm.</div>
+</section>
+
+<!-- 3 -->
+<section id="dinhly">
+  <h2><span class="n">3</span>Hai định lý</h2>
+  <div class="thm">
+    <div class="card">
+      <h3>Định lý đối ngẫu 1</h3>
+      <p>(P) có PATƯ khi và chỉ khi (D) có PATƯ, và giá trị tối ưu của hai bài bằng nhau: <strong><i>f</i>(<i>x</i>*) = <i>G</i>(<i>y</i>*)</strong>.</p>
+      <p class="use"><strong>Dùng để tự kiểm tra.</strong> Tìm xong <i>y</i>*, thay vào <i>G</i>(<i>y</i>). Kết quả phải bằng đúng <i>f</i>(<i>x</i>*); lệch là có chỗ sai.</p>
+    </div>
+    <div class="card">
+      <h3>Định lý đối ngẫu 2 · độ lệch bù yếu</h3>
+      <p><i>x</i>* và <i>y</i>* là PATƯ khi và chỉ khi chúng là phương án, và trong mọi cặp ràng buộc, <strong>ràng buộc này lỏng thì ràng buộc kia phải chặt</strong>.</p>
+      <p style="margin:10px 0 0">Khi làm bài, định lý này chỉ dùng qua hai mũi tên:</p>
+      <div class="arrows">
+        <div class="arrow"><span class="tag">DÙNG ĐƯỢC</span><span><i>x<sub>j</sub></i>* &gt; 0 ⇒ ràng buộc chung thứ <i>j</i> của (D) <strong>chặt</strong>: viết thành phương trình “=”.</span></div>
+        <div class="arrow"><span class="tag">DÙNG ĐƯỢC</span><span>Thay <i>x</i>* vào ràng buộc chung thứ <i>i</i> của (P), thấy <strong>lỏng</strong> (&lt; hoặc &gt; thật sự) ⇒ <i>y<sub>i</sub></i>* = 0.</span></div>
+        <div class="arrow no"><span class="tag">KHÔNG SUY RA GÌ</span><span><i>x<sub>j</sub></i>* = 0; ràng buộc chung thay vào ra chặt; ràng buộc vốn là dấu “=”.</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 -->
+<section id="suy">
+  <h2><span class="n">4</span>Suy PATƯ của (D) từ (P)</h2>
+  <ol class="steps">
+    <li><div><strong>Xét các ẩn.</strong> Mỗi <i>x<sub>j</sub></i>* &gt; 0 cho một phương trình: ràng buộc thứ <i>j</i> của (D) lấy dấu “=”.</div></li>
+    <li><div><strong>Xét các ràng buộc.</strong> Thay <i>x</i>* vào từng ràng buộc bất đẳng thức của (P) và ghi rõ phép tính. Ràng buộc nào lỏng thì <i>y<sub>i</sub></i>* = 0.</div></li>
+    <li><div><strong>Giải hệ</strong> vừa lập, kết luận <strong>cả</strong> <i>y</i>* <strong>lẫn</strong> <i>G</i>(<i>y</i>*).</div></li>
+  </ol>
+
+  <h3>Ví dụ 7 trong bài giảng: cho sẵn <i>x</i>* = (4, 0, 2), <i>f</i>(<i>x</i>*) = 34</h3>
+  <div class="lp-row card"><div class="lp"><div class="lp-label">(P)</div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = 6<i>x</i><sub>1</sub> + 2<i>x</i><sub>2</sub> + 5<i>x</i><sub>3</sub> → max</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm">2<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">3<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">10</td></tr><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">6</td></tr><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm">5<i>x</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">19</td></tr></tbody></table></div><div class="lp-signs"><i>x</i><sub>1</sub>, <i>x</i><sub>2</sub>, <i>x</i><sub>3</sub> ≥ 0</div></div></div><div class="lp"><div class="lp-label">(D)</div><div class="lp-main"><div class="lp-obj"><i>G</i>(<i>y</i>) = 10<i>y</i><sub>1</sub> + 6<i>y</i><sub>2</sub> + 19<i>y</i><sub>3</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm">2<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>3</sub></td><td class="rl">≥</td><td class="rh">6</td></tr><tr><td class="op"></td><td class="tm">3<i>y</i><sub>1</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm">2<i>y</i><sub>3</sub></td><td class="rl">≥</td><td class="rh">2</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm">5<i>y</i><sub>3</sub></td><td class="rl">≥</td><td class="rh">5</td></tr></tbody></table></div><div class="lp-signs"><i>y</i><sub>1</sub>, <i>y</i><sub>2</sub>, <i>y</i><sub>3</sub> ≥ 0</div></div></div></div>
+  <div class="card work" style="margin-top:12px">
+    <span class="ln"><span class="why">Áp dụng định lý độ lệch bù yếu:</span></span>
+    <span class="ln"><i>x</i><sub>1</sub> = 4 &gt; 0 ⇒ 2<i>y</i><sub>1</sub> + <i>y</i><sub>2</sub> + <i>y</i><sub>3</sub> = 6 &nbsp;(1)</span>
+    <span class="ln"><i>x</i><sub>3</sub> = 2 &gt; 0 ⇒ <i>y</i><sub>1</sub> + <i>y</i><sub>2</sub> + 5<i>y</i><sub>3</sub> = 5 &nbsp;(2)</span>
+    <span class="ln"><span class="why">RB 1:</span> 2·4 + 3·0 + 2 = 10 <span class="why">→ chặt, không suy ra gì</span></span>
+    <span class="ln"><span class="why">RB 2:</span> 4 + 2 = 6 <span class="why">→ chặt, không suy ra gì</span></span>
+    <span class="ln"><span class="why">RB 3:</span> 4 + 2·0 + 5·2 = 14 &lt; 19 ⇒ <i>y</i><sub>3</sub> = 0 &nbsp;(3)</span>
+    <span class="ln"><span class="why">Giải (1), (2), (3):</span> <span class="res"><i>y</i>* = (1; 4; 0), &nbsp;<i>G</i>(<i>y</i>*) = 10·1 + 6·4 = 34</span></span>
+  </div>
+
+  <div class="callout info"><b>Kiểm tra trong 20 giây.</b> (a) <i>y</i>* có đúng dấu không (ở đây mọi <i>y</i> ≥ 0)? (b) Thay vào RB chưa dùng: 3·1 + 2·0 = 3 ≥ 2, thỏa. (c) <i>G</i>(<i>y</i>*) = 34 = <i>f</i>(<i>x</i>*). Đủ ba điều thì yên tâm.</div>
+
+  <h3>Khi hệ thiếu phương trình (Ví dụ 10)</h3>
+  <p>Có lúc số phương trình ít hơn số ẩn. Đặt một ẩn làm tham số, rồi dùng dấu của <i>y</i> và các ràng buộc còn lại của (D) để chặn tham số.</p>
+  <div class="lp-row card"><div class="lp"><div class="lp-label">(P)</div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = 6<i>x</i><sub>1</sub> + 3<i>x</i><sub>2</sub> + <i>x</i><sub>3</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm">2<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">5<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">10</td></tr><tr><td class="op"></td><td class="tm">4<i>x</i><sub>1</sub></td><td class="op">−</td><td class="tm">3<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>3</sub></td><td class="rl">≥</td><td class="rh">16</td></tr><tr><td class="op"></td><td class="tm">2<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">4<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="rl">=</td><td class="rh">8</td></tr></tbody></table></div><div class="lp-signs"><i>x</i><sub>1</sub>, <i>x</i><sub>2</sub>, <i>x</i><sub>3</sub> ≥ 0</div></div></div><div class="lp"><div class="lp-label">(D)</div><div class="lp-main"><div class="lp-obj"><i>G</i>(<i>y</i>) = 10<i>y</i><sub>1</sub> + 16<i>y</i><sub>2</sub> + 8<i>y</i><sub>3</sub> → max</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm">2<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">4<i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm">2<i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">6</td></tr><tr><td class="op"></td><td class="tm">5<i>y</i><sub>1</sub></td><td class="op">−</td><td class="tm">3<i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm">4<i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">3</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">1</td></tr></tbody></table></div><div class="lp-signs"><i>y</i><sub>1</sub> ≤ 0; <i>y</i><sub>2</sub> ≥ 0; <i>y</i><sub>3</sub> k.h.c</div></div></div></div>
+  <div class="card work" style="margin-top:12px">
+    <span class="ln"><span class="why">Cho <i>x</i>* = (0; 0; 8), <i>f</i> = 8.</span></span>
+    <span class="ln"><i>x</i><sub>3</sub> = 8 &gt; 0 ⇒ <i>y</i><sub>1</sub> + 2<i>y</i><sub>2</sub> + <i>y</i><sub>3</sub> = 1</span>
+    <span class="ln"><span class="why">RB 1:</span> 8 &lt; 10 ⇒ <i>y</i><sub>1</sub> = 0 &nbsp;&nbsp;<span class="why">RB 2:</span> 16 = 16 <span class="why">→ chặt</span> &nbsp;&nbsp;<span class="why">RB 3 là “=”</span></span>
+    <span class="ln"><span class="why">2 phương trình, 3 ẩn → đặt</span> <i>y</i><sub>2</sub> = <i>a</i> ⇒ <i>y</i><sub>3</sub> = 1 − 2<i>a</i></span>
+    <span class="ln"><span class="why">Chặn <i>a</i>:</span> <i>y</i><sub>2</sub> ≥ 0 ⇒ <i>a</i> ≥ 0; &nbsp;RB 2 của (D): −3<i>a</i> + 4(1 − 2<i>a</i>) ≤ 3 ⇒ <i>a</i> ≥ 1/11; &nbsp;RB 1 của (D) luôn bằng 2 ≤ 6</span>
+    <span class="ln"><span class="res"><i>y</i>* = (0; <i>a</i>; 1 − 2<i>a</i>) với <i>a</i> ≥ 1/11, &nbsp;<i>G</i>(<i>y</i>*) = 8</span></span>
+  </div>
+  <p class="note-s" style="margin-top:8px">Các đề cuối kỳ gần đây đều ra hệ có nghiệm duy nhất. Gặp trường hợp này thì cứ làm như trên, đừng hoảng.</p>
+
+  <h3>Chiều ngược: giải (D) trước rồi suy (P)</h3>
+  <p>Đề HK1 24–25 hỏi theo kiểu này. Vẫn là hai mũi tên đó, chỉ đổi vai: <strong><i>y<sub>i</sub></i>* ≠ 0 ⇒ RB chung thứ <i>i</i> của (P) chặt</strong>; thay <i>y</i>* vào RB thứ <i>j</i> của (D) thấy <strong>lỏng ⇒ <i>x<sub>j</sub></i>* = 0</strong>.</p>
+  <div class="lp-row card"><div class="lp"><div class="lp-label">(P)</div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = 12<i>x</i><sub>1</sub> + 9<i>x</i><sub>2</sub> + 10<i>x</i><sub>3</sub> + 8<i>x</i><sub>4</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm">3<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>4</sub></td><td class="rl">≤</td><td class="rh">15</td></tr><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>3</sub></td><td class="op">+</td><td class="tm">3<i>x</i><sub>4</sub></td><td class="rl">=</td><td class="rh">10</td></tr><tr><td class="op"></td><td class="tm">2<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>3</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>4</sub></td><td class="rl">≥</td><td class="rh">12</td></tr></tbody></table></div><div class="lp-signs"><i>x</i><sub>1</sub>, <i>x</i><sub>2</sub>, <i>x</i><sub>3</sub>, <i>x</i><sub>4</sub> ≥ 0</div></div></div><div class="lp"><div class="lp-label">(D)</div><div class="lp-main"><div class="lp-obj"><i>G</i>(<i>y</i>) = 15<i>y</i><sub>1</sub> + 10<i>y</i><sub>2</sub> + 12<i>y</i><sub>3</sub> → max</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm">3<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm">2<i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">12</td></tr><tr><td class="op"></td><td class="tm">2<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">9</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm">2<i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">10</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">3<i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">8</td></tr></tbody></table></div><div class="lp-signs"><i>y</i><sub>1</sub> ≤ 0; <i>y</i><sub>2</sub> k.h.c; <i>y</i><sub>3</sub> ≥ 0</div></div></div></div>
+  <div class="card work" style="margin-top:12px">
+    <span class="ln"><span class="why">Giải (D) được <i>y</i>* = (0; −2; 7), <i>G</i> = 64.</span></span>
+    <span class="ln"><i>y</i><sub>3</sub> = 7 ≠ 0 ⇒ 2<i>x</i><sub>1</sub> + <i>x</i><sub>2</sub> + 2<i>x</i><sub>3</sub> + <i>x</i><sub>4</sub> = 12 &nbsp;<span class="why">(<i>y</i><sub>2</sub> ≠ 0 cho RB 2, vốn đã là “=”)</span></span>
+    <span class="ln"><span class="why">RB 2 (D):</span> 2·0 + 2·(−2) + 7 = 3 &lt; 9 ⇒ <i>x</i><sub>2</sub> = 0</span>
+    <span class="ln"><span class="why">RB 4 (D):</span> 0 + 3·(−2) + 7 = 1 &lt; 8 ⇒ <i>x</i><sub>4</sub> = 0</span>
+    <span class="ln"><span class="why">Còn:</span> <i>x</i><sub>1</sub> + 2<i>x</i><sub>3</sub> = 10 và 2<i>x</i><sub>1</sub> + 2<i>x</i><sub>3</sub> = 12</span>
+    <span class="ln"><span class="res"><i>x</i>* = (2; 0; 4; 0), &nbsp;<i>f</i>(<i>x</i>*) = 24 + 40 = 64</span></span>
+  </div>
+</section>
+
+<!-- 5 -->
+<section id="demau">
+  <h2><span class="n">5</span>Giải đề mẫu</h2>
+  <p class="sub">Câu 1, đề cuối kỳ HK2 2022–23 (đại trà), trình bày theo đáp án của cô. Số đỏ bên lề là điểm từng phần.</p>
+
+  <div class="paper">
+    <div class="q"><div class="lp"><div class="lp-label">(P)</div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = 2<i>x</i><sub>1</sub> + 4<i>x</i><sub>2</sub> + 3<i>x</i><sub>3</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">−</td><td class="tm">2<i>x</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">12</td></tr><tr><td class="op"></td><td class="tm">2<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>3</sub></td><td class="rl">=</td><td class="rh">5</td></tr><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">16</td></tr></tbody></table></div><div class="lp-signs"><i>x</i><sub>1</sub>, <i>x</i><sub>2</sub>, <i>x</i><sub>3</sub> ≥ 0</div></div></div><p class="note-s" style="margin-top:10px">a) Lập bài toán đối ngẫu (D). &nbsp;b) Dùng phương pháp đơn hình giải (P), từ đó suy ra kết quả của (D).</p></div>
+
+    <div class="step"><div><h4>a) Bài toán đối ngẫu</h4><div class="lp"><div class="lp-label">(D)</div><div class="lp-main"><div class="lp-obj"><i>g</i>(<i>y</i>) = 12<i>y</i><sub>1</sub> + 5<i>y</i><sub>2</sub> + 16<i>y</i><sub>3</sub> → max</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">2</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">4</td></tr><tr><td class="op"></td><td class="tm">−2<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm">2<i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">3</td></tr></tbody></table></div><div class="lp-signs"><i>y</i><sub>1</sub> ≤ 0; <i>y</i><sub>2</sub> k.h.c; <i>y</i><sub>3</sub> ≤ 0</div></div></div>
+      <p class="note-s" style="margin-top:8px">(P) min: RB 1 “≤” ⇒ <i>y</i><sub>1</sub> ≤ 0; RB 2 “=” ⇒ <i>y</i><sub>2</sub> k.h.c; RB 3 “≤” ⇒ <i>y</i><sub>3</sub> ≤ 0. Mọi <i>x</i> ≥ 0 ⇒ RB của (D) là “≤”.</p></div><div class="pts">1đ</div></div>
+
+    <div class="step"><div><h4>b) Dạng chuẩn</h4><div class="lp"><div class="lp-label"></div><div class="lp-main"><div class="lp-obj"><i>F</i>(<i>x</i>) = 2<i>x</i><sub>1</sub> + 4<i>x</i><sub>2</sub> + 3<i>x</i><sub>3</sub> + M<i>x</i><sub>6</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">−</td><td class="tm">2<i>x</i><sub>3</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>4</sub></td><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"></td><td class="rl">=</td><td class="rh">12</td></tr><tr><td class="op"></td><td class="tm">2<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>3</sub></td><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>x</i><sub>6</sub></td><td class="rl">=</td><td class="rh">5</td></tr><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>3</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>x</i><sub>5</sub></td><td class="op"></td><td class="tm"></td><td class="rl">=</td><td class="rh">16</td></tr></tbody></table></div><div class="lp-signs"><i>x<sub>j</sub></i> ≥ 0, &nbsp;j = 1, …, 6</div><div class="note-s" style="margin-top:4px">Ẩn phụ: <i>x</i><sub>4</sub>, <i>x</i><sub>5</sub> · Ẩn giả: <i>x</i><sub>6</sub> · M là số dương rất lớn</div></div></div>
+      <p class="note-s" style="margin-top:8px">Ẩn phụ <i>x</i><sub>4</sub>, <i>x</i><sub>5</sub> có hệ số 0 trong hàm mục tiêu. Ẩn giả <i>x</i><sub>6</sub> có hệ số +M vì bài min.</p></div><div class="pts">0,25đ</div></div>
+
+    <div class="step"><div><h4>Bảng đơn hình</h4><figure class="tab"><figcaption><span>Bảng xuất phát</span><span class="cap">Ẩn vào <i>x</i><sub>1</sub> · Ẩn ra <i>x</i><sub>6</sub></span></figcaption><div class="scroll"><table class="tableau"><thead><tr><th>c<sub>i</sub></th><th>Ẩn CS</th><th>b<sub>i</sub></th><th class="enter"><i>x</i><sub>1</sub></th><th><i>x</i><sub>2</sub></th><th><i>x</i><sub>3</sub></th><th><i>x</i><sub>4</sub></th><th><i>x</i><sub>5</sub></th><th>λ</th></tr><tr class="cj"><td></td><td></td><td></td><td>2</td><td>4</td><td>3</td><td>0</td><td>0</td><td></td></tr></thead><tbody><tr><td>0</td><td><i>x</i><sub>4</sub></td><td>12</td><td>1</td><td>1</td><td>−2</td><td>1</td><td>0</td><td class="lam">12</td></tr><tr class="leave"><td>M</td><td><i>x</i><sub>6</sub></td><td>5</td><td class="pivot">2</td><td>1</td><td>2</td><td>0</td><td>0</td><td class="lam">5/2</td></tr><tr><td>0</td><td><i>x</i><sub>5</sub></td><td>16</td><td>1</td><td>1</td><td>2</td><td>0</td><td>1</td><td class="lam">16</td></tr><tr class="delta"><td></td><td><i>f</i>(<i>x</i>)</td><td>0</td><td>−2</td><td>−4</td><td>−3</td><td>0</td><td>0</td><td></td></tr><tr class="delta m"><td></td><td>M</td><td>5</td><td>2</td><td>1</td><td>2</td><td>0</td><td>0</td><td></td></tr></tbody></table></div></figure><figure class="tab"><figcaption><span>Bảng 1</span><span class="cap">Mọi Δ<sub>j</sub> ≤ 0 ⇒ tối ưu</span></figcaption><div class="scroll"><table class="tableau"><thead><tr><th>c<sub>i</sub></th><th>Ẩn CS</th><th>b<sub>i</sub></th><th><i>x</i><sub>1</sub></th><th><i>x</i><sub>2</sub></th><th><i>x</i><sub>3</sub></th><th><i>x</i><sub>4</sub></th><th><i>x</i><sub>5</sub></th><th>λ</th></tr><tr class="cj"><td></td><td></td><td></td><td>2</td><td>4</td><td>3</td><td>0</td><td>0</td><td></td></tr></thead><tbody><tr><td>0</td><td><i>x</i><sub>4</sub></td><td>19/2</td><td>0</td><td>1/2</td><td>−3</td><td>1</td><td>0</td><td class="lam">–</td></tr><tr><td>2</td><td><i>x</i><sub>1</sub></td><td>5/2</td><td>1</td><td>1/2</td><td>1</td><td>0</td><td>0</td><td class="lam">–</td></tr><tr><td>0</td><td><i>x</i><sub>5</sub></td><td>27/2</td><td>0</td><td>1/2</td><td>1</td><td>0</td><td>1</td><td class="lam">–</td></tr><tr class="delta"><td></td><td><i>f</i>(<i>x</i>)</td><td>5</td><td>0</td><td>−3</td><td>−1</td><td>0</td><td>0</td><td></td></tr></tbody></table></div></figure>
+      <p class="note-s">Hàng M: <i>x</i><sub>1</sub> và <i>x</i><sub>3</sub> cùng bằng 2, nên xét tiếp hàng <i>f</i>(<i>x</i>): −2 &gt; −3, chọn <i>x</i><sub>1</sub>. Giữ nguyên thứ tự ẩn cơ sở, chỉ thay <i>x</i><sub>6</sub> bằng <i>x</i><sub>1</sub> tại đúng dòng đó.</p></div><div class="pts">1,25đ</div></div>
+
+    <div class="step"><div><h4>Kết luận (P)</h4>
+      <div class="work">
+        <span class="ln">Δ<sub>j</sub> ≤ 0 với mọi <i>j</i> ⇒ phương án đang xét là PATƯ của bài toán mở rộng:</span>
+        <span class="ln"><i>x</i>* = (5/2; 0; 0; 19/2; 27/2; 0), &nbsp;<i>F</i>(<i>x</i>*) = 5</span>
+        <span class="ln">Ẩn giả <i>x</i><sub>6</sub> = 0 ⇒ bài toán gốc có PATƯ <span class="res"><i>x</i>* = (5/2; 0; 0), &nbsp;<i>f</i>(<i>x</i>*) = 5</span></span>
+      </div></div><div class="pts">0,5đ</div></div>
+
+    <div class="step"><div><h4>Suy kết quả (D)</h4>
+      <div class="work">
+        <span class="ln"><i>x</i><sub>1</sub> = 5/2 &gt; 0 ⇒ <i>y</i><sub>1</sub> + 2<i>y</i><sub>2</sub> + <i>y</i><sub>3</sub> = 2</span>
+        <span class="ln"><span class="why">RB 1:</span> 5/2 + 0 − 0 = 5/2 &lt; 12 ⇒ <i>y</i><sub>1</sub> = 0</span>
+        <span class="ln"><span class="why">RB 3:</span> 5/2 + 0 + 0 = 5/2 &lt; 16 ⇒ <i>y</i><sub>3</sub> = 0</span>
+        <span class="ln">⇒ 2<i>y</i><sub>2</sub> = 2 ⇒ <i>y</i><sub>2</sub> = 1</span>
+      </div></div><div class="pts">0,75đ</div></div>
+
+    <div class="step"><div><h4>Kết luận (D)</h4>
+      <div class="work"><span class="ln">PATƯ của (D): <span class="res"><i>y</i>* = (0; 1; 0), &nbsp;<i>g</i>(<i>y</i>*) = 5</span> <span class="why">= <i>f</i>(<i>x</i>*), khớp định lý 1</span></span></div>
+    </div><div class="pts">0,25đ</div></div>
+  </div>
+  <p class="note-s">File đáp án gốc có một lỗi đánh máy ở RB 3 của (D), ghi “−2<i>y</i><sub>1</sub> + 2<i>y</i><sub>1</sub> + 2<i>y</i><sub>3</sub> ≤ 3”. Đúng là −2<i>y</i><sub>1</sub> + 2<i>y</i><sub>2</sub> + 2<i>y</i><sub>3</sub> ≤ 3.</p>
+</section>
+
+<!-- 6 -->
+<section id="bay">
+  <h2><span class="n">6</span>Bẫy mất điểm</h2>
+  <p class="sub">Trích file “lưu ý” của cô. Phần lớn điểm bị mất vì trình bày, không phải vì không hiểu bài.</p>
+
+  <div class="traps">
+    <h3>Bài toán đối ngẫu</h3>
+    <div class="trap"><span class="stamp">0đ</span><span>Viết (D) sai một hệ số hoặc một dấu, dù chỉ một chỗ.</span></div>
+    <div class="trap"><span class="stamp">0đ</span><span>Ghi sai mục tiêu tối ưu của (D), ví dụ (P) min mà (D) vẫn ghi min.</span></div>
+    <div class="trap"><span class="stamp minus">−đ</span><span>Chỉ ghi hệ phương trình theo <i>y</i>, không ghi các ràng buộc lỏng/chặt đã dẫn tới hệ đó.</span></div>
+    <div class="trap"><span class="stamp minus">−đ</span><span>Kết luận chỉ ghi <i>y</i>* hoặc chỉ ghi giá trị tối ưu, không ghi đủ cả hai.</span></div>
+  </div>
+
+  <div class="traps">
+    <h3>Đơn hình (phần b của Câu 1)</h3>
+    <div class="trap"><span class="stamp">0đ</span><span>Hệ số của ẩn phụ trong hàm mục tiêu ghi là 1. Đúng là 0.</span></div>
+    <div class="trap"><span class="stamp">0đ</span><span>Bài max mà hệ số ẩn giả ghi +M. Đúng: min dùng +M, max dùng −M.</span></div>
+    <div class="trap"><span class="stamp">0đ</span><span>Ghi hệ số M cho ẩn giả trong ràng buộc chung. Ở đó hệ số là 1.</span></div>
+    <div class="trap"><span class="stamp">0đ</span><span>Sắp lại ẩn cơ sở cho “đẹp” (<i>x</i><sub>6</sub>, <i>x</i><sub>7</sub>, <i>x</i><sub>8</sub> theo thứ tự tăng) ở bảng xuất phát.</span></div>
+    <div class="trap"><span class="stamp">0đ</span><span>Bỏ cột của ẩn phụ trong bảng đơn hình.</span></div>
+    <div class="trap"><span class="stamp minus">−đ</span><span>Dạng chuẩn không ghi điều kiện <i>x<sub>j</sub></i> ≥ 0 cho mọi <i>j</i>.</span></div>
+    <div class="trap"><span class="stamp minus">−đ</span><span>Kết luận thiếu điều kiện tối ưu, thiếu <i>x</i>* hoặc <i>f</i>(<i>x</i>*), hoặc chỉ ghi PATƯ của bài toán mở rộng mà không ghi PATƯ của bài toán gốc.</span></div>
+    <div class="trap"><span class="stamp minus">−đ</span><span>Bảng tối ưu không ghi đủ các giá trị.</span></div>
+  </div>
+
+  <div class="traps">
+    <h3>Lỗi hay gặp khác (không có trong file của cô)</h3>
+    <div class="trap"><span class="stamp tip">lưu ý</span><span>Lập (D) hoặc xét lỏng/chặt trên ràng buộc đã nhân −1 ở dạng chuẩn. Luôn quay về đề gốc.</span></div>
+    <div class="trap"><span class="stamp tip">lưu ý</span><span>Thấy <i>x<sub>j</sub></i>* = 0 rồi kết luận ràng buộc thứ <i>j</i> của (D) lỏng. Thực ra không suy ra được gì.</span></div>
+    <div class="trap"><span class="stamp tip">lưu ý</span><span>Đọc hàng thay vì đọc cột khi viết vế trái của (D).</span></div>
+    <div class="trap"><span class="stamp tip">lưu ý</span><span>Có <i>y</i>* nhưng không kiểm tra dấu. Nếu (D) yêu cầu <i>y</i><sub>2</sub> ≤ 0 mà giải ra dương thì đã sai từ trước.</span></div>
+  </div>
+</section>
+
+<!-- 7 -->
+<section id="luyen">
+  <h2><span class="n">7</span>Luyện tập</h2>
+
+  <h3>Máy tập lập (D)</h3>
+  <p>Mỗi lần bấm “Đề khác” máy sinh một bài (P) ngẫu nhiên. Chọn chiều mục tiêu, dấu từng <i>y<sub>i</sub></i>, chiều từng ràng buộc rồi bấm Chấm. Vế trái thì viết ra giấy, sau đó so với (D) đầy đủ hiện ở dưới. Đề đầu tiên là Bài tập 2.4 trong bài giảng.</p>
+
+  <div class="trainer" id="trainer">
+    <div class="tr-head"><strong>Lập bài toán đối ngẫu</strong><span class="score" id="score">Đúng hết: 0 / 0 đề · Chuỗi: 0</span></div>
+    <div class="tr-body">
+      <div class="tr-prob"><div class="from" id="tr-from">Bài tập 2.4 · bài giảng</div><div id="tr-p"></div></div>
+      <div class="tr-form" id="tr-form"></div>
+    </div>
+    <div class="tr-result" id="tr-result" aria-live="polite"></div>
+  </div>
+
+  <h3>Bài tập lập (D) trong bài giảng</h3>
+  <details class="ex"><summary>Ví dụ 2.1<span class="meta">(P) min · 3 ẩn · 2 ràng buộc</span></summary><div class="ex-body"><div class="lp"><div class="lp-label">(P)</div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = 3<i>x</i><sub>1</sub> + <i>x</i><sub>2</sub> + <i>x</i><sub>3</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm">2<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="rl">≥</td><td class="rh">8</td></tr><tr><td class="op"></td><td class="tm">3<i>x</i><sub>1</sub></td><td class="op">−</td><td class="tm">2<i>x</i><sub>2</sub></td><td class="op"></td><td class="tm"></td><td class="rl">=</td><td class="rh">1</td></tr></tbody></table></div><div class="lp-signs"><i>x</i><sub>1</sub>, <i>x</i><sub>2</sub> ≥ 0; <i>x</i><sub>3</sub> k.h.c</div></div></div><details class="ans"><summary>Xem (D)</summary><div><div class="lp"><div class="lp-label">(D)</div><div class="lp-main"><div class="lp-obj"><i>G</i>(<i>y</i>) = 8<i>y</i><sub>1</sub> + <i>y</i><sub>2</sub> → max</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm">2<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">3<i>y</i><sub>2</sub></td><td class="rl">≤</td><td class="rh">3</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">−</td><td class="tm">2<i>y</i><sub>2</sub></td><td class="rl">≤</td><td class="rh">1</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op"></td><td class="tm"></td><td class="rl">=</td><td class="rh">1</td></tr></tbody></table></div><div class="lp-signs"><i>y</i><sub>1</sub> ≥ 0; <i>y</i><sub>2</sub> k.h.c</div></div></div></div></details></div></details><details class="ex"><summary>Bài tập 2.1<span class="meta">(P) min · 5 ẩn · 3 ràng buộc</span></summary><div class="ex-body"><div class="lp"><div class="lp-label">(P)</div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = <i>x</i><sub>1</sub> + <i>x</i><sub>2</sub> + <i>x</i><sub>3</sub> + <i>x</i><sub>4</sub> + <i>x</i><sub>5</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op">−</td><td class="tm">3<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm">4<i>x</i><sub>3</sub></td><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"></td><td class="rl">≥</td><td class="rh">2</td></tr><tr><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm">2<i>x</i><sub>2</sub></td><td class="op">−</td><td class="tm"><i>x</i><sub>3</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>4</sub></td><td class="op"></td><td class="tm"></td><td class="rl">≤</td><td class="rh">1</td></tr><tr><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm">4<i>x</i><sub>2</sub></td><td class="op">−</td><td class="tm">5<i>x</i><sub>3</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>x</i><sub>5</sub></td><td class="rl">=</td><td class="rh">4</td></tr></tbody></table></div><div class="lp-signs"><i>x</i><sub>1</sub>, <i>x</i><sub>2</sub>, <i>x</i><sub>3</sub>, <i>x</i><sub>4</sub>, <i>x</i><sub>5</sub> ≥ 0</div></div></div><details class="ans"><summary>Xem (D)</summary><div><div class="lp"><div class="lp-label">(D)</div><div class="lp-main"><div class="lp-obj"><i>G</i>(<i>y</i>) = 2<i>y</i><sub>1</sub> + <i>y</i><sub>2</sub> + 4<i>y</i><sub>3</sub> → max</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"></td><td class="rl">≤</td><td class="rh">1</td></tr><tr><td class="op"></td><td class="tm">−3<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm">4<i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">1</td></tr><tr><td class="op"></td><td class="tm">4<i>y</i><sub>1</sub></td><td class="op">−</td><td class="tm"><i>y</i><sub>2</sub></td><td class="op">−</td><td class="tm">5<i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">1</td></tr><tr><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"><i>y</i><sub>2</sub></td><td class="op"></td><td class="tm"></td><td class="rl">≤</td><td class="rh">1</td></tr><tr><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"><i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">1</td></tr></tbody></table></div><div class="lp-signs"><i>y</i><sub>1</sub> ≥ 0; <i>y</i><sub>2</sub> ≤ 0; <i>y</i><sub>3</sub> k.h.c</div></div></div></div></details></div></details><details class="ex"><summary>Bài tập 2.2<span class="meta">(P) min · 3 ẩn · 2 ràng buộc</span></summary><div class="ex-body"><div class="lp"><div class="lp-label">(P)</div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = 3<i>x</i><sub>1</sub> + 3<i>x</i><sub>2</sub> + 5<i>x</i><sub>3</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm">2<i>x</i><sub>1</sub></td><td class="op">−</td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">−</td><td class="tm"><i>x</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">−1</td></tr><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">4<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm">6<i>x</i><sub>3</sub></td><td class="rl">=</td><td class="rh">10</td></tr></tbody></table></div><div class="lp-signs"><i>x</i><sub>1</sub> ≤ 0; <i>x</i><sub>2</sub> k.h.c; <i>x</i><sub>3</sub> ≥ 0</div></div></div><details class="ans"><summary>Xem (D)</summary><div><div class="lp"><div class="lp-label">(D)</div><div class="lp-main"><div class="lp-obj"><i>G</i>(<i>y</i>) = −<i>y</i><sub>1</sub> + 10<i>y</i><sub>2</sub> → max</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm">2<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>2</sub></td><td class="rl">≥</td><td class="rh">3</td></tr><tr><td class="op"></td><td class="tm">−<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">4<i>y</i><sub>2</sub></td><td class="rl">=</td><td class="rh">3</td></tr><tr><td class="op"></td><td class="tm">−<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">6<i>y</i><sub>2</sub></td><td class="rl">≤</td><td class="rh">5</td></tr></tbody></table></div><div class="lp-signs"><i>y</i><sub>1</sub> ≤ 0; <i>y</i><sub>2</sub> k.h.c</div></div></div></div></details></div></details><details class="ex"><summary>Bài tập 2.3<span class="meta">(P) max · 3 ẩn · 2 ràng buộc</span></summary><div class="ex-body"><div class="lp"><div class="lp-label">(P)</div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = 3<i>x</i><sub>1</sub> − <i>x</i><sub>2</sub> − 2<i>x</i><sub>3</sub> → max</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">3</td></tr><tr><td class="op"></td><td class="tm">2<i>x</i><sub>1</sub></td><td class="op">−</td><td class="tm">4<i>x</i><sub>2</sub></td><td class="op">−</td><td class="tm">3<i>x</i><sub>3</sub></td><td class="rl">=</td><td class="rh">−1</td></tr></tbody></table></div><div class="lp-signs"><i>x</i><sub>1</sub> ≤ 0; <i>x</i><sub>2</sub>, <i>x</i><sub>3</sub> ≥ 0</div></div></div><details class="ans"><summary>Xem (D)</summary><div><div class="lp"><div class="lp-label">(D)</div><div class="lp-main"><div class="lp-obj"><i>G</i>(<i>y</i>) = 3<i>y</i><sub>1</sub> − <i>y</i><sub>2</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>y</i><sub>2</sub></td><td class="rl">≤</td><td class="rh">3</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">−</td><td class="tm">4<i>y</i><sub>2</sub></td><td class="rl">≥</td><td class="rh">−1</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">−</td><td class="tm">3<i>y</i><sub>2</sub></td><td class="rl">≥</td><td class="rh">−2</td></tr></tbody></table></div><div class="lp-signs"><i>y</i><sub>1</sub> ≥ 0; <i>y</i><sub>2</sub> k.h.c</div></div></div></div></details></div></details><details class="ex"><summary>Bài tập 2.4<span class="meta">(P) min · 3 ẩn · 3 ràng buộc</span></summary><div class="ex-body"><div class="lp"><div class="lp-label">(P)</div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = 3<i>x</i><sub>1</sub> + <i>x</i><sub>2</sub> + <i>x</i><sub>3</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm">2<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="rl">≥</td><td class="rh">8</td></tr><tr><td class="op"></td><td class="tm">3<i>x</i><sub>1</sub></td><td class="op">−</td><td class="tm">2<i>x</i><sub>2</sub></td><td class="op"></td><td class="tm"></td><td class="rl">≤</td><td class="rh">1</td></tr><tr><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm">4<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="rl">=</td><td class="rh">2</td></tr></tbody></table></div><div class="lp-signs"><i>x</i><sub>1</sub>, <i>x</i><sub>2</sub> ≥ 0; <i>x</i><sub>3</sub> k.h.c</div></div></div><details class="ans"><summary>Xem (D)</summary><div><div class="lp"><div class="lp-label">(D)</div><div class="lp-main"><div class="lp-obj"><i>G</i>(<i>y</i>) = 8<i>y</i><sub>1</sub> + <i>y</i><sub>2</sub> + 2<i>y</i><sub>3</sub> → max</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm">2<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">3<i>y</i><sub>2</sub></td><td class="op"></td><td class="tm"></td><td class="rl">≤</td><td class="rh">3</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">−</td><td class="tm">2<i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm">4<i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">1</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>y</i><sub>3</sub></td><td class="rl">=</td><td class="rh">1</td></tr></tbody></table></div><div class="lp-signs"><i>y</i><sub>1</sub> ≥ 0; <i>y</i><sub>2</sub> ≤ 0; <i>y</i><sub>3</sub> k.h.c</div></div></div></div></details></div></details><details class="ex"><summary>Bài tập 2.5<span class="meta">(P) min · 3 ẩn · 2 ràng buộc</span></summary><div class="ex-body"><div class="lp"><div class="lp-label">(P)</div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = 6<i>x</i><sub>1</sub> − <i>x</i><sub>2</sub> − 3<i>x</i><sub>3</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="rl">≥</td><td class="rh">10</td></tr><tr><td class="op"></td><td class="tm">2<i>x</i><sub>1</sub></td><td class="op">−</td><td class="tm">4<i>x</i><sub>2</sub></td><td class="op"></td><td class="tm"></td><td class="rl">≤</td><td class="rh">2</td></tr></tbody></table></div><div class="lp-signs"><i>x</i><sub>1</sub> ≥ 0; <i>x</i><sub>2</sub> ≤ 0; <i>x</i><sub>3</sub> k.h.c</div></div></div><details class="ans"><summary>Xem (D)</summary><div><div class="lp"><div class="lp-label">(D)</div><div class="lp-main"><div class="lp-obj"><i>G</i>(<i>y</i>) = 10<i>y</i><sub>1</sub> + 2<i>y</i><sub>2</sub> → max</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>y</i><sub>2</sub></td><td class="rl">≤</td><td class="rh">6</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">−</td><td class="tm">4<i>y</i><sub>2</sub></td><td class="rl">≥</td><td class="rh">−1</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op"></td><td class="tm"></td><td class="rl">=</td><td class="rh">−3</td></tr></tbody></table></div><div class="lp-signs"><i>y</i><sub>1</sub> ≥ 0; <i>y</i><sub>2</sub> ≤ 0</div></div></div></div></details></div></details>
+
+  <h3>Suy PATƯ khi đã có <i>x</i>*</h3>
+  <details class="ex"><summary>Ví dụ 8 · bài giảng<span class="meta">(P) max · cho x* = (0; 14; 6; 5), f = 40</span></summary><div class="ex-body"><div class="lp"><div class="lp-label">(P)</div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = 2<i>x</i><sub>1</sub> + <i>x</i><sub>2</sub> + <i>x</i><sub>3</sub> + 4<i>x</i><sub>4</sub> → max</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm">5<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="op">+</td><td class="tm">6<i>x</i><sub>4</sub></td><td class="rl">=</td><td class="rh">50</td></tr><tr><td class="op"></td><td class="tm">−3<i>x</i><sub>1</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>4</sub></td><td class="rl">≥</td><td class="rh">16</td></tr><tr><td class="op"></td><td class="tm">4<i>x</i><sub>1</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm">3<i>x</i><sub>3</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>4</sub></td><td class="rl">≤</td><td class="rh">23</td></tr></tbody></table></div><div class="lp-signs"><i>x</i><sub>1</sub>, <i>x</i><sub>2</sub>, <i>x</i><sub>3</sub>, <i>x</i><sub>4</sub> ≥ 0</div></div></div><p class="note-s" style="margin:0">Viết (D) và tìm PATƯ của (D).</p><details class="ans"><summary>Xem lời giải</summary><div><div class="lp"><div class="lp-label">(D)</div><div class="lp-main"><div class="lp-obj"><i>G</i>(<i>y</i>) = 50<i>y</i><sub>1</sub> + 16<i>y</i><sub>2</sub> + 23<i>y</i><sub>3</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm">5<i>y</i><sub>1</sub></td><td class="op">−</td><td class="tm">3<i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm">4<i>y</i><sub>3</sub></td><td class="rl">≥</td><td class="rh">2</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"></td><td class="rl">≥</td><td class="rh">1</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm">3<i>y</i><sub>3</sub></td><td class="rl">≥</td><td class="rh">1</td></tr><tr><td class="op"></td><td class="tm">6<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>3</sub></td><td class="rl">≥</td><td class="rh">4</td></tr></tbody></table></div><div class="lp-signs"><i>y</i><sub>1</sub> k.h.c; <i>y</i><sub>2</sub> ≤ 0; <i>y</i><sub>3</sub> ≥ 0</div></div></div><div class="work"><span class="ln"><i>x</i><sub>2</sub> = 14 &gt; 0 ⇒ <i>y</i><sub>1</sub> = 1 &nbsp;(1)</span><span class="ln"><i>x</i><sub>3</sub> = 6 &gt; 0 ⇒ <i>y</i><sub>1</sub> + <i>y</i><sub>2</sub> + 3<i>y</i><sub>3</sub> = 1 &nbsp;(2)</span><span class="ln"><i>x</i><sub>4</sub> = 5 &gt; 0 ⇒ 6<i>y</i><sub>1</sub> + 2<i>y</i><sub>2</sub> + <i>y</i><sub>3</sub> = 4 &nbsp;(3)</span><span class="ln"><span class="why">RB 2:</span> −3·0 + 6 + 2·5 = 16 <span class="why">→ chặt</span> &nbsp; <span class="why">RB 3:</span> 4·0 + 3·6 + 5 = 23 <span class="why">→ chặt</span> &nbsp; <span class="why">RB 1 là “=”</span></span><span class="ln"><span class="why">Giải (1), (2), (3):</span> <span class="res"><i>y</i>* = (1; −6/5; 2/5), &nbsp;<i>G</i>(<i>y</i>*) = 50 − 96/5 + 46/5 = 40</span></span><span class="ln"><span class="why">Kiểm tra dấu: <i>y</i><sub>1</sub> k.h.c, <i>y</i><sub>2</sub> = −6/5 ≤ 0, <i>y</i><sub>3</sub> = 2/5 ≥ 0. Thỏa.</span></span></div></div></details></div></details>
+
+  <h3>Trọn Câu 1 như đề thi</h3>
+  <p class="note-s">Bấm giờ 25 phút cho mỗi bài. Lời giải trình bày đúng thứ tự cần viết vào bài thi; mọi bảng đều đã được giải lại bằng máy để đối chiếu.</p>
+  <details class="ex"><summary>Đề thi thử HK1 2021–22<span class="meta">(P) min · 2 ẩn giả</span></summary><div class="ex-body"><div class="lp"><div class="lp-label">(P)</div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = 5<i>x</i><sub>1</sub> + 10<i>x</i><sub>2</sub> + 7<i>x</i><sub>3</sub> + 3<i>x</i><sub>4</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">4<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>4</sub></td><td class="rl">≤</td><td class="rh">6</td></tr><tr><td class="op"></td><td class="tm">2<i>x</i><sub>1</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="op">+</td><td class="tm">4<i>x</i><sub>4</sub></td><td class="rl">=</td><td class="rh">9</td></tr><tr><td class="op"></td><td class="tm">3<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>2</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>x</i><sub>4</sub></td><td class="rl">≥</td><td class="rh">10</td></tr></tbody></table></div><div class="lp-signs"><i>x</i><sub>1</sub>, <i>x</i><sub>2</sub>, <i>x</i><sub>3</sub>, <i>x</i><sub>4</sub> ≥ 0</div></div></div><p class="note-s" style="margin:0">a) Lập bài toán đối ngẫu (D). &nbsp;b) Giải (P) bằng thuật toán đơn hình, suy ra kết quả (D).</p><details class="ans"><summary>Xem lời giải</summary><div><h5>a) Bài toán đối ngẫu</h5><div class="lp"><div class="lp-label">(D)</div><div class="lp-main"><div class="lp-obj"><i>g</i>(<i>y</i>) = 6<i>y</i><sub>1</sub> + 9<i>y</i><sub>2</sub> + 10<i>y</i><sub>3</sub> → max</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm">3<i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">5</td></tr><tr><td class="op"></td><td class="tm">4<i>y</i><sub>1</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm">2<i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">10</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>2</sub></td><td class="op"></td><td class="tm"></td><td class="rl">≤</td><td class="rh">7</td></tr><tr><td class="op"></td><td class="tm">2<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">4<i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">3</td></tr></tbody></table></div><div class="lp-signs"><i>y</i><sub>1</sub> ≤ 0; <i>y</i><sub>2</sub> k.h.c; <i>y</i><sub>3</sub> ≥ 0</div></div></div><h5>b) Dạng chuẩn</h5><div class="lp"><div class="lp-label"></div><div class="lp-main"><div class="lp-obj"><i>F</i>(<i>x</i>) = 5<i>x</i><sub>1</sub> + 10<i>x</i><sub>2</sub> + 7<i>x</i><sub>3</sub> + 3<i>x</i><sub>4</sub> + M<i>x</i><sub>7</sub> + M<i>x</i><sub>8</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">4<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>4</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>5</sub></td><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"></td><td class="rl">=</td><td class="rh">6</td></tr><tr><td class="op"></td><td class="tm">2<i>x</i><sub>1</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="op">+</td><td class="tm">4<i>x</i><sub>4</sub></td><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>x</i><sub>7</sub></td><td class="op"></td><td class="tm"></td><td class="rl">=</td><td class="rh">9</td></tr><tr><td class="op"></td><td class="tm">3<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>2</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>x</i><sub>4</sub></td><td class="op"></td><td class="tm"></td><td class="op">−</td><td class="tm"><i>x</i><sub>6</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>x</i><sub>8</sub></td><td class="rl">=</td><td class="rh">10</td></tr></tbody></table></div><div class="lp-signs"><i>x<sub>j</sub></i> ≥ 0, &nbsp;j = 1, …, 8</div><div class="note-s" style="margin-top:4px">Ẩn phụ: <i>x</i><sub>5</sub>, <i>x</i><sub>6</sub> · Ẩn giả: <i>x</i><sub>7</sub>, <i>x</i><sub>8</sub></div></div></div><h5>Bảng đơn hình</h5><div><figure class="tab"><figcaption><span>Bảng xuất phát</span><span class="cap">Ẩn vào <i>x</i><sub>4</sub> · Ẩn ra <i>x</i><sub>7</sub></span></figcaption><div class="scroll"><table class="tableau"><thead><tr><th>c<sub>i</sub></th><th>Ẩn CS</th><th>b<sub>i</sub></th><th><i>x</i><sub>1</sub></th><th><i>x</i><sub>2</sub></th><th><i>x</i><sub>3</sub></th><th class="enter"><i>x</i><sub>4</sub></th><th><i>x</i><sub>5</sub></th><th><i>x</i><sub>6</sub></th><th>λ</th></tr><tr class="cj"><td></td><td></td><td></td><td>5</td><td>10</td><td>7</td><td>3</td><td>0</td><td>0</td><td></td></tr></thead><tbody><tr><td>0</td><td><i>x</i><sub>5</sub></td><td>6</td><td>1</td><td>4</td><td>1</td><td>2</td><td>1</td><td>0</td><td class="lam">3</td></tr><tr class="leave"><td>M</td><td><i>x</i><sub>7</sub></td><td>9</td><td>2</td><td>0</td><td>1</td><td class="pivot">4</td><td>0</td><td>0</td><td class="lam">9/4</td></tr><tr><td>M</td><td><i>x</i><sub>8</sub></td><td>10</td><td>3</td><td>2</td><td>0</td><td>1</td><td>0</td><td>−1</td><td class="lam">10</td></tr><tr class="delta"><td></td><td><i>f</i>(<i>x</i>)</td><td>0</td><td>−5</td><td>−10</td><td>−7</td><td>−3</td><td>0</td><td>0</td><td></td></tr><tr class="delta m"><td></td><td>M</td><td>19</td><td>5</td><td>2</td><td>1</td><td>5</td><td>0</td><td>−1</td><td></td></tr></tbody></table></div></figure><figure class="tab"><figcaption><span>Bảng 1</span><span class="cap">Ẩn vào <i>x</i><sub>1</sub> · Ẩn ra <i>x</i><sub>8</sub></span></figcaption><div class="scroll"><table class="tableau"><thead><tr><th>c<sub>i</sub></th><th>Ẩn CS</th><th>b<sub>i</sub></th><th class="enter"><i>x</i><sub>1</sub></th><th><i>x</i><sub>2</sub></th><th><i>x</i><sub>3</sub></th><th><i>x</i><sub>4</sub></th><th><i>x</i><sub>5</sub></th><th><i>x</i><sub>6</sub></th><th>λ</th></tr><tr class="cj"><td></td><td></td><td></td><td>5</td><td>10</td><td>7</td><td>3</td><td>0</td><td>0</td><td></td></tr></thead><tbody><tr><td>0</td><td><i>x</i><sub>5</sub></td><td>3/2</td><td>0</td><td>4</td><td>1/2</td><td>0</td><td>1</td><td>0</td><td class="lam">–</td></tr><tr><td>3</td><td><i>x</i><sub>4</sub></td><td>9/4</td><td>1/2</td><td>0</td><td>1/4</td><td>1</td><td>0</td><td>0</td><td class="lam">9/2</td></tr><tr class="leave"><td>M</td><td><i>x</i><sub>8</sub></td><td>31/4</td><td class="pivot">5/2</td><td>2</td><td>−1/4</td><td>0</td><td>0</td><td>−1</td><td class="lam">31/10</td></tr><tr class="delta"><td></td><td><i>f</i>(<i>x</i>)</td><td>27/4</td><td>−7/2</td><td>−10</td><td>−25/4</td><td>0</td><td>0</td><td>0</td><td></td></tr><tr class="delta m"><td></td><td>M</td><td>31/4</td><td>5/2</td><td>2</td><td>−1/4</td><td>0</td><td>0</td><td>−1</td><td></td></tr></tbody></table></div></figure><figure class="tab"><figcaption><span>Bảng 2</span><span class="cap">Mọi Δ<sub>j</sub> ≤ 0 ⇒ tối ưu</span></figcaption><div class="scroll"><table class="tableau"><thead><tr><th>c<sub>i</sub></th><th>Ẩn CS</th><th>b<sub>i</sub></th><th><i>x</i><sub>1</sub></th><th><i>x</i><sub>2</sub></th><th><i>x</i><sub>3</sub></th><th><i>x</i><sub>4</sub></th><th><i>x</i><sub>5</sub></th><th><i>x</i><sub>6</sub></th><th>λ</th></tr><tr class="cj"><td></td><td></td><td></td><td>5</td><td>10</td><td>7</td><td>3</td><td>0</td><td>0</td><td></td></tr></thead><tbody><tr><td>0</td><td><i>x</i><sub>5</sub></td><td>3/2</td><td>0</td><td>4</td><td>1/2</td><td>0</td><td>1</td><td>0</td><td class="lam">–</td></tr><tr><td>3</td><td><i>x</i><sub>4</sub></td><td>7/10</td><td>0</td><td>−2/5</td><td>3/10</td><td>1</td><td>0</td><td>1/5</td><td class="lam">–</td></tr><tr><td>5</td><td><i>x</i><sub>1</sub></td><td>31/10</td><td>1</td><td>4/5</td><td>−1/10</td><td>0</td><td>0</td><td>−2/5</td><td class="lam">–</td></tr><tr class="delta"><td></td><td><i>f</i>(<i>x</i>)</td><td>88/5</td><td>0</td><td>−36/5</td><td>−33/5</td><td>0</td><td>0</td><td>−7/5</td><td></td></tr></tbody></table></div></figure></div><h5>Kết luận (P)</h5><div class="work"><span class="ln">Δ<sub>j</sub> ≤ 0 ∀j ⇒ PATƯ bài toán mở rộng: <i>x</i>* = (31/10; 0; 0; 7/10; 3/2; 0; 0; 0), <i>F</i> = 88/5</span><span class="ln">Ẩn giả <i>x</i><sub>7</sub> = <i>x</i><sub>8</sub> = 0 ⇒ <span class="res"><i>x</i>* = (31/10; 0; 0; 7/10), &nbsp;<i>f</i>(<i>x</i>*) = 88/5</span></span></div><h5>Suy kết quả (D)</h5><div class="work"><span class="ln"><i>x</i><sub>1</sub> = 31/10 &gt; 0 ⇒ <i>y</i><sub>1</sub> + 2<i>y</i><sub>2</sub> + 3<i>y</i><sub>3</sub> = 5 &nbsp;(1)</span><span class="ln"><i>x</i><sub>4</sub> = 7/10 &gt; 0 ⇒ 2<i>y</i><sub>1</sub> + 4<i>y</i><sub>2</sub> + <i>y</i><sub>3</sub> = 3 &nbsp;(2)</span><span class="ln"><span class="why">RB 1:</span> 31/10 + 4·0 + 0 + 2·7/10 = 9/2 &lt; 6 ⇒ <i>y</i><sub>1</sub> = 0 &nbsp;(3)</span><span class="ln"><span class="why">RB 3:</span> 3·31/10 + 2·0 + 7/10 = 10 <span class="why">→ chặt</span> &nbsp; <span class="why">RB 2 là “=”</span></span><span class="ln"><span class="why">Giải (1), (2), (3):</span> <span class="res"><i>y</i>* = (0; 2/5; 7/5), &nbsp;<i>g</i>(<i>y</i>*) = 9·2/5 + 10·7/5 = 88/5</span></span></div></div></details></div></details><details class="ex"><summary>Cuối kỳ HK1 2025–26 · đề 1<span class="meta">(P) max · vế phải âm · ẩn giả −M</span></summary><div class="ex-body"><div class="lp"><div class="lp-label">(P)</div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = <i>x</i><sub>1</sub> + 4<i>x</i><sub>2</sub> + <i>x</i><sub>3</sub> → max</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">2</td></tr><tr><td class="op"></td><td class="tm">2<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm">6<i>x</i><sub>3</sub></td><td class="rl">≥</td><td class="rh">−1</td></tr><tr><td class="op"></td><td class="tm">12<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">12<i>x</i><sub>2</sub></td><td class="op"></td><td class="tm"></td><td class="rl">=</td><td class="rh">12</td></tr></tbody></table></div><div class="lp-signs"><i>x</i><sub>1</sub>, <i>x</i><sub>2</sub>, <i>x</i><sub>3</sub> ≥ 0</div></div></div><p class="note-s" style="margin:0">a) Lập bài toán đối ngẫu (D). &nbsp;b) Giải (P) bằng thuật toán đơn hình, suy ra kết quả (D).</p><details class="ans"><summary>Xem lời giải</summary><div><h5>a) Bài toán đối ngẫu</h5><div class="lp"><div class="lp-label">(D)</div><div class="lp-main"><div class="lp-obj"><i>g</i>(<i>y</i>) = 2<i>y</i><sub>1</sub> − <i>y</i><sub>2</sub> + 12<i>y</i><sub>3</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm">12<i>y</i><sub>3</sub></td><td class="rl">≥</td><td class="rh">1</td></tr><tr><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"><i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm">12<i>y</i><sub>3</sub></td><td class="rl">≥</td><td class="rh">4</td></tr><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm">6<i>y</i><sub>2</sub></td><td class="op"></td><td class="tm"></td><td class="rl">≥</td><td class="rh">1</td></tr></tbody></table></div><div class="lp-signs"><i>y</i><sub>1</sub> ≥ 0; <i>y</i><sub>2</sub> ≤ 0; <i>y</i><sub>3</sub> k.h.c</div></div></div><h5>b) Dạng chuẩn</h5><div class="lp"><div class="lp-label"></div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = <i>x</i><sub>1</sub> + 4<i>x</i><sub>2</sub> + <i>x</i><sub>3</sub> − M<i>x</i><sub>6</sub> → max</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>4</sub></td><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"></td><td class="rl">=</td><td class="rh">2</td></tr><tr><td class="op"></td><td class="tm">−2<i>x</i><sub>1</sub></td><td class="op">−</td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">−</td><td class="tm">6<i>x</i><sub>3</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>x</i><sub>5</sub></td><td class="op"></td><td class="tm"></td><td class="rl">=</td><td class="rh">1</td></tr><tr><td class="op"></td><td class="tm">12<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">12<i>x</i><sub>2</sub></td><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>x</i><sub>6</sub></td><td class="rl">=</td><td class="rh">12</td></tr></tbody></table></div><div class="lp-signs"><i>x<sub>j</sub></i> ≥ 0, &nbsp;j = 1, …, 6</div><div class="note-s" style="margin-top:4px">RB 2 có vế phải −1 nên nhân −1 thành −2<i>x</i><sub>1</sub> − <i>x</i><sub>2</sub> − 6<i>x</i><sub>3</sub> ≤ 1. Ẩn phụ: <i>x</i><sub>4</sub>, <i>x</i><sub>5</sub> · Ẩn giả: <i>x</i><sub>6</sub>, hệ số −M vì bài max</div></div></div><h5>Bảng đơn hình</h5><div><figure class="tab"><figcaption><span>Bảng xuất phát</span><span class="cap">Ẩn vào <i>x</i><sub>2</sub> · Ẩn ra <i>x</i><sub>6</sub></span></figcaption><div class="scroll"><table class="tableau"><thead><tr><th>c<sub>i</sub></th><th>Ẩn CS</th><th>b<sub>i</sub></th><th><i>x</i><sub>1</sub></th><th class="enter"><i>x</i><sub>2</sub></th><th><i>x</i><sub>3</sub></th><th><i>x</i><sub>4</sub></th><th><i>x</i><sub>5</sub></th><th>λ</th></tr><tr class="cj"><td></td><td></td><td></td><td>1</td><td>4</td><td>1</td><td>0</td><td>0</td><td></td></tr></thead><tbody><tr><td>0</td><td><i>x</i><sub>4</sub></td><td>2</td><td>1</td><td>0</td><td>1</td><td>1</td><td>0</td><td class="lam">–</td></tr><tr><td>0</td><td><i>x</i><sub>5</sub></td><td>1</td><td>−2</td><td>−1</td><td>−6</td><td>0</td><td>1</td><td class="lam">–</td></tr><tr class="leave"><td>−M</td><td><i>x</i><sub>6</sub></td><td>12</td><td>12</td><td class="pivot">12</td><td>0</td><td>0</td><td>0</td><td class="lam">1</td></tr><tr class="delta"><td></td><td><i>f</i>(<i>x</i>)</td><td>0</td><td>−1</td><td>−4</td><td>−1</td><td>0</td><td>0</td><td></td></tr><tr class="delta m"><td></td><td>M</td><td>−12</td><td>−12</td><td>−12</td><td>0</td><td>0</td><td>0</td><td></td></tr></tbody></table></div></figure><figure class="tab"><figcaption><span>Bảng 1</span><span class="cap">Ẩn vào <i>x</i><sub>3</sub> · Ẩn ra <i>x</i><sub>4</sub></span></figcaption><div class="scroll"><table class="tableau"><thead><tr><th>c<sub>i</sub></th><th>Ẩn CS</th><th>b<sub>i</sub></th><th><i>x</i><sub>1</sub></th><th><i>x</i><sub>2</sub></th><th class="enter"><i>x</i><sub>3</sub></th><th><i>x</i><sub>4</sub></th><th><i>x</i><sub>5</sub></th><th>λ</th></tr><tr class="cj"><td></td><td></td><td></td><td>1</td><td>4</td><td>1</td><td>0</td><td>0</td><td></td></tr></thead><tbody><tr class="leave"><td>0</td><td><i>x</i><sub>4</sub></td><td>2</td><td>1</td><td>0</td><td class="pivot">1</td><td>1</td><td>0</td><td class="lam">2</td></tr><tr><td>0</td><td><i>x</i><sub>5</sub></td><td>2</td><td>−1</td><td>0</td><td>−6</td><td>0</td><td>1</td><td class="lam">–</td></tr><tr><td>4</td><td><i>x</i><sub>2</sub></td><td>1</td><td>1</td><td>1</td><td>0</td><td>0</td><td>0</td><td class="lam">–</td></tr><tr class="delta"><td></td><td><i>f</i>(<i>x</i>)</td><td>4</td><td>3</td><td>0</td><td>−1</td><td>0</td><td>0</td><td></td></tr></tbody></table></div></figure><figure class="tab"><figcaption><span>Bảng 2</span><span class="cap">Mọi Δ<sub>j</sub> ≥ 0 ⇒ tối ưu</span></figcaption><div class="scroll"><table class="tableau"><thead><tr><th>c<sub>i</sub></th><th>Ẩn CS</th><th>b<sub>i</sub></th><th><i>x</i><sub>1</sub></th><th><i>x</i><sub>2</sub></th><th><i>x</i><sub>3</sub></th><th><i>x</i><sub>4</sub></th><th><i>x</i><sub>5</sub></th><th>λ</th></tr><tr class="cj"><td></td><td></td><td></td><td>1</td><td>4</td><td>1</td><td>0</td><td>0</td><td></td></tr></thead><tbody><tr><td>1</td><td><i>x</i><sub>3</sub></td><td>2</td><td>1</td><td>0</td><td>1</td><td>1</td><td>0</td><td class="lam">–</td></tr><tr><td>0</td><td><i>x</i><sub>5</sub></td><td>14</td><td>5</td><td>0</td><td>0</td><td>6</td><td>1</td><td class="lam">–</td></tr><tr><td>4</td><td><i>x</i><sub>2</sub></td><td>1</td><td>1</td><td>1</td><td>0</td><td>0</td><td>0</td><td class="lam">–</td></tr><tr class="delta"><td></td><td><i>f</i>(<i>x</i>)</td><td>6</td><td>4</td><td>0</td><td>0</td><td>1</td><td>0</td><td></td></tr></tbody></table></div></figure></div><h5>Kết luận (P)</h5><div class="work"><span class="ln">Δ<sub>j</sub> ≥ 0 ∀j ⇒ PATƯ bài toán mở rộng: <i>x</i>* = (0; 1; 2; 0; 14; 0), <i>f</i> = 6</span><span class="ln">Ẩn giả <i>x</i><sub>6</sub> = 0 ⇒ <span class="res"><i>x</i>* = (0; 1; 2), &nbsp;<i>f</i>(<i>x</i>*) = 6</span></span></div><h5>Suy kết quả (D)</h5><div class="work"><span class="ln"><i>x</i><sub>2</sub> = 1 &gt; 0 ⇒ <i>y</i><sub>2</sub> + 12<i>y</i><sub>3</sub> = 4 &nbsp;(1)</span><span class="ln"><i>x</i><sub>3</sub> = 2 &gt; 0 ⇒ <i>y</i><sub>1</sub> + 6<i>y</i><sub>2</sub> = 1 &nbsp;(2)</span><span class="ln"><span class="why">RB 1:</span> 0 + 2 = 2 <span class="why">→ chặt</span></span><span class="ln"><span class="why">RB 2 (đề gốc):</span> 2·0 + 1 + 6·2 = 13 &gt; −1 ⇒ <i>y</i><sub>2</sub> = 0 &nbsp;(3)</span><span class="ln"><span class="why">Giải (1), (2), (3):</span> <span class="res"><i>y</i>* = (1; 0; 1/3), &nbsp;<i>g</i>(<i>y</i>*) = 2·1 − 0 + 12·1/3 = 6</span></span></div><p class="note-s">Trong file “CK 25-25 Đề + ĐA.pdf”, bảng cuối của đáp án gốc ghi lệch tên ẩn cơ sở. Kết quả cuối vẫn đúng. Bảng ở trên đã được tính lại.</p></div></details></div></details><details class="ex"><summary>Cuối kỳ HK1 2025–26 · đề 2<span class="meta">(P) min · vế phải âm</span></summary><div class="ex-body"><div class="lp"><div class="lp-label">(P)</div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = <i>x</i><sub>1</sub> + 4<i>x</i><sub>2</sub> + <i>x</i><sub>3</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>2</sub></td><td class="op"></td><td class="tm"></td><td class="rl">≥</td><td class="rh">−1</td></tr><tr><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">1</td></tr><tr><td class="op"></td><td class="tm">2<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm">8<i>x</i><sub>3</sub></td><td class="rl">≥</td><td class="rh">16</td></tr></tbody></table></div><div class="lp-signs"><i>x</i><sub>1</sub>, <i>x</i><sub>2</sub>, <i>x</i><sub>3</sub> ≥ 0</div></div></div><p class="note-s" style="margin:0">a) Lập bài toán đối ngẫu (D). &nbsp;b) Giải (P) bằng thuật toán đơn hình, suy ra kết quả (D).</p><details class="ans"><summary>Xem lời giải</summary><div><h5>a) Bài toán đối ngẫu</h5><div class="lp"><div class="lp-label">(D)</div><div class="lp-main"><div class="lp-obj"><i>g</i>(<i>y</i>) = −<i>y</i><sub>1</sub> + <i>y</i><sub>2</sub> + 16<i>y</i><sub>3</sub> → max</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm"><i>y</i><sub>1</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm">2<i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">1</td></tr><tr><td class="op"></td><td class="tm">2<i>y</i><sub>1</sub></td><td class="op">+</td><td class="tm"><i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm">2<i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">4</td></tr><tr><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"><i>y</i><sub>2</sub></td><td class="op">+</td><td class="tm">8<i>y</i><sub>3</sub></td><td class="rl">≤</td><td class="rh">1</td></tr></tbody></table></div><div class="lp-signs"><i>y</i><sub>1</sub> ≥ 0; <i>y</i><sub>2</sub> ≤ 0; <i>y</i><sub>3</sub> ≥ 0</div></div></div><h5>b) Dạng chuẩn</h5><div class="lp"><div class="lp-label"></div><div class="lp-main"><div class="lp-obj"><i>f</i>(<i>x</i>) = <i>x</i><sub>1</sub> + 4<i>x</i><sub>2</sub> + <i>x</i><sub>3</sub> + M<i>x</i><sub>7</sub> → min</div><div class="lp-body"><span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><table class="sys"><tbody><tr><td class="op"></td><td class="tm">−<i>x</i><sub>1</sub></td><td class="op">−</td><td class="tm">2<i>x</i><sub>2</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>x</i><sub>4</sub></td><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"></td><td class="rl">=</td><td class="rh">1</td></tr><tr><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"><i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>3</sub></td><td class="op"></td><td class="tm"></td><td class="op">+</td><td class="tm"><i>x</i><sub>5</sub></td><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"></td><td class="rl">=</td><td class="rh">1</td></tr><tr><td class="op"></td><td class="tm">2<i>x</i><sub>1</sub></td><td class="op">+</td><td class="tm">2<i>x</i><sub>2</sub></td><td class="op">+</td><td class="tm">8<i>x</i><sub>3</sub></td><td class="op"></td><td class="tm"></td><td class="op"></td><td class="tm"></td><td class="op">−</td><td class="tm"><i>x</i><sub>6</sub></td><td class="op">+</td><td class="tm"><i>x</i><sub>7</sub></td><td class="rl">=</td><td class="rh">16</td></tr></tbody></table></div><div class="lp-signs"><i>x<sub>j</sub></i> ≥ 0, &nbsp;j = 1, …, 7</div><div class="note-s" style="margin-top:4px">RB 1 có vế phải −1 nên nhân −1 thành −<i>x</i><sub>1</sub> − 2<i>x</i><sub>2</sub> ≤ 1. Ẩn phụ: <i>x</i><sub>4</sub>, <i>x</i><sub>5</sub>, <i>x</i><sub>6</sub> · Ẩn giả: <i>x</i><sub>7</sub></div></div></div><h5>Bảng đơn hình</h5><div><figure class="tab"><figcaption><span>Bảng xuất phát</span><span class="cap">Ẩn vào <i>x</i><sub>3</sub> · Ẩn ra <i>x</i><sub>5</sub></span></figcaption><div class="scroll"><table class="tableau"><thead><tr><th>c<sub>i</sub></th><th>Ẩn CS</th><th>b<sub>i</sub></th><th><i>x</i><sub>1</sub></th><th><i>x</i><sub>2</sub></th><th class="enter"><i>x</i><sub>3</sub></th><th><i>x</i><sub>4</sub></th><th><i>x</i><sub>5</sub></th><th><i>x</i><sub>6</sub></th><th>λ</th></tr><tr class="cj"><td></td><td></td><td></td><td>1</td><td>4</td><td>1</td><td>0</td><td>0</td><td>0</td><td></td></tr></thead><tbody><tr><td>0</td><td><i>x</i><sub>4</sub></td><td>1</td><td>−1</td><td>−2</td><td>0</td><td>1</td><td>0</td><td>0</td><td class="lam">–</td></tr><tr class="leave"><td>0</td><td><i>x</i><sub>5</sub></td><td>1</td><td>0</td><td>1</td><td class="pivot">1</td><td>0</td><td>1</td><td>0</td><td class="lam">1</td></tr><tr><td>M</td><td><i>x</i><sub>7</sub></td><td>16</td><td>2</td><td>2</td><td>8</td><td>0</td><td>0</td><td>−1</td><td class="lam">2</td></tr><tr class="delta"><td></td><td><i>f</i>(<i>x</i>)</td><td>0</td><td>−1</td><td>−4</td><td>−1</td><td>0</td><td>0</td><td>0</td><td></td></tr><tr class="delta m"><td></td><td>M</td><td>16</td><td>2</td><td>2</td><td>8</td><td>0</td><td>0</td><td>−1</td><td></td></tr></tbody></table></div></figure><figure class="tab"><figcaption><span>Bảng 1</span><span class="cap">Ẩn vào <i>x</i><sub>1</sub> · Ẩn ra <i>x</i><sub>7</sub></span></figcaption><div class="scroll"><table class="tableau"><thead><tr><th>c<sub>i</sub></th><th>Ẩn CS</th><th>b<sub>i</sub></th><th class="enter"><i>x</i><sub>1</sub></th><th><i>x</i><sub>2</sub></th><th><i>x</i><sub>3</sub></th><th><i>x</i><sub>4</sub></th><th><i>x</i><sub>5</sub></th><th><i>x</i><sub>6</sub></th><th>λ</th></tr><tr class="cj"><td></td><td></td><td></td><td>1</td><td>4</td><td>1</td><td>0</td><td>0</td><td>0</td><td></td></tr></thead><tbody><tr><td>0</td><td><i>x</i><sub>4</sub></td><td>1</td><td>−1</td><td>−2</td><td>0</td><td>1</td><td>0</td><td>0</td><td class="lam">–</td></tr><tr><td>1</td><td><i>x</i><sub>3</sub></td><td>1</td><td>0</td><td>1</td><td>1</td><td>0</td><td>1</td><td>0</td><td class="lam">–</td></tr><tr class="leave"><td>M</td><td><i>x</i><sub>7</sub></td><td>8</td><td class="pivot">2</td><td>−6</td><td>0</td><td>0</td><td>−8</td><td>−1</td><td class="lam">4</td></tr><tr class="delta"><td></td><td><i>f</i>(<i>x</i>)</td><td>1</td><td>−1</td><td>−3</td><td>0</td><td>0</td><td>1</td><td>0</td><td></td></tr><tr class="delta m"><td></td><td>M</td><td>8</td><td>2</td><td>−6</td><td>0</td><td>0</td><td>−8</td><td>−1</td><td></td></tr></tbody></table></div></figure><figure class="tab"><figcaption><span>Bảng 2</span><span class="cap">Mọi Δ<sub>j</sub> ≤ 0 ⇒ tối ưu</span></figcaption><div class="scroll"><table class="tableau"><thead><tr><th>c<sub>i</sub></th><th>Ẩn CS</th><th>b<sub>i</sub></th><th><i>x</i><sub>1</sub></th><th><i>x</i><sub>2</sub></th><th><i>x</i><sub>3</sub></th><th><i>x</i><sub>4</sub></th><th><i>x</i><sub>5</sub></th><th><i>x</i><sub>6</sub></th><th>λ</th></tr><tr class="cj"><td></td><td></td><td></td><td>1</td><td>4</td><td>1</td><td>0</td><td>0</td><td>0</td><td></td></tr></thead><tbody><tr><td>0</td><td><i>x</i><sub>4</sub></td><td>5</td><td>0</td><td>−5</td><td>0</td><td>1</td><td>−4</td><td>−1/2</td><td class="lam">–</td></tr><tr><td>1</td><td><i>x</i><sub>3</sub></td><td>1</td><td>0</td><td>1</td><td>1</td><td>0</td><td>1</td><td>0</td><td class="lam">–</td></tr><tr><td>1</td><td><i>x</i><sub>1</sub></td><td>4</td><td>1</td><td>−3</td><td>0</td><td>0</td><td>−4</td><td>−1/2</td><td class="lam">–</td></tr><tr class="delta"><td></td><td><i>f</i>(<i>x</i>)</td><td>5</td><td>0</td><td>−6</td><td>0</td><td>0</td><td>−3</td><td>−1/2</td><td></td></tr></tbody></table></div></figure></div><h5>Kết luận (P)</h5><div class="work"><span class="ln">Δ<sub>j</sub> ≤ 0 ∀j ⇒ PATƯ bài toán mở rộng: <i>x</i>* = (4; 0; 1; 5; 0; 0), <i>f</i> = 5</span><span class="ln">Ẩn giả <i>x</i><sub>7</sub> = 0 ⇒ <span class="res"><i>x</i>* = (4; 0; 1), &nbsp;<i>f</i>(<i>x</i>*) = 5</span></span></div><h5>Suy kết quả (D)</h5><div class="work"><span class="ln"><i>x</i><sub>1</sub> = 4 &gt; 0 ⇒ <i>y</i><sub>1</sub> + 2<i>y</i><sub>3</sub> = 1 &nbsp;(1)</span><span class="ln"><i>x</i><sub>3</sub> = 1 &gt; 0 ⇒ <i>y</i><sub>2</sub> + 8<i>y</i><sub>3</sub> = 1 &nbsp;(2)</span><span class="ln"><span class="why">RB 1 (đề gốc):</span> 4 + 2·0 = 4 &gt; −1 ⇒ <i>y</i><sub>1</sub> = 0 &nbsp;(3)</span><span class="ln"><span class="why">RB 2:</span> 0 + 1 = 1 <span class="why">→ chặt</span> &nbsp; <span class="why">RB 3:</span> 2·4 + 0 + 8·1 = 16 <span class="why">→ chặt</span></span><span class="ln"><span class="why">Giải (1), (2), (3):</span> <span class="res"><i>y</i>* = (0; −3; 1/2), &nbsp;<i>g</i>(<i>y</i>*) = 0 − 3 + 16·1/2 = 5</span></span><span class="ln"><span class="why">Kiểm tra dấu: <i>y</i><sub>2</sub> = −3 ≤ 0, đúng yêu cầu của (D).</span></span></div></div></details></div></details>
+</section>
+
+<footer>
+  Nguồn: bài giảng Chương 2 (GV Nguyễn Thị Anh Vân); đáp án cuối kỳ HK2 2022–23, HK1 2025–26 (đề 1, 2); đáp án đề thi thử HK1 2021–22; file “lưu ý” của cô. Nghiệm và bảng đơn hình ở đây được giải lại bằng máy để đối chiếu với đáp án.<br>Làm bởi Claude · cập nhật 11/09/2026 · <a href="https://github.com/trn-anh/lopie-hub/blob/main/toi-uu-hoa/doi-ngau/index.html">Mã nguồn</a> · <a href="https://github.com/trn-anh/lopie-hub/commits/main/toi-uu-hoa/doi-ngau">Lịch sử sửa</a>
+</footer>
+</main>
+</div>
+
+<script>
+(function(){
+  const MINUS = '−';
+  const REL = {'<=':'≤','>=':'≥','=':'='};
+  const SIGN = {'>=0':'≥ 0','<=0':'≤ 0','khc':'k.h.c'};
+  const V = (v,j) => `<i>${v}</i><sub>${j}</sub>`;
+  const num = a => a < 0 ? MINUS + (-a) : String(a);
+  const BRACE = '<span class="brace" aria-hidden="true"><svg viewBox="0 0 10 100" preserveAspectRatio="none"><path d="M9 1 C5 1 5 5 5 10 L5 42 C5 47 4 50 1 50 C4 50 5 53 5 58 L5 90 C5 95 5 99 9 99" fill="none" stroke="currentColor" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span>';
+
+  function expr(c, v){
+    let out = '';
+    c.forEach((a, k) => {
+      if (a === 0) return;
+      const mag = Math.abs(a) === 1 ? '' : String(Math.abs(a));
+      const t = mag + V(v, k+1);
+      if (!out) out = (a < 0 ? MINUS : '') + t;
+      else out += (a > 0 ? ' + ' : ` ${MINUS} `) + t;
+    });
+    return out || '0';
+  }
+  function rows(A, rel, b, v){
+    return A.map((row, i) => {
+      let first = true, cells = '';
+      row.forEach((a, k) => {
+        if (a === 0){ cells += '<td class="op"></td><td class="tm"></td>'; return; }
+        const mag = Math.abs(a) === 1 ? '' : String(Math.abs(a));
+        let op = '', body;
+        if (first){ body = (a < 0 ? MINUS : '') + mag + V(v, k+1); first = false; }
+        else { op = a > 0 ? '+' : MINUS; body = mag + V(v, k+1); }
+        cells += `<td class="op">${op}</td><td class="tm">${body}</td>`;
+      });
+      return `<tr>${cells}<td class="rl">${REL[rel[i]]}</td><td class="rh">${num(b[i])}</td></tr>`;
+    }).join('');
+  }
+  function signs(xs, v){
+    const g = [];
+    xs.forEach((s, k) => { if (g.length && g[g.length-1][0] === s) g[g.length-1][1].push(k+1); else g.push([s,[k+1]]); });
+    return g.map(([s, js]) => js.map(j => V(v,j)).join(', ') + ' ' + SIGN[s]).join('; ');
+  }
+  function lp(p, v, f, label){
+    return `<div class="lp"><div class="lp-label">${label}</div><div class="lp-main"><div class="lp-obj"><i>${f}</i>(<i>${v}</i>) = ${expr(p.c, v)} → ${p.sense}</div><div class="lp-body">${BRACE}<table class="sys"><tbody>${rows(p.A, p.rel, p.b, v)}</tbody></table></div><div class="lp-signs">${signs(p.xs, v)}</div></div></div>`;
+  }
+  function dual(p){
+    const m = p.b.length, n = p.c.length;
+    const At = Array.from({length:n}, (_, j) => Array.from({length:m}, (_, i) => p.A[i][j]));
+    let ys, drel, sense;
+    if (p.sense === 'min'){
+      ys = p.rel.map(r => ({'>=':'>=0','<=':'<=0','=':'khc'})[r]);
+      drel = p.xs.map(x => ({'>=0':'<=','<=0':'>=','khc':'='})[x]);
+      sense = 'max';
+    } else {
+      ys = p.rel.map(r => ({'<=':'>=0','>=':'<=0','=':'khc'})[r]);
+      drel = p.xs.map(x => ({'>=0':'>=','<=0':'<=','khc':'='})[x]);
+      sense = 'min';
+    }
+    return {sense, c: p.b.slice(), A: At, rel: drel, b: p.c.slice(), xs: ys};
+  }
+
+  const ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+  const pick = (opts, w) => { let r = Math.random(), s = 0; for (let i = 0; i < opts.length; i++){ s += w[i]; if (r < s) return opts[i]; } return opts[opts.length-1]; };
+  function gen(){
+    const m = ri(2,3), n = ri(3,4);
+    let A;
+    const ok = M => M.every(r => r.filter(a => a !== 0).length >= 2) && M[0].every((_, j) => M.some(r => r[j] !== 0));
+    do {
+      A = Array.from({length:m}, () => Array.from({length:n}, () => { if (Math.random() < 0.22) return 0; const a = ri(-6, 9); return a === 0 ? 1 : a; }));
+    } while (!ok(A));
+    const b = Array.from({length:m}, () => Math.random() < 0.1 ? 0 : ri(-10, 40));
+    const c = Array.from({length:n}, () => { const a = ri(-5, 15); return a === 0 ? 2 : a; });
+    let rel, xs;
+    do {
+      rel = Array.from({length:m}, () => pick(['<=','>=','='], [.4,.4,.2]));
+      xs = Array.from({length:n}, () => pick(['>=0','<=0','khc'], [.55,.25,.2]));
+    } while (rel.every(r => r === rel[0]) && xs.every(x => x === '>=0') && Math.random() < 0.7);
+    return {sense: Math.random() < .5 ? 'min' : 'max', c, A, rel, b, xs};
+  }
+
+  const SEED = {sense:'min', c:[3,1,1], A:[[2,1,1],[3,-2,0],[0,4,1]], rel:['>=','<=','='], b:[8,1,2], xs:['>=0','>=0','khc']};
+  let P = SEED, D = dual(P), ans = {}, checked = false;
+  const stats = {done:0, perfect:0, streak:0};
+
+  const $ = id => document.getElementById(id);
+  const OBJ = [['min','→ min'],['max','→ max']];
+  const YS = [['>=0','≥ 0'],['<=0','≤ 0'],['khc','k.h.c']];
+  const RS = [['<=','≤'],['>=','≥'],['=','=']];
+  const slug = {'min':'min','max':'max','>=0':'ge0','<=0':'le0','khc':'khc','<=':'le','>=':'ge','=':'eq'};
+
+  function segs(key, opts){
+    return `<div class="segs" role="group">${opts.map(([v, t]) => `<button type="button" id="q-${key}-${slug[v]}" data-key="${key}" data-val="${v}" aria-pressed="${ans[key] === v}">${t}</button>`).join('')}</div>`;
+  }
+  function renderForm(){
+    const m = P.b.length, n = P.c.length;
+    let h = `<div class="grp"><div class="grp-title">Hàm mục tiêu của (D)</div><div class="q-row" data-row="obj"><span class="lbl"><i>G</i>(<i>y</i>)</span>${segs('obj', OBJ)}<span class="mark"></span></div></div>`;
+    h += `<div class="grp"><div class="grp-title">Dấu của ẩn (D)</div>`;
+    for (let i = 0; i < m; i++) h += `<div class="q-row" data-row="y${i}"><span class="lbl">${V('y', i+1)} <small>từ RB ${i+1}</small></span>${segs('y'+i, YS)}<span class="mark"></span></div>`;
+    h += `</div><div class="grp"><div class="grp-title">Chiều ràng buộc của (D)</div>`;
+    for (let j = 0; j < n; j++) h += `<div class="q-row" data-row="r${j}"><span class="lbl">RB ${j+1} <small>từ ${V('x', j+1)}</small></span>${segs('r'+j, RS)}<span class="mark"></span></div>`;
+    h += `</div><div class="tr-actions"><button type="button" class="btn" id="btn-check">Chấm</button><button type="button" class="btn ghost" id="btn-new">Đề khác</button></div>`;
+    $('tr-form').innerHTML = h;
+  }
+  function renderProblem(label){
+    $('tr-from').textContent = label;
+    $('tr-p').innerHTML = lp(P, 'x', 'f', '(P)');
+    $('tr-result').className = 'tr-result';
+    $('tr-result').innerHTML = '';
+  }
+  function reason(kind, idx){
+    const minP = P.sense === 'min';
+    if (kind === 'y'){
+      const r = P.rel[idx];
+      if (r === '=') return `RB ${idx+1} là “=” nên ${V('y', idx+1)} k.h.c`;
+      return `(P) ${P.sense}, RB ${idx+1} là “${REL[r]}”: ${minP ? 'chung cùng dấu' : 'chung trái dấu'} nên ${V('y', idx+1)} ${SIGN[D.xs[idx]]}`;
+    }
+    const x = P.xs[idx];
+    if (x === 'khc') return `${V('x', idx+1)} k.h.c nên RB ${idx+1} là “=”`;
+    return `(P) ${P.sense}, ${V('x', idx+1)} ${SIGN[x]}: ${minP ? 'biến trái dấu' : 'biến cùng dấu'} nên RB ${idx+1} là “${REL[D.rel[idx]]}”`;
+  }
+  function check(){
+    const m = P.b.length, n = P.c.length;
+    let wrong = [];
+    const mark = (row, good, correctText) => {
+      const el = document.querySelector(`[data-row="${row}"]`);
+      el.classList.remove('ok','bad'); el.classList.add(good ? 'ok' : 'bad');
+      el.querySelector('.mark').textContent = good ? '✓ đúng' : `✗ đúng là ${correctText}`;
+    };
+    const okObj = ans.obj === D.sense; mark('obj', okObj, '→ ' + D.sense);
+    if (!okObj) wrong.push(`(P) ${P.sense} nên (D) ${D.sense}`);
+    for (let i = 0; i < m; i++){ const g = ans['y'+i] === D.xs[i]; mark('y'+i, g, SIGN[D.xs[i]]); if (!g) wrong.push(reason('y', i)); }
+    for (let j = 0; j < n; j++){ const g = ans['r'+j] === D.rel[j]; mark('r'+j, g, REL[D.rel[j]]); if (!g) wrong.push(reason('r', j)); }
+    if (!checked){
+      stats.done++;
+      if (!wrong.length){ stats.perfect++; stats.streak++; } else stats.streak = 0;
+      checked = true;
+      $('score').textContent = `Đúng hết: ${stats.perfect} / ${stats.done} đề · Chuỗi: ${stats.streak}`;
+    }
+    const res = $('tr-result');
+    res.className = 'tr-result show';
+    res.innerHTML = (wrong.length
+      ? `<div class="verdict bad">Sai ${wrong.length} chỗ. Trong bài thi, như vậy câu a) được 0đ.</div><ul class="note-s">${wrong.map(w => `<li>${w}</li>`).join('')}</ul>`
+      : `<div class="verdict ok">Đúng hết dấu. Giờ so vế trái bạn viết với (D) đầy đủ:</div>`)
+      + `<div style="overflow-x:auto;margin-top:10px">${lp(D, 'y', 'G', '(D)')}</div>`;
+  }
+  function newProblem(){
+    P = gen(); D = dual(P); ans = {}; checked = false;
+    renderProblem('Đề ngẫu nhiên'); renderForm();
+  }
+  document.addEventListener('click', e => {
+    const b = e.target.closest('#trainer button');
+    if (!b) return;
+    if (b.id === 'btn-check') return check();
+    if (b.id === 'btn-new') return newProblem();
+    const key = b.dataset.key;
+    if (!key) return;
+    ans[key] = b.dataset.val;
+    b.parentElement.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+  });
+  renderProblem('Bài tập 2.4 · bài giảng');
+  renderForm();
+})();
+
+</script>
+</body>
+</html>
