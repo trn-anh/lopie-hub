@@ -12,6 +12,10 @@ Nhật ký thay đổi của repo. Mục mới nhất nằm trên cùng.
 
 ## 2026-09-23
 
+- [Claude] thêm: `apps-script/lich-hop-nhom/`: bản 3.5, dùng cho HCMUTE và trường nhiều phòng
+  - Quản trị › Phòng họp › Thêm hàng loạt: địa điểm HCMUTE theo sơ đồ + bảng sân GDTC, tạo dãy phòng theo khu, dán danh sách từ Excel; `api_importRooms`
+  - Sức chứa 0 = chưa rõ, không cảnh báo quá chỗ
+  - Tiêu đề cột một dòng; chú thích, mẹo gom vào nút ⓘ; chọn khu, tìm phòng, ẩn phòng trống; lọc khu gom theo cơ sở và được nhớ; form chọn phòng theo nhóm khu
 - [Claude] lỗi: `apps-script/lich-hop-nhom/`: bản 3.4, sửa ảnh đại diện
   - Ảnh Google không lấy được: id_token có thể không kèm ảnh, nay hỏi thêm userinfo; lấy ảnh 256px; ghi nhật ký đăng nhập
   - Người mới xin tham gia có sẵn ảnh Google; sửa nhầm `s.profileName`

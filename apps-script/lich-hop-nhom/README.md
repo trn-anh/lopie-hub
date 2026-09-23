@@ -13,7 +13,7 @@ Thư mục này **không phải** một trang của hub, chỉ để lưu mã v�
 1. Mở dự án Apps Script, dán đè toàn bộ nội dung `Code.gs` và `Index.html`.
 2. Chọn **Triển khai → Quản lý triển khai**. Chọn **đúng triển khai có URL trùng `WEBAPP_URL`**, là URL đã khai trong `setOAuthCredentials`. Chạy `kiemTraCauHinh()` nếu không nhớ.
 3. Bấm **✏️ Sửa → Phiên bản: Phiên bản mới → Triển khai**. URL `/exec` giữ nguyên, không cần cấu hình lại OAuth.
-4. Kiểm tra: mở app, bấm ảnh đại diện góc phải. Dòng cuối menu phải ghi **Phiên bản 3.4**.
+4. Kiểm tra: mở app, bấm ảnh đại diện góc phải. Dòng cuối menu phải ghi **Phiên bản 3.5**.
 
 > **Vì sao phải đúng triển khai:** đăng nhập Google xong luôn quay về `WEBAPP_URL`.
 > Nếu cập nhật nhầm triển khai khác, hoặc chỉ thử bằng link `/dev`, thì lúc đăng nhập lại sẽ rơi về giao diện cũ.
@@ -21,6 +21,26 @@ Thư mục này **không phải** một trang của hub, chỉ để lưu mã v�
 
 > **Bảo mật:** hàm `napCauHinh()` trong repo để trống, vì client secret thật đã nằm trong Script Properties.
 > Không commit client secret lên GitHub.
+
+## Dùng cho HCMUTE (bản 3.5)
+
+Vào **Quản trị → Phòng họp → Thêm hàng loạt**. Hộp thoại có 3 tab:
+
+| Tab | Việc làm |
+|---|---|
+| Địa điểm HCMUTE | Nạp 8 địa điểm có tên trên sơ đồ và bảng sân GDTC: Hội trường lớn, Nhà mái vòm khu A, Nhà tập khu E, Sân quần vợt khu E, Sân bóng đá, Hội trường CS2, Sân bóng CS2, Sân cầu lông CS2. Có tuỳ chọn tạm ngưng 4 phòng mẫu của app. |
+| Tạo dãy phòng | Chọn khu theo sơ đồ, nhập số tầng và số phòng mỗi tầng. VD Khu A4, tầng 1–5, 10 phòng/tầng tạo ra A4-101 … A4-510. Xem trước trước khi tạo. |
+| Dán danh sách | Dán từ Excel hoặc Google Sheets, mỗi dòng một phòng: `Mã phòng · Sức chứa · Khu · Thiết bị`. Chỉ cần cột đầu. |
+
+- **Nguồn:** chú thích "Bản đồ hiện trạng" cơ sở 1 (1 Võ Văn Ngân: khu A1–A5, khối B, C, D, E0–E4, F1, G), cơ sở 2 (Lê Văn Việt: khối V 9 tầng…), và bảng phân bố sân GDTC HK1 2024–2025.
+- **Giới hạn:** sơ đồ không ghi số phòng, số tầng (trừ khối V) và sức chứa, nên app không tự bịa số phòng.
+  - Số tầng, số phòng mỗi tầng cần kiểm tra với trường.
+  - Sức chứa để trống nghĩa là "chưa rõ"; phòng như vậy không bị cảnh báo quá chỗ.
+- Mã phòng đã có thì được bỏ qua, không ghi đè.
+- Nhiều phòng vẫn dễ xem:
+  - Chọn khu, tìm phòng, "Ẩn phòng trống" trên thanh công cụ.
+  - Lọc khu bên trái gom theo cơ sở, có nút "chỉ" để xem riêng một khu, lựa chọn được nhớ lại.
+  - Tiêu đề cột một dòng; chú thích và mẹo gom vào nút ⓘ.
 
 ## Tính năng chính (bản 3.3–3.4)
 

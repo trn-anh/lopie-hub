@@ -213,7 +213,8 @@ var LHN = (function () {
           }
         }
       });
-      if (room && !room.online && ppl.length > Number(room.capacity)) warnings.push(room.name + ' chỉ có ' + room.capacity + ' chỗ nhưng có ' + ppl.length + ' người tham dự.');
+      // Sức chứa 0 = chưa rõ (VD phòng vừa nạp từ sơ đồ): không cảnh báo quá chỗ
+      if (room && !room.online && Number(room.capacity) > 0 && ppl.length > Number(room.capacity)) warnings.push(room.name + ' chỉ có ' + room.capacity + ' chỗ nhưng có ' + ppl.length + ' người tham dự.');
     }
     return { errors: errors, warnings: warnings, freeRooms: freeRooms, dates: dates, conflictDates: conflictDates };
   }
@@ -765,7 +766,7 @@ function appPayload_(db, user) {
     settings: db.settings,
     today: Utilities.formatDate(now, APP_TIME_ZONE, 'yyyy-MM-dd'),
     nowMin: nowTime[0] * 60 + nowTime[1],
-    version: '3.4',
+    version: '3.5',
     users: user.role === 'admin' ? db.users : db.users.filter(function (x) { return x.status === 'active'; }),
     rooms: db.rooms,
     meetings: db.meetings,
@@ -1146,6 +1147,48 @@ function api_saveRoom(token, x) {
   return { ok: true, data: api_bootstrap(token) };
 }
 
+/**
+ * Thêm nhiều phòng một lần (tạo dãy phòng, dán danh sách, nạp địa điểm theo sơ đồ trường).
+ * Mã phòng đã có thì bỏ qua, không ghi đè. opts.deactivate: mã các phòng mẫu muốn tạm ngưng.
+ */
+function api_importRooms(token, list, opts) {
+  var c = ctx_(token);
+  requireAdmin_(c);
+  var db = c.db;
+  list = Array.isArray(list) ? list : [];
+  if (list.length > 1000) throw new Error('Mỗi lần thêm tối đa 1000 phòng.');
+  var byId = {};
+  db.rooms.forEach(function (r) { byId[r.id] = r; });
+  var added = [], skipped = [], paused = [];
+  list.forEach(function (x) {
+    x = x || {};
+    var id = String(x.id || x.name || '').trim().replace(/[^\w\-.]/g, '-').slice(0, 40);
+    if (!id) return;
+    if (byId[id]) { skipped.push(id); return; }
+    var r = {
+      id: id,
+      name: String(x.name || id).trim().slice(0, 80),
+      capacity: Math.max(0, Math.floor(Number(x.capacity) || 0)),   // 0 = chưa rõ
+      building: String(x.building || '').trim().slice(0, 80) || 'Khác',
+      equipment: String(x.equipment || '').trim().slice(0, 200),
+      online: false,
+      active: x.active !== false
+    };
+    db.rooms.push(r); byId[id] = r; added.push(id);
+  });
+  ((opts && opts.deactivate) || []).forEach(function (id) {
+    var r = byId[String(id)];
+    if (r && r.active && !r.online) { r.active = false; paused.push(r.id); }
+  });
+  if (added.length || paused.length) {
+    saveDatabase_(db);
+    addLog_(c.email, 'room_import', '', 'Thêm ' + added.length + ' phòng' +
+      (added.length ? ' (' + added.slice(0, 4).join(', ') + (added.length > 4 ? '…' : '') + ')' : '') +
+      (paused.length ? ', tạm ngưng ' + paused.join(', ') : ''));
+  }
+  return { ok: true, added: added.length, skipped: skipped, paused: paused, data: api_bootstrap(token) };
+}
+
 function api_saveUser(token, x) {
   var c = ctx_(token);
   requireAdmin_(c);
@@ -1497,7 +1540,7 @@ function kiemTraCauHinh() {
     '  > Sửa > Phiên bản: Phiên bản mới > Triển khai.',
     '- Không bấm "Triển khai mới" (sẽ ra URL khác). Không dùng link /dev để dùng thật: link /dev',
     '  chạy code mới nhất, nhưng đăng nhập lại sẽ đưa về bản /exec cũ.',
-    '- Kiểm tra: mở app, bấm ảnh đại diện góc phải, dòng "Phiên bản" phải là ' + '3.4' + '.'
+    '- Kiểm tra: mở app, bấm ảnh đại diện góc phải, dòng "Phiên bản" phải là ' + '3.5' + '.'
   ].join('\n');
   Logger.log(out);
   return out;
