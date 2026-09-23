@@ -12,6 +12,10 @@ Nhật ký thay đổi của repo. Mục mới nhất nằm trên cùng.
 
 ## 2026-09-23
 
+- [Claude] thêm: `apps-script/lich-hop-nhom/`: bản 3.10, làm lại dữ liệu từ đầu an toàn
+  - `taoSheetMoi()`: tạo Google Sheet mới, chuyển app sang, giữ cấu hình đăng nhập; không xoá sheet cũ, báo có xoá được hay không (script nằm trong sheet thì không)
+  - `doiLinkChinh()`: đổi link chính sang triển khai mới mà không phải nhập lại client secret
+  - Sheet bị xoá tay: lỗi chỉ rõ chạy `taoSheetMoi()`; `kiemTraCauHinh()` in đường dẫn sheet dữ liệu
 - [Claude] dọn: `apps-script/lich-hop-nhom/`: bản 3.9, bỏ thông báo "Cập nhật link chính" theo yêu cầu
   - Bỏ thanh cảnh báo màu cam, hộp hướng dẫn tự mở và lời nhắc trên trang đăng nhập; bỏ `api_checkDeploy`, `api_deployStatus`
   - Chỉ còn kiểm tra trong `kiemTraCauHinh()`; link bắt đăng nhập Google thì hàm chỉ nêu thông tin, không kết luận "cần cập nhật"

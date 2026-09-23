@@ -1260,7 +1260,7 @@ const MockAPI=(()=>{
   const canEdit=(u,m)=>u.role==='admin'||m.createdBy===u.email||m.chair===u.email;
   function payload(){
     const u=me();
-    return {state:'ok',mode:'demo',email:u.email,me:u,settings:db.settings,today:today(),nowMin:nowMin(),version:'3.9-demo',
+    return {state:'ok',mode:'demo',email:u.email,me:u,settings:db.settings,today:today(),nowMin:nowMin(),version:'3.10-demo',
       users:u.role==='admin'?db.users:db.users.filter(x=>x.status==='active'),rooms:db.rooms,meetings:db.meetings,docs:db.docs,attendance:db.attendance};
   }
   function guard(admin){load();const u=me();if(!u)throw new Error('Phiên đăng nhập đã hết. Hãy đăng nhập lại.');if(admin&&u.role!=='admin')throw new Error('Chỉ quản trị viên được thực hiện thao tác này.');return u;}
@@ -1274,7 +1274,7 @@ const MockAPI=(()=>{
     setPresence(){return ok({ok:true,visible:true});},
     saveAvatar(x){return run(()=>{const u=guard();u.avatar=x===null||x==='none'?'':'data:'+x.mimeType+';base64,'+x.data;log('avatar','',u.avatar?'ảnh tải lên':'chữ viết tắt');save();return {ok:true,url:u.avatar,data:payload()};});},
     reset(){const s=db&&db.session;db=seed();db.session=s;save();},
-    bootstrap(){load();if(!me())return ok({state:'login',mode:'demo',settings:db.settings,version:'3.9-demo'});return ok(payload());},
+    bootstrap(){load();if(!me())return ok({state:'login',mode:'demo',settings:db.settings,version:'3.10-demo'});return ok(payload());},
     requestAccess(){return fail('Bản demo không hỗ trợ đăng ký.');},
     saveMeeting(input){return run(()=>{
       const u=guard();

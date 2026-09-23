@@ -15,7 +15,7 @@ Làm đủ 4 bước mỗi lần dán code mới. Chỉ dán code mà bỏ bư�
 1. Mở dự án Apps Script, dán đè toàn bộ nội dung `Code.gs` và `Index.html`, bấm Lưu.
 2. Chọn **Triển khai (Deploy) → Quản lý triển khai (Manage deployments)**. Chọn triển khai có **Mã triển khai (Deployment ID) trùng mã in ở dòng "Mã triển khai link chính"** của `kiemTraCauHinh()`.
 3. Bấm **bút chì (Edit) → Phiên bản (Version): Phiên bản mới (New version) → Triển khai (Deploy)**. Link `/exec` giữ nguyên, không cần cấu hình lại OAuth.
-4. Chạy `kiemTraCauHinh()`: dòng **Link chính đang chạy** phải có dấu ✓. Hoặc mở **link chính**: chân trang đăng nhập phải ghi **Phiên bản 3.9**.
+4. Chạy `kiemTraCauHinh()`: dòng **Link chính đang chạy** phải có dấu ✓. Hoặc mở **link chính**: chân trang đăng nhập phải ghi **Phiên bản 3.10**.
 
 > **Vì sao đăng xuất rồi đăng nhập lại thì thấy giao diện cũ:**
 > - Link thử (Test deployments, đuôi `/dev`) luôn chạy code mới nhất, nhưng chỉ chủ dự án mở được.
@@ -31,6 +31,28 @@ Làm đủ 4 bước mỗi lần dán code mới. Chỉ dán code mà bỏ bư�
 
 > **Bảo mật:** hàm `napCauHinh()` trong repo để trống, vì client secret thật đã nằm trong Script Properties.
 > Không commit client secret lên GitHub.
+
+## Làm lại dữ liệu từ đầu (sheet mới, từ bản 3.10)
+
+**Đừng xoá tay file Google Sheet đang dùng.**
+- App sẽ báo "Không mở được Google Sheet".
+- Nếu project Apps Script được tạo từ bên trong file đó (Tiện ích mở rộng → Apps Script), xoá file là mất luôn cả app.
+
+Thay vào đó, trong Apps Script chọn hàm **`taoSheetMoi`** rồi bấm **Chạy (Run)**:
+- **Tạo một sheet mới tinh** và chuyển app sang dùng sheet đó:
+  - Bạn (chủ script) là quản trị viên.
+  - Có sẵn phòng Online và phòng HCMUTE theo sơ đồ.
+  - Cài đặt về mặc định.
+- **Giữ nguyên:** cấu hình đăng nhập Google, link app, các tệp đã tải lên Drive.
+- **Không chuyển sang sheet mới:** thành viên, lịch họp, nhật ký cũ. Người khác đăng nhập lại và gửi yêu cầu tham gia, hoặc bạn thêm họ trong Quản trị → Thành viên.
+- **Sheet cũ vẫn nằm trong Drive.** Nhật ký chạy hàm cho biết có xoá được sheet cũ không: script đứng riêng thì xoá được, script nằm trong file sheet thì không.
+
+**Nếu không tìm thấy link chính.** Có thể trong "Quản lý triển khai" không có triển khai nào trùng "Mã triển khai link chính", do link chính thuộc dự án khác hoặc đã bị lưu trữ. Khi đó:
+1. Tạo **Triển khai mới** (Ứng dụng web; Thực thi với tư cách: Tôi; Người có quyền truy cập: Bất kỳ ai).
+2. Dán link `/exec` mới vào hàm **`doiLinkChinh`** rồi chạy.
+3. Thêm link đó vào Google Cloud Console → Credentials → OAuth client → **Authorized redirect URIs**.
+
+Không cần nhập lại client secret.
 
 ## Bản 3.7–3.8: link chính và giao diện gọn hơn
 

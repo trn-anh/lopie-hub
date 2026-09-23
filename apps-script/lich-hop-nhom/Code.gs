@@ -1,6 +1,7 @@
 /**
  * LỊCH HỌP NHÓM — BACKEND GOOGLE APPS SCRIPT (Code.gs)
- * Phiên bản 3.9 — Đăng nhập bằng Google OAuth 2.0 thật, phòng HCMUTE nạp sẵn.
+ * Phiên bản 3.10 — Đăng nhập bằng Google OAuth 2.0 thật, phòng HCMUTE nạp sẵn.
+ * Làm lại dữ liệu từ đầu: chạy taoSheetMoi() (không xoá tay file Google Sheet).
  * kiemTraCauHinh() cho biết link chính (/exec) có đang chạy đúng phiên bản không.
  *
  * KIẾN TRÚC XÁC THỰC
@@ -27,7 +28,7 @@
 var SESSION_HOURS = 12;              // Session token sống bao lâu
 var SCRIPT_PROPS = PropertiesService.getScriptProperties();
 var APP_TIME_ZONE = 'Asia/Ho_Chi_Minh';
-var APP_VERSION = '3.9';
+var APP_VERSION = '3.10';
 var DEFAULT_SCHOOL = 'Trường Đại học Công nghệ Kỹ thuật TP.HCM';
 var TEXT_SETTINGS = ['APP_NAME', 'ORG_NAME', 'SCHOOL_NAME'];   // luôn là chữ, kể cả khi gõ toàn số
 
@@ -379,7 +380,7 @@ function getSpreadsheet_() {
     try {
       return SpreadsheetApp.openById(sheetId);
     } catch (e) {
-      throw new Error('Không mở được Google Sheet (ID: ' + sheetId + '). Hãy kiểm tra file còn tồn tại và chạy lại setup().');
+      throw new Error('Không mở được Google Sheet (ID: ' + sheetId + '). File có thể đã bị xoá. Quản trị viên mở Apps Script, chạy hàm taoSheetMoi() để tạo sheet mới.');
     }
   }
   var ss = null;
@@ -1636,6 +1637,36 @@ function trashAvatar_(url) {
  */
 function setup() {
   var ss = getSpreadsheet_();
+  var myEmail = initData_(ss);
+
+  var url = '';
+  try { url = ScriptApp.getService().getUrl() || ''; } catch (e) {}
+
+  var out = [
+    '================ SETUP HOÀN TẤT ================',
+    'Google Sheet : ' + ss.getUrl(),
+    'Quản trị viên: ' + myEmail,
+    'URL web app  : ' + (url || '(chưa deploy — hãy Deploy > New deployment trước)'),
+    '',
+    'BƯỚC TIẾP THEO:',
+    '1. Deploy > New deployment > Web app',
+    '     Execute as       : Me (' + myEmail + ')',
+    '     Who has access   : Anyone',
+    '2. Copy URL kết thúc bằng /exec',
+    '3. Vào Google Cloud Console tạo OAuth Client ID (loại Web application),',
+    '   dán URL /exec đó vào mục "Authorized redirect URIs"',
+    '4. Quay lại đây chạy: setOAuthCredentials("CLIENT_ID","CLIENT_SECRET","URL_/exec")',
+    '================================================'
+  ].join('\n');
+  Logger.log(out);
+  return out;
+}
+
+/**
+ * Tạo các bảng còn thiếu trong sheet: quản trị viên (chủ script), phòng Online + phòng HCMUTE,
+ * cài đặt mặc định. Dữ liệu đã có thì giữ nguyên. Trả về email quản trị viên.
+ */
+function initData_(ss) {
   var myEmail = String(Session.getEffectiveUser().getEmail() || '').toLowerCase().trim();
   if (myEmail) SCRIPT_PROPS.setProperty('ADMIN_EMAIL', myEmail);
 
@@ -1669,25 +1700,57 @@ function setup() {
   db.settings = Object.assign({}, defaultSettings, db.settings || {});
   saveDatabase_(db, ss);
   if (freshRooms) SCRIPT_PROPS.setProperty('HCMUTE_SEED', '1');
+  return myEmail;
+}
 
-  var url = '';
-  try { url = ScriptApp.getService().getUrl() || ''; } catch (e) {}
+/**
+ * LÀM LẠI DỮ LIỆU TỪ ĐẦU — chọn hàm này rồi bấm Chạy (Run).
+ * - Tạo một Google Sheet mới tinh và chuyển app sang dùng sheet đó: bạn (chủ script) là quản trị viên,
+ *   có sẵn phòng Online + phòng HCMUTE theo sơ đồ, cài đặt mặc định.
+ * - Giữ nguyên cấu hình đăng nhập Google, link app, và các tệp đã tải lên Drive.
+ * - Thành viên, lịch họp, nhật ký cũ không chuyển sang. Người khác đăng nhập lại và gửi yêu cầu tham gia.
+ * - Sheet cũ KHÔNG bị xoá, vẫn nằm trong Drive. Đừng xoá tay file sheet đang dùng: app sẽ báo lỗi,
+ *   và nếu script được tạo từ bên trong file đó (Tiện ích mở rộng > Apps Script) thì mất luôn cả app.
+ */
+function taoSheetMoi() {
+  var oldId = prop_('SPREADSHEET_ID'), oldUrl = '';
+  if (oldId) { try { oldUrl = SpreadsheetApp.openById(oldId).getUrl(); } catch (e) { oldUrl = '(không mở được: ' + oldId + ')'; } }
+  var container = null;
+  try { container = SpreadsheetApp.getActiveSpreadsheet(); } catch (e) {}
 
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  var ss, myEmail;
+  try {
+    ss = SpreadsheetApp.create('CSDL Lịch Họp Nhóm (' + Utilities.formatDate(new Date(), APP_TIME_ZONE, 'dd/MM/yyyy') + ')');
+    SCRIPT_PROPS.setProperty('SPREADSHEET_ID', ss.getId());
+    SCRIPT_PROPS.deleteProperty('HCMUTE_SEED');
+    myEmail = initData_(ss);
+    // Bỏ trang tính trống mặc định của file mới
+    var ours = ['Users', 'Rooms', 'Meetings', 'Docs', 'Attendance', 'Settings', 'Logs'];
+    ss.getSheets().forEach(function (sh) {
+      if (ours.indexOf(sh.getName()) < 0 && sh.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(sh);
+    });
+  } finally {
+    lock.releaseLock();
+  }
+  addLog_(myEmail, 'setup', '', 'Tạo sheet dữ liệu mới' + (oldId ? ' (thay ' + oldId + ')' : ''));
+
+  var keepOld = container && oldId && container.getId() === oldId;
   var out = [
-    '================ SETUP HOÀN TẤT ================',
-    'Google Sheet : ' + ss.getUrl(),
-    'Quản trị viên: ' + myEmail,
-    'URL web app  : ' + (url || '(chưa deploy — hãy Deploy > New deployment trước)'),
+    '============ ĐÃ TẠO SHEET DỮ LIỆU MỚI ============',
+    'Sheet mới     : ' + ss.getUrl(),
+    'Sheet cũ      : ' + (oldUrl || '(không có)') + (oldUrl ? '  — vẫn giữ nguyên trong Drive' : ''),
+    'Quản trị viên : ' + myEmail,
+    'Phòng         : Online + ' + (getDatabase_(ss).rooms.length - 1) + ' phòng HCMUTE (phòng học là phòng mẫu)',
     '',
-    'BƯỚC TIẾP THEO:',
-    '1. Deploy > New deployment > Web app',
-    '     Execute as       : Me (' + myEmail + ')',
-    '     Who has access   : Anyone',
-    '2. Copy URL kết thúc bằng /exec',
-    '3. Vào Google Cloud Console tạo OAuth Client ID (loại Web application),',
-    '   dán URL /exec đó vào mục "Authorized redirect URIs"',
-    '4. Quay lại đây chạy: setOAuthCredentials("CLIENT_ID","CLIENT_SECRET","URL_/exec")',
-    '================================================'
+    keepOld ? 'ĐỪNG XOÁ SHEET CŨ: script này nằm bên trong file đó, xoá file là mất cả app.'
+      : container ? 'Script này nằm trong file "' + container.getName() + '": đừng xoá file đó. Sheet cũ thì xoá được khi không cần nữa.'
+      : 'Script đứng riêng, không nằm trong sheet nào: sheet cũ xoá được khi không cần nữa.',
+    '',
+    'TIẾP THEO: mở link chính của app, đăng nhập lại. Mọi người khác gửi lại yêu cầu tham gia,',
+    'hoặc bạn thêm họ trong Quản trị > Thành viên.',
+    '=================================================='
   ].join('\n');
   Logger.log(out);
   return out;
@@ -1733,6 +1796,7 @@ function kiemTraCauHinh() {
   var pr = deployState_(true);
   var out = [
     'SPREADSHEET_ID     : ' + (prop_('SPREADSHEET_ID') || '(chưa có — chạy setup())'),
+    'Sheet dữ liệu      : ' + (function () { try { return getSpreadsheet_().getUrl(); } catch (e) { return 'KHÔNG MỞ ĐƯỢC — chạy taoSheetMoi()'; } })(),
     'OAUTH_CLIENT_ID    : ' + (cid || '(CHƯA CÓ)'),
     'OAUTH_CLIENT_SECRET: ' + (prop_('OAUTH_CLIENT_SECRET') ? '(đã lưu)' : '(CHƯA CÓ)'),
     'WEBAPP_URL         : ' + (prop_('WEBAPP_URL') || '(CHƯA CÓ)'),
@@ -1761,7 +1825,7 @@ function kiemTraCauHinh() {
     '- Link thử (Test deployments, đuôi /dev) luôn chạy code mới nhất nhưng chỉ bạn mở được;',
     '  đăng nhập xong Google đưa về link chính, nên nếu link chính chưa cập nhật bạn sẽ thấy bản cũ.',
     '- Không thấy mã triển khai trên trong danh sách: link chính thuộc dự án Apps Script khác.',
-    '  Dán code vào đúng dự án đó, hoặc chạy lại setOAuthCredentials với link /exec của dự án này.',
+    '  Dán code vào đúng dự án đó, hoặc tạo triển khai mới ở dự án này rồi làm theo hàm doiLinkChinh().',
     '- Kiểm tra: mở app, bấm ảnh đại diện góc phải, dòng "Phiên bản" phải là ' + APP_VERSION + '.'
   ].join('\n');
   Logger.log(out);
@@ -1809,6 +1873,38 @@ function napCauHinh() {
     '',   // CLIENT_SECRET (GOCSPX-…)
     ''    // URL web app (https://script.google.com/macros/s/…/exec)
   );
+}
+
+/**
+ * ĐỔI LINK CHÍNH — chỉ dùng khi trong "Quản lý triển khai" không có triển khai nào trùng
+ * "Mã triển khai link chính" (link chính thuộc dự án khác hoặc đã bị lưu trữ).
+ * 1. Triển khai (Deploy) > Triển khai mới (New deployment) > Ứng dụng web: Thực thi với tư cách "Tôi",
+ *    Người có quyền truy cập "Bất kỳ ai" > Triển khai > sao chép URL ứng dụng web (đuôi /exec).
+ * 2. Dán URL đó vào giữa hai dấu nháy ở dòng var url bên dưới, chọn hàm này, bấm Chạy.
+ * 3. Google Cloud Console > APIs & Services > Credentials > OAuth client của app >
+ *    Authorized redirect URIs: thêm đúng URL đó, bấm Save (thiếu bước này Google báo redirect_uri_mismatch).
+ * Giữ nguyên CLIENT_ID và CLIENT_SECRET đã lưu, không cần nhập lại.
+ */
+function doiLinkChinh() {
+  var url = '';   // dán URL /exec mới vào đây
+  url = String(url || '').trim();
+  if (!/^https:\/\/script\.google\.com\/(a\/macros\/[^\/]+|macros)\/s\/[\w-]+\/exec$/.test(url)) {
+    throw new Error('Dán URL ứng dụng web dạng https://script.google.com/macros/s/.../exec vào dòng var url trong hàm doiLinkChinh.');
+  }
+  var old = prop_('WEBAPP_URL');
+  SCRIPT_PROPS.setProperty('WEBAPP_URL', url);
+  SCRIPT_PROPS.deleteProperty('EXEC_VERSION');
+  try { CacheService.getScriptCache().remove('lhn_exec_probe'); } catch (e) {}
+  var out = [
+    'Đã đổi link chính.',
+    '  Cũ : ' + (old || '(chưa có)'),
+    '  Mới: ' + url,
+    'BẮT BUỘC: thêm link mới vào Google Cloud Console > APIs & Services > Credentials >',
+    'OAuth client của app > Authorized redirect URIs, bấm Save. Chờ vài phút rồi mở link mới để đăng nhập.',
+    'Từ nay chia sẻ link mới; mỗi lần cập nhật code thì sửa đúng triển khai này (bút chì > Phiên bản mới).'
+  ].join('\n');
+  Logger.log(out);
+  return out;
 }
 
 /**
