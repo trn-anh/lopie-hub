@@ -166,7 +166,9 @@ var LHN = (function () {
     else if (e - s < 15) errors.push('Cuộc họp cần dài ít nhất 15 phút.');
     else {
       var o = ctx.original;
-      var timeChanged = !o || o.date !== d.date || o.start !== d.start || o.end !== d.end;
+      // Chỉ chặn "thời điểm đã qua" khi dời ngày hoặc giờ bắt đầu: kéo dài giờ kết thúc
+      // của cuộc họp đang diễn ra vẫn được.
+      var timeChanged = !o || o.date !== d.date || o.start !== d.start;
       if (timeChanged && (d.date < ctx.today || (d.date === ctx.today && s < ctx.nowMin))) errors.push('Không thể đặt lịch cho thời điểm đã qua.');
       for (var i = 0; i < repeat; i++) dates.push(addDays(d.date, 7 * i));
       var active = (ctx.meetings || []).filter(function (m) { return m.status !== 'cancelled' && m.id !== ctx.editingId; });
@@ -743,7 +745,7 @@ function appPayload_(db, user) {
     settings: db.settings,
     today: Utilities.formatDate(now, APP_TIME_ZONE, 'yyyy-MM-dd'),
     nowMin: nowTime[0] * 60 + nowTime[1],
-    version: '3.2-clash',
+    version: '3.3-keo-tha',
     users: user.role === 'admin' ? db.users : db.users.filter(function (x) { return x.status === 'active'; }),
     rooms: db.rooms,
     meetings: db.meetings,
@@ -920,6 +922,53 @@ function api_saveMeeting(token, input) {
   }
 }
 
+/**
+ * Kéo thả trên lịch: chỉ đổi ngày, giờ, phòng; tài liệu và thành phần giữ nguyên.
+ * Vẫn kiểm tra đầy đủ như khi sửa bằng form: trùng phòng, chủ trì/thư ký bận, giờ đã qua.
+ */
+function api_moveMeeting(token, mid, patch) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Hệ thống đang xử lý một lượt đặt lịch khác. Vui lòng thử lại sau vài giây.');
+  try {
+    var c = ctx_(token);
+    var db = c.db, user = c.user, email = c.email;
+    var m = null;
+    db.meetings.forEach(function (x) { if (x.id === mid) m = x; });
+    if (!m) throw new Error('Không tìm thấy cuộc họp.');
+    if (m.status === 'cancelled') throw new Error('Cuộc họp đã bị hủy.');
+    if (user.role !== 'admin' && m.createdBy !== email && m.chair !== email) {
+      throw new Error('Chỉ người tạo, chủ trì hoặc quản trị viên được dời cuộc họp này.');
+    }
+    patch = patch || {};
+    var input = {
+      id: m.id, title: m.title, desc: m.desc, chair: m.chair, secretary: m.secretary, members: m.members,
+      date: String(patch.date || m.date), start: String(patch.start || m.start),
+      end: String(patch.end || m.end), room: String(patch.room || m.room), docs: [], repeatWeeks: 1
+    };
+    var now = new Date();
+    var clock = Utilities.formatDate(now, APP_TIME_ZONE, 'HH:mm').split(':').map(Number);
+    var userBy = {};
+    db.users.forEach(function (u) { userBy[u.email] = u; });
+    var res = LHN.validate(input, {
+      rooms: db.rooms, userBy: userBy, meetings: db.meetings, attendance: db.attendance,
+      dayStart: Number(db.settings.DAY_START), dayEnd: Number(db.settings.DAY_END),
+      maxRepeat: Number(db.settings.MAX_REPEAT_WEEKS),
+      today: Utilities.formatDate(now, APP_TIME_ZONE, 'yyyy-MM-dd'), nowMin: clock[0] * 60 + clock[1],
+      editingId: m.id, original: m
+    });
+    if (res.errors.length > 0) throw new Error(res.errors.join('\n'));
+
+    var before = m.date + ' ' + m.start + '–' + m.end + ' ' + m.room;
+    m.date = input.date; m.start = input.start; m.end = input.end; m.room = input.room;
+    m.updatedAt = Utilities.formatDate(now, APP_TIME_ZONE, 'yyyy-MM-dd HH:mm:ss');
+    saveDatabase_(db);
+    addLog_(email, 'move', m.id, before + ' → ' + m.date + ' ' + m.start + '–' + m.end + ' ' + m.room);
+    return { ok: true, ids: [m.id], warnings: res.warnings, data: appPayload_(db, user) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function api_cancelMeeting(token, mid, scope, reason) {
   var c = ctx_(token);
   var db = c.db, user = c.user, email = c.email;
@@ -1026,10 +1075,25 @@ function api_saveMinutes(token, mid, text) {
   return { ok: true, data: appPayload_(db, user) };
 }
 
+/** Thư mục Drive chứa tài liệu cuộc họp, tạo một lần rồi dùng lại (thay vì rải ở thư mục gốc). */
+function docsFolder_() {
+  var id = prop_('DOCS_FOLDER_ID');
+  if (id) {
+    try { return DriveApp.getFolderById(id); } catch (e) {}
+  }
+  var folder = DriveApp.createFolder('Lich Hop Nhom — Tai lieu');
+  SCRIPT_PROPS.setProperty('DOCS_FOLDER_ID', folder.getId());
+  return folder;
+}
+
 function api_uploadDoc(token, fileData) {
   var c = ctx_(token);
-  var blob = Utilities.newBlob(Utilities.base64Decode(fileData.data), fileData.mimeType, fileData.name);
-  var file = DriveApp.createFile(blob);
+  var bytes = Utilities.base64Decode(String((fileData && fileData.data) || ''));
+  if (!bytes || !bytes.length) throw new Error('Không đọc được nội dung tệp.');
+  if (bytes.length > 10 * 1024 * 1024) throw new Error('Tệp tối đa 10 MB. Hãy tải lên Drive rồi dán link.');
+  var name = String(fileData.name || 'tai-lieu').slice(0, 200);
+  var blob = Utilities.newBlob(bytes, String(fileData.mimeType || 'application/octet-stream'), name);
+  var file = docsFolder_().createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   addLog_(c.email, 'upload', '', file.getName());
   return { name: file.getName(), url: file.getUrl() };
@@ -1208,7 +1272,7 @@ function api_heartbeat(token) {
         email: u.email,
         name: u.name || u.email.split('@')[0],
         unit: u.unit || '',
-        photo: u.avatar || u.photo || '',
+        photo: u.avatar === 'none' ? '' : (u.avatar || u.photo || ''),
         isMe: email === s.email
       });
     });
@@ -1250,12 +1314,14 @@ function api_saveAvatar(token, fileData) {
 
   var oldUrl = String(c.user.avatar || '');
 
-  if (!fileData) {
-    c.user.avatar = '';
+  // null = dùng ảnh tài khoản Google, 'none' = chỉ hiện chữ viết tắt
+  if (!fileData || fileData === 'none') {
+    var none = fileData === 'none';
+    c.user.avatar = none ? 'none' : '';
     saveDatabase_(c.db);
     trashAvatar_(oldUrl);
-    addLog_(c.email, 'avatar', '', 'dùng lại ảnh Google');
-    return { ok: true, url: c.user.photo || '', data: api_bootstrap(token) };
+    addLog_(c.email, 'avatar', '', none ? 'dùng chữ viết tắt' : 'dùng lại ảnh Google');
+    return { ok: true, url: none ? '' : (c.user.photo || ''), data: api_bootstrap(token) };
   }
 
   var mime = String(fileData.mimeType || '');

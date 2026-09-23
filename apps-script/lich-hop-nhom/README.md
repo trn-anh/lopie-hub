@@ -17,6 +17,27 @@ Thư mục này **không phải** một trang của hub, chỉ để lưu mã v�
 > **Bảo mật:** hàm `napCauHinh()` trong repo để trống, vì client secret thật đã nằm trong Script Properties.
 > Không commit client secret lên GitHub.
 
+## Tính năng chính (bản 3.3)
+
+- **Kéo thả như Google Calendar** (chuột hoặc bút):
+  - Lịch ngày: kéo khối để đổi giờ hoặc sang phòng khác; kéo mép dưới để đổi giờ kết thúc.
+  - Lịch tuần: kéo thẻ sang ngày khác.
+  - Khi đang kéo, khung xem trước báo đỏ nếu vị trí mới bị trùng. Dời xong có nút **Hoàn tác**.
+  - Chỉ người tạo, chủ trì hoặc quản trị viên được kéo. Trên điện thoại vẫn dời bằng nút "Sửa".
+- **Chọn giờ dạng 24h**, bước 15 phút, chỉ có giờ trong khung cho phép.
+  - Hết nhầm sáng/chiều: gõ "12:30" lên một giờ buổi sáng không còn thành 00:30.
+  - Giờ đang bận được ghi ngay trong danh sách ("· phòng bận", "· chủ trì bận").
+  - Lỗi hiện ngay dưới hàng ngày/giờ/phòng, kèm nút gợi ý giờ trống gần nhất hoặc phòng khác.
+- **Chèn tài liệu** trong một khung, có 3 tab:
+  - *Tải lên*: kéo thả, chọn nhiều tệp; tệp tự lưu vào thư mục Drive "Lich Hop Nhom — Tai lieu".
+  - *Dán link*.
+  - *Đã dùng gần đây*: lấy lại tài liệu đã gắn ở cuộc họp khác.
+- **Ảnh đại diện**: chọn ảnh Google, ảnh tự chọn hoặc chữ viết tắt.
+  - Ảnh tự chọn được tự cắt vuông và thu nhỏ còn 256px, nên ảnh điện thoại vài MB vẫn dùng được.
+  - Lần đầu đăng nhập mà chưa có ảnh thì app nhắc chọn ảnh.
+- **Giờ đã qua** trong lịch ngày được tô sọc xám phía trên đường đỏ và không đặt lịch được. Đường đỏ cập nhật mỗi 30 giây.
+- **Cuộc họp đã báo vắng** hiện gạch ngang trên lịch.
+
 ## Quy tắc trùng lịch (từ bản 3.2)
 
 | Trường hợp | Khi đặt hoặc sửa lịch | Trên lịch |
@@ -27,4 +48,5 @@ Thư mục này **không phải** một trang của hub, chỉ để lưu mã v�
 
 - Phòng Online không tính trùng phòng.
 - Ai đã báo "Vắng" ở một cuộc họp thì không bị tính trùng ở cuộc họp đó.
+- Kéo dài giờ kết thúc của cuộc họp đang diễn ra thì được. Dời ngày hoặc giờ bắt đầu về thời điểm đã qua thì vẫn bị chặn.
 - Lịch cũ đã lỡ bị trùng cũng được báo đỏ ở mọi màn hình: lịch ngày, tuần, bảng tuần, phòng họp, cuộc họp của tôi, lịch nhỏ và panel chi tiết.
