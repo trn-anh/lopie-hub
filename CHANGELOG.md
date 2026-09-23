@@ -12,6 +12,11 @@ Nhật ký thay đổi của repo. Mục mới nhất nằm trên cùng.
 
 ## 2026-09-23
 
+- [Claude] lỗi: `apps-script/lich-hop-nhom/`: bản 3.4, sửa ảnh đại diện
+  - Ảnh Google không lấy được: id_token có thể không kèm ảnh, nay hỏi thêm userinfo; lấy ảnh 256px; ghi nhật ký đăng nhập
+  - Người mới xin tham gia có sẵn ảnh Google; sửa nhầm `s.profileName`
+  - Đang online hiện ngay ảnh vừa đổi; bỏ chữ "Đổi ảnh" và lời nhắc tự bật
+  - Bỏ dòng "Đồng bộ với Google Sheets"; ghi số phiên bản trong menu tài khoản; `kiemTraCauHinh()` hướng dẫn cập nhật đúng triển khai
 - [Claude] thêm: `apps-script/lich-hop-nhom/`: bản 3.3, xử lý góp ý demo và yêu cầu mới
   - Kéo thả cuộc họp như Google Calendar (lịch ngày: đổi giờ, phòng, giờ kết thúc; lịch tuần: đổi ngày), có hoàn tác
   - Chọn giờ dạng 24h thay ô AM/PM (lỗi gõ 12:30 thành 00:30); báo lỗi và gợi ý giờ trống ngay dưới hàng giờ

@@ -262,6 +262,7 @@ var AUTH = (function () {
     var body = encodeStr(JSON.stringify({
       e: String(profile.email || '').toLowerCase(),
       n: String(profile.name || ''),
+      p: String(profile.picture || ''),   // ảnh Google, để tài khoản mới duyệt cũng có ảnh ngay
       x: Date.now() + SESSION_HOURS * 3600 * 1000
     }));
     return body + '.' + sign(body);
@@ -276,7 +277,7 @@ var AUTH = (function () {
     try { data = JSON.parse(decodeStr(parts[0])); } catch (e) { return null; }
     if (!data || !data.e || !data.x) return null;
     if (Number(data.x) < Date.now()) return null;      // hết hạn
-    return { email: String(data.e).toLowerCase().trim(), name: String(data.n || '') };
+    return { email: String(data.e).toLowerCase().trim(), name: String(data.n || ''), picture: String(data.p || '') };
   }
 
   /* ---- Bước 1: tạo URL đăng nhập Google ---- */
@@ -316,7 +317,24 @@ var AUTH = (function () {
     if (res.getResponseCode() !== 200 || !body.id_token) {
       throw new Error(body.error_description || body.error || 'Google từ chối mã đăng nhập (HTTP ' + res.getResponseCode() + ').');
     }
-    return readIdToken(body.id_token);
+    var profile = readIdToken(body.id_token);
+    // Google ghi rõ id_token "không bảo đảm" có ảnh và tên. Thiếu thì hỏi thêm userinfo
+    // bằng access token vừa nhận (cùng quyền openid email profile, không xin thêm quyền).
+    if ((!profile.picture || !profile.name) && body.access_token) {
+      try {
+        var info = UrlFetchApp.fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+          headers: { Authorization: 'Bearer ' + body.access_token }, muteHttpExceptions: true
+        });
+        if (info.getResponseCode() === 200) {
+          var u = JSON.parse(info.getContentText() || '{}');
+          if (!profile.picture && u.picture) profile.picture = String(u.picture);
+          if (!profile.name && u.name) profile.name = String(u.name).trim();
+        }
+      } catch (e) {}
+    }
+    // Ảnh Google mặc định chỉ 96px, lấy bản 256px cho rõ
+    if (profile.picture) profile.picture = profile.picture.replace(/=s\d+(-c)?$/, '=s256-c');
+    return profile;
   }
 
   /* ---- Bước 3: đọc & kiểm tra id_token ---- */
@@ -575,6 +593,7 @@ function saveDatabase_(db, ss) {
     return { key: k, value: String(db.settings[k]) };
   });
   saveSheetData_('Settings', settingRows, ['key', 'value'], ss);
+  dirInvalidate_();   // xoá lần nữa: nhịp "đang online" chạy song song có thể vừa đệm lại danh bạ cũ
 }
 
 function addLog_(email, action, mid, detail) {
@@ -611,6 +630,7 @@ function doGet(e) {
       }
       var profile = AUTH.exchangeCode(p.code);
       syncUser_(profile);
+      addLog_(profile.email, 'login', '', profile.picture ? 'có ảnh Google' : 'Google không trả ảnh đại diện');
       var handoff = AUTH.putHandoff(AUTH.makeToken(profile));
       return redirectPage_(AUTH.webAppUrl() + '?t=' + handoff, profile.email);
     } catch (err) {
@@ -745,7 +765,7 @@ function appPayload_(db, user) {
     settings: db.settings,
     today: Utilities.formatDate(now, APP_TIME_ZONE, 'yyyy-MM-dd'),
     nowMin: nowTime[0] * 60 + nowTime[1],
-    version: '3.3-keo-tha',
+    version: '3.4',
     users: user.role === 'admin' ? db.users : db.users.filter(function (x) { return x.status === 'active'; }),
     rooms: db.rooms,
     meetings: db.meetings,
@@ -784,7 +804,10 @@ function api_bootstrap(token) {
     var user = null;
     db.users.forEach(function (u) { if (u.email === s.email) user = u; });
     if (!user) {
-      user = syncUser_({ email: s.email, name: s.profileName, picture: '' });
+      user = syncUser_({ email: s.email, name: s.name, picture: s.picture });
+    } else if (!user.photo && s.picture) {
+      user.photo = s.picture;   // hồ sơ chưa có ảnh Google (VD tài khoản vừa được duyệt): lấy từ phiên đăng nhập
+      saveDatabase_(db);
     }
     if (!user) {
       return { state: 'unregistered', email: s.email, settings: db.settings, preview: previewList };
@@ -819,7 +842,7 @@ function api_requestAccess(token, data) {
     role: 'member',
     status: 'pending',
     createdAt: nowStr,
-    photo: '',
+    photo: s.picture || '',
     avatar: '',
     showPresence: true
   });
@@ -1465,7 +1488,16 @@ function kiemTraCauHinh() {
     'SESSION_SECRET     : ' + (prop_('SESSION_SECRET') ? '(đã có)' : '(sẽ tự tạo khi đăng nhập lần đầu)'),
     '',
     'Sẵn sàng đăng nhập: ' + (AUTH.isConfigured() ? 'CÓ' : 'CHƯA'),
-    'URL đăng nhập thử : ' + (AUTH.loginUrl() || '(chưa cấu hình)')
+    'URL đăng nhập thử : ' + (AUTH.loginUrl() || '(chưa cấu hình)'),
+    '',
+    'LƯU Ý VỀ PHIÊN BẢN:',
+    '- Đăng nhập Google xong luôn quay về WEBAPP_URL ở trên, nên mọi người chỉ thấy phiên bản',
+    '  đang gắn với URL đó.',
+    '- Cập nhật code: Triển khai > Quản lý triển khai > chọn triển khai có URL trùng WEBAPP_URL',
+    '  > Sửa > Phiên bản: Phiên bản mới > Triển khai.',
+    '- Không bấm "Triển khai mới" (sẽ ra URL khác). Không dùng link /dev để dùng thật: link /dev',
+    '  chạy code mới nhất, nhưng đăng nhập lại sẽ đưa về bản /exec cũ.',
+    '- Kiểm tra: mở app, bấm ảnh đại diện góc phải, dòng "Phiên bản" phải là ' + '3.4' + '.'
   ].join('\n');
   Logger.log(out);
   return out;

@@ -11,13 +11,18 @@ Thư mục này **không phải** một trang của hub, chỉ để lưu mã v�
 ## Cập nhật bản đang chạy
 
 1. Mở dự án Apps Script, dán đè toàn bộ nội dung `Code.gs` và `Index.html`.
-2. Chọn **Triển khai → Quản lý triển khai → ✏️ Sửa → Phiên bản: Phiên bản mới → Triển khai**.
-3. URL `/exec` giữ nguyên, không cần cấu hình lại OAuth.
+2. Chọn **Triển khai → Quản lý triển khai**. Chọn **đúng triển khai có URL trùng `WEBAPP_URL`**, là URL đã khai trong `setOAuthCredentials`. Chạy `kiemTraCauHinh()` nếu không nhớ.
+3. Bấm **✏️ Sửa → Phiên bản: Phiên bản mới → Triển khai**. URL `/exec` giữ nguyên, không cần cấu hình lại OAuth.
+4. Kiểm tra: mở app, bấm ảnh đại diện góc phải. Dòng cuối menu phải ghi **Phiên bản 3.4**.
+
+> **Vì sao phải đúng triển khai:** đăng nhập Google xong luôn quay về `WEBAPP_URL`.
+> Nếu cập nhật nhầm triển khai khác, hoặc chỉ thử bằng link `/dev`, thì lúc đăng nhập lại sẽ rơi về giao diện cũ.
+> Phần lấy ảnh Google chạy trong bước đăng nhập, nên cũng không có tác dụng.
 
 > **Bảo mật:** hàm `napCauHinh()` trong repo để trống, vì client secret thật đã nằm trong Script Properties.
 > Không commit client secret lên GitHub.
 
-## Tính năng chính (bản 3.3)
+## Tính năng chính (bản 3.3–3.4)
 
 - **Kéo thả như Google Calendar** (chuột hoặc bút):
   - Lịch ngày: kéo khối để đổi giờ hoặc sang phòng khác; kéo mép dưới để đổi giờ kết thúc.
@@ -34,7 +39,8 @@ Thư mục này **không phải** một trang của hub, chỉ để lưu mã v�
   - *Đã dùng gần đây*: lấy lại tài liệu đã gắn ở cuộc họp khác.
 - **Ảnh đại diện**: chọn ảnh Google, ảnh tự chọn hoặc chữ viết tắt.
   - Ảnh tự chọn được tự cắt vuông và thu nhỏ còn 256px, nên ảnh điện thoại vài MB vẫn dùng được.
-  - Lần đầu đăng nhập mà chưa có ảnh thì app nhắc chọn ảnh.
+  - Ảnh Google lấy lúc đăng nhập. id_token của Google không bảo đảm có ảnh, nên thiếu thì app hỏi thêm userinfo (bản 3.4).
+    Nhật ký ghi "Đăng nhập · có ảnh Google" hoặc "Google không trả ảnh đại diện".
 - **Giờ đã qua** trong lịch ngày được tô sọc xám phía trên đường đỏ và không đặt lịch được. Đường đỏ cập nhật mỗi 30 giây.
 - **Cuộc họp đã báo vắng** hiện gạch ngang trên lịch.
 

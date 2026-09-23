@@ -1240,7 +1240,7 @@ function ingest(d){
     date:normalizeDate(m.date),start:normalizeTime(m.start),end:normalizeTime(m.end),
     members:Array.isArray(m.members)?m.members:(()=>{try{return JSON.parse(m.members||'[]');}catch(e){return String(m.members||'').split(',').map(L.lc).filter(Boolean);}})()
   }));
-  S.docs=d.docs||[];S.attendance=d.attendance||[];
+  S.docs=d.docs||[];S.attendance=d.attendance||[];S.version=d.version||'';
   if(!L.isDate(S.date))S.date=L.isDate(d.today)?d.today:today();
   S.userBy=Object.fromEntries(S.users.map(u=>[u.email,u]));
   if(S.me&&!S.userBy[S.me.email])S.userBy[S.me.email]=S.me;
@@ -1508,7 +1508,7 @@ function renderTop(){
   const meEl=$('#meAvatar');
   if(meEl) meEl.outerHTML=avatar(u.email).replace('class="avatar"','class="avatar" id="meAvatar"');
   $('#demoFlag').hidden=!API.demo;
-  $('#sideFoot').textContent=API.demo?'Bản demo · dữ liệu lưu trên trình duyệt':'Đồng bộ với Google Sheets';
+  const sf=$('#sideFoot');sf.textContent=API.demo?'Bản demo · dữ liệu lưu trên trình duyệt':'';sf.hidden=!API.demo;
 }
 function render(){renderTop();renderNav();renderFilters();renderMini();renderPresence();renderMain();}
 
@@ -1853,7 +1853,7 @@ function settingsView(){
   </form>`;
 }
 function logsView(){
-  const A={create:'Tạo lịch',update:'Sửa lịch',move:'Dời lịch',cancel:'Hủy lịch',restore:'Khôi phục',rsvp:'Phản hồi',minutes:'Biên bản',upload:'Tải tệp',room_save:'Lưu phòng',room_create:'Thêm phòng',room_update:'Sửa phòng',user_save:'Lưu thành viên',user_create:'Thêm thành viên',user_update:'Sửa thành viên',settings:'Cài đặt',request_access:'Xin tham gia',seed:'Khởi tạo',mail_error:'Lỗi email',calendar_error:'Lỗi Calendar'};
+  const A={login:'Đăng nhập',avatar:'Ảnh đại diện',presence:'Trạng thái online',create:'Tạo lịch',update:'Sửa lịch',move:'Dời lịch',cancel:'Hủy lịch',restore:'Khôi phục',rsvp:'Phản hồi',minutes:'Biên bản',upload:'Tải tệp',room_save:'Lưu phòng',room_create:'Thêm phòng',room_update:'Sửa phòng',user_save:'Lưu thành viên',user_create:'Thêm thành viên',user_update:'Sửa thành viên',settings:'Cài đặt',request_access:'Xin tham gia',seed:'Khởi tạo',mail_error:'Lỗi email',calendar_error:'Lỗi Calendar'};
   if(!S.logs)return `<div class="panel empty"><div class="spinner"></div><br>Đang tải nhật ký…</div>`;
   return `<div class="panel"><div class="panel-h"><h3>Nhật ký hoạt động gần đây</h3><div class="spacer"></div><button class="btn sm" data-logs-reload>Tải lại</button></div>
   ${S.logs.length?S.logs.map(l=>`<div class="logrow"><span class="muted">${esc(l.time)}</span><span>${esc(user(l.email)?.name||l.email)}</span><span><span class="chip neutral">${esc(A[l.action]||l.action)}</span></span><span>${esc(l.detail)}</span></div>`).join(''):'<div class="empty">Chưa có hoạt động.</div>'}</div>`;
@@ -2567,7 +2567,8 @@ $('#acctBtn').onclick=e=>{
     <hr>
     <button class="item" role="menuitem" id="mSwitch">Đổi tài khoản</button>
     ${!IS_GAS?`<button class="item" role="menuitem" id="mReset">Khôi phục dữ liệu mẫu</button>`:''}
-    <button class="item" role="menuitem" id="mOut" style="color:var(--bad)">Đăng xuất</button>`;
+    <button class="item" role="menuitem" id="mOut" style="color:var(--bad)">Đăng xuất</button>
+    ${S.version?`<div class="muted" style="padding:6px 10px 2px;font-size:11.5px">Phiên bản ${esc(S.version)}</div>`:''}`;
   menu.hidden=false;$('#acctBtn').setAttribute('aria-expanded','true');
   menu.querySelector('.item').focus();
 };
@@ -2632,7 +2633,7 @@ function renderPresence(){
   const list=PRESENCE.online||[];
   box.hidden=false;
   const rows=list.length
-    ? `<div class="presence-list">${list.map(u=>`<div class="presence-item">${avatar(u.email,28,undefined,u.photo||'')}<span class="nm">${esc(u.name)}${u.isMe?' <span class="muted">(bạn)</span> <button type="button" class="linkbtn" data-me-avatar>Đổi ảnh</button>':''}<small>${esc(u.unit||u.email)}</small></span></div>`).join('')}</div>`
+    ? `<div class="presence-list">${list.map(u=>`<div class="presence-item">${u.isMe?`<button type="button" class="avatar-btn" data-me-avatar title="Đổi ảnh đại diện">${avatar(u.email,28,undefined,photoOf(u.email))}</button>`:avatar(u.email,28,undefined,user(u.email)?photoOf(u.email):(u.photo||''))}<span class="nm">${esc(u.name)}${u.isMe?' <span class="muted">(bạn)</span>':''}<small>${esc(u.unit||u.email)}</small></span></div>`).join('')}</div>`
     : `<div class="presence-note">Chưa có ai đang mở trang.</div>`;
   box.innerHTML=`<div class="presence-h"><i class="dot"></i>Đang online<span class="n">${list.length}</span></div>${rows}`
     +(PRESENCE.visible?'':`<div class="presence-note">Bạn đang ẩn trạng thái nên không xuất hiện trong danh sách này.</div>`);
@@ -2729,17 +2730,12 @@ $('#avForm').addEventListener('submit',async e=>{
     const r=await call(API.saveAvatar(arg),$('#avSave'));
     $('#avatarDialog').close();
     if(r&&r.data&&r.data.state!=='error'){ingest(r.data);render();}
-    toast(choice==='google'?'Đã dùng ảnh tài khoản Google.':choice==='none'?'Đã chuyển sang chữ viết tắt.':'Đã cập nhật ảnh đại diện.');
+    const hasG=!!((user(ME())||{}).photo);
+    toast(choice==='google'?(hasG?'Đã dùng ảnh tài khoản Google.':'Đã chọn ảnh Google, nhưng máy chủ chưa lấy được ảnh Google của bạn nên tạm hiện chữ viết tắt. Mở lại mục này và bấm "Đăng nhập lại" để lấy ảnh.')
+      :choice==='none'?'Đã chuyển sang chữ viết tắt.':'Đã cập nhật ảnh đại diện.',{ms:hasG||choice!=='google'?4500:10000,type:hasG||choice!=='google'?undefined:'alert'});
     beat();
   }catch(err){/* call() đã báo lỗi */}
 });
-/* Lần đầu đăng nhập mà chưa có ảnh nào: gợi ý chọn ảnh (chỉ hỏi một lần trên mỗi máy) */
-function askAvatarOnce(){
-  const u=S.me;if(!u||u.avatar||u.photo)return;
-  const k='lhn-avatar-asked:'+u.email;
-  try{if(localStorage.getItem(k))return;localStorage.setItem(k,'1');}catch(e){return;}
-  toast('Bạn chưa có ảnh đại diện. Chọn ảnh để mọi người dễ nhận ra bạn trên lịch.',{ms:12000,action:{label:'Chọn ảnh',fn:openAvatarDialog}});
-}
 
 $('#presence').addEventListener('click',e=>{if(e.target.closest('[data-me-avatar]'))openAvatarDialog();});
 
@@ -2801,7 +2797,6 @@ async function boot(fresh){
   if(!isAdmin()&&S.section==='admin')S.section='calendar';
   render();
   greet(fresh);
-  askAvatarOnce();
   beat();
 }
 boot();
