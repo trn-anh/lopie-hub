@@ -15,7 +15,7 @@ Làm đủ 4 bước mỗi lần dán code mới. Chỉ dán code mà bỏ bư�
 1. Mở dự án Apps Script, dán đè toàn bộ nội dung `Code.gs` và `Index.html`, bấm Lưu.
 2. Chọn **Triển khai (Deploy) → Quản lý triển khai (Manage deployments)**. Chọn triển khai có **Mã triển khai (Deployment ID) trùng mã in ở dòng "Mã triển khai link chính"** của `kiemTraCauHinh()`.
 3. Bấm **bút chì (Edit) → Phiên bản (Version): Phiên bản mới (New version) → Triển khai (Deploy)**. Link `/exec` giữ nguyên, không cần cấu hình lại OAuth.
-4. Chạy `kiemTraCauHinh()`: dòng **Link chính đang chạy** phải có dấu ✓. Hoặc mở app: chân trang đăng nhập và dòng cuối menu tài khoản ghi **Phiên bản 3.7**.
+4. Chạy `kiemTraCauHinh()`: dòng **Link chính đang chạy** phải có dấu ✓. Hoặc mở **link chính**: chân trang đăng nhập phải ghi **Phiên bản 3.8**.
 
 > **Vì sao đăng xuất rồi đăng nhập lại thì thấy giao diện cũ:**
 > - Link thử (Test deployments, đuôi `/dev`) luôn chạy code mới nhất, nhưng chỉ chủ dự án mở được.
@@ -24,16 +24,20 @@ Làm đủ 4 bước mỗi lần dán code mới. Chỉ dán code mà bỏ bư�
 >
 > Không bấm "Triển khai mới" (New deployment): nó tạo ra link khác, còn đăng nhập vẫn quay về link cũ.
 >
-> Từ bản 3.7:
-> - Nếu link chính còn chạy bản cũ, quản trị viên thấy **thanh cảnh báo màu cam** ngay trong app, kèm nút **Cách cập nhật** và **Kiểm tra lại**.
-> - Máy chủ tự hỏi link chính đang chạy bản nào, bằng cách gọi link đó với `?lhn_probe=1`.
+> Từ bản 3.8, app tự phát hiện khi link chính còn chạy bản cũ:
+> - Trang đăng nhập (mở bằng link thử) nhắc ngay: "Đăng nhập xong… bạn sẽ thấy giao diện cũ".
+> - Trong app, quản trị viên thấy **thanh cảnh báo màu cam**, và hộp hướng dẫn tự mở lần đầu. Hộp có nút **Mở dự án Apps Script**, **Mở link chính**, **Kiểm tra lại**.
+> - Cách phát hiện:
+>   - Máy chủ gọi thẳng link chính với `?lhn_probe=1` và tự đi theo chuyển hướng.
+>   - Nếu link chính bắt đăng nhập Google (quyền "Bất kỳ ai có tài khoản Google") thì không gọi thẳng được. Khi đó app dựa vào phiên bản đã xử lý lần đăng nhập gần nhất (Script Property `EXEC_VERSION`), vì bước đổi mã đăng nhập luôn chạy ở link chính.
 
 > **Bảo mật:** hàm `napCauHinh()` trong repo để trống, vì client secret thật đã nằm trong Script Properties.
 > Không commit client secret lên GitHub.
 
-## Bản 3.7: link chính và giao diện gọn hơn
+## Bản 3.7–3.8: link chính và giao diện gọn hơn
 
 - **Tự kiểm tra link chính.** Quản trị viên được báo khi link `/exec` còn chạy bản cũ. `kiemTraCauHinh()` in "Link chính đang chạy" và "Mã triển khai link chính".
+  - Bản 3.7 bỏ sót trường hợp trang app bản cũ có sẵn link đăng nhập Google. Bản 3.8 sửa lỗi đó, và báo cả ở trang đăng nhập.
 - Chân trang đăng nhập ghi số phiên bản, để biết ngay đang mở bản nào.
 - **Cột trái:** lịch nhỏ nằm ngay dưới menu. Bộ lọc khu xuống dưới cùng; khi trường có hơn 10 khu, các nhóm cơ sở thu gọn, bấm để mở. App nhớ nhóm nào đang mở.
 - **Lọc khu nhất quán:**

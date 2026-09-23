@@ -12,6 +12,10 @@ Nhật ký thay đổi của repo. Mục mới nhất nằm trên cùng.
 
 ## 2026-09-23
 
+- [Claude] lỗi: `apps-script/lich-hop-nhom/`: bản 3.8, báo chắc chắn khi link chính còn chạy bản cũ
+  - Bản 3.7 không báo vì đoán theo nội dung trang (trang app nào cũng có link ServiceLogin); nay hỏi link chính và tự đi theo từng bước chuyển hướng
+  - Link bắt đăng nhập Google: dựa vào phiên bản đã xử lý lần đăng nhập gần nhất (`EXEC_VERSION`, ghi ở bước đổi mã đăng nhập)
+  - Trang đăng nhập nhắc ngay khi link chính còn bản cũ; hướng dẫn tự mở một lần cho quản trị viên, có nút mở dự án Apps Script
 - [Claude] lỗi: `apps-script/lich-hop-nhom/`: bản 3.7, đăng nhập lại bị về giao diện cũ
   - Nguyên nhân: link chính `/exec` (nơi Google trả về sau đăng nhập) vẫn gắn phiên bản cũ, chỉ link thử `/dev` chạy code mới
   - Máy chủ tự hỏi link chính đang chạy bản nào (`?lhn_probe=1`, `api_checkDeploy`); quản trị viên thấy thanh cảnh báo kèm cách cập nhật và nút kiểm tra lại
