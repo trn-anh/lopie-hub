@@ -1,6 +1,6 @@
 /**
  * LỊCH HỌP NHÓM — BACKEND GOOGLE APPS SCRIPT (Code.gs)
- * Phiên bản 3.10 — Đăng nhập bằng Google OAuth 2.0 thật, phòng HCMUTE nạp sẵn.
+ * Phiên bản 3.11 — Đăng nhập bằng Google OAuth 2.0 thật, phòng HCMUTE nạp sẵn.
  * Làm lại dữ liệu từ đầu: chạy taoSheetMoi() (không xoá tay file Google Sheet).
  * kiemTraCauHinh() cho biết link chính (/exec) có đang chạy đúng phiên bản không.
  *
@@ -28,7 +28,7 @@
 var SESSION_HOURS = 12;              // Session token sống bao lâu
 var SCRIPT_PROPS = PropertiesService.getScriptProperties();
 var APP_TIME_ZONE = 'Asia/Ho_Chi_Minh';
-var APP_VERSION = '3.10';
+var APP_VERSION = '3.11';
 var DEFAULT_SCHOOL = 'Trường Đại học Công nghệ Kỹ thuật TP.HCM';
 var TEXT_SETTINGS = ['APP_NAME', 'ORG_NAME', 'SCHOOL_NAME'];   // luôn là chữ, kể cả khi gõ toàn số
 
@@ -690,43 +690,73 @@ function errorPage_(title, message) {
    5. PHIÊN LÀM VIỆC — mọi API đều đi qua đây
    ===================================================================== */
 
-/** Tạo hồ sơ lần đầu đăng nhập; hồ sơ đã có thì chỉ bổ sung tên nếu còn trống. */
-function syncUser_(profile) {
-  var db = getDatabase_();
+/** Hồ sơ chưa có tên thật (trống hoặc chỉ là phần đầu email) thì lấy tên tài khoản Google. */
+function wantsName_(u, name) {
+  return !!name && u.name !== name && (!u.name || u.name === String(u.email).split('@')[0]);
+}
+
+/**
+ * Chạy fn trong khoá ghi. saveDatabase_ viết lại cả bảng, nên mọi thao tác đọc–sửa–lưu
+ * phải đọc dữ liệu BÊN TRONG fn; nếu không, hai người lưu cùng lúc sẽ đè mất thay đổi của nhau.
+ */
+function locked_(fn) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Hệ thống đang xử lý một thao tác khác. Vui lòng thử lại sau vài giây.');
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Tìm hồ sơ của tài khoản vừa đăng nhập; chủ script đăng nhập lần đầu thì tạo hồ sơ quản trị viên.
+ * Chỉ ghi khi cần (hồ sơ mới, hoặc điền tên từ tài khoản Google). Truyền db vào thì danh sách
+ * thành viên trong db được cập nhật theo bản vừa ghi.
+ */
+function syncUser_(profile, db) {
+  db = db || getDatabase_();
   var found = null;
   db.users.forEach(function (u) { if (u.email === profile.email) found = u; });
-
-  if (found) {
-    if (!found.name && profile.name) { found.name = profile.name; saveDatabase_(db); }
-    return found;
-  }
+  if (found && !wantsName_(found, profile.name)) return found;
 
   var ownerEmail = prop_('ADMIN_EMAIL').toLowerCase();
   if (!ownerEmail) {
     try { ownerEmail = String(Session.getEffectiveUser().getEmail() || '').toLowerCase(); } catch (e) {}
   }
+  // Người khác phải gửi yêu cầu và chờ duyệt
+  if (!found && db.users.length > 0 && profile.email !== ownerEmail) return null;
 
-  var nowStr = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm:ss');
-
-  // Chủ sở hữu script luôn là quản trị viên. Người khác phải chờ duyệt.
-  if (db.users.length === 0 || profile.email === ownerEmail) {
-    var admin = {
-      email: profile.email,
-      name: profile.name || profile.email.split('@')[0],
-      unit: 'Ban Quản trị',
-      role: 'admin',
-      status: 'active',
-      createdAt: nowStr,
-      photo: '',
-      avatar: '',
-      showPresence: true
-    };
-    db.users.push(admin);
-    saveDatabase_(db);
-    addLog_(profile.email, 'admin_created', '', 'Tạo quản trị viên đầu tiên');
-    return admin;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return found;   // đang có người lưu: lần mở app sau ghi tiếp
+  try {
+    var fresh = getDatabase_();   // đọc lại trong khoá
+    var user = null;
+    fresh.users.forEach(function (u) { if (u.email === profile.email) user = u; });
+    if (user) {
+      if (wantsName_(user, profile.name)) { user.name = profile.name; saveDatabase_(fresh); }
+    } else if (fresh.users.length === 0 || profile.email === ownerEmail) {
+      // Chủ sở hữu script luôn là quản trị viên
+      user = {
+        email: profile.email,
+        name: profile.name || profile.email.split('@')[0],
+        unit: 'Ban Quản trị',
+        role: 'admin',
+        status: 'active',
+        createdAt: Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm:ss'),
+        photo: '',
+        avatar: '',
+        showPresence: true
+      };
+      fresh.users.push(user);
+      saveDatabase_(fresh);
+      addLog_(profile.email, 'admin_created', '', 'Tạo quản trị viên đầu tiên');
+    }
+    db.users = fresh.users;
+    return user;
+  } finally {
+    lock.releaseLock();
   }
-  return null;
 }
 
 /** Đọc token -> trả về { db, user, email }. Ném lỗi nếu chưa đăng nhập. */
@@ -797,9 +827,7 @@ function api_bootstrap(token) {
       return { state: 'login', mode: 'gas', authUrl: AUTH.loginUrl(), settings: brand, version: APP_VERSION };
     }
 
-    var user = null;
-    db.users.forEach(function (u) { if (u.email === s.email) user = u; });
-    if (!user) user = syncUser_({ email: s.email, name: s.name });
+    var user = syncUser_({ email: s.email, name: s.name }, db);
     if (!user) return { state: 'unregistered', email: s.email, settings: brand, version: APP_VERSION };
     if (user.status === 'pending') return { state: 'pending', email: user.email, settings: brand, version: APP_VERSION };
     if (user.status === 'disabled') return { state: 'disabled', email: user.email, settings: brand, version: APP_VERSION };
@@ -820,28 +848,30 @@ function api_bootstrap(token) {
 function api_requestAccess(token, data) {
   var s = AUTH.readToken(token);
   if (!s) throw new Error('Phiên đăng nhập đã hết hạn.');
-  var db = getDatabase_();
-  if (db.settings.ALLOW_SELF_REGISTER === false) throw new Error('Hệ thống đang tắt chức năng tự đăng ký.');
+  return locked_(function () {
+    var db = getDatabase_();
+    if (db.settings.ALLOW_SELF_REGISTER === false) throw new Error('Hệ thống đang tắt chức năng tự đăng ký.');
 
-  var existing = null;
-  db.users.forEach(function (u) { if (u.email === s.email) existing = u; });
-  if (existing) throw new Error('Yêu cầu của bạn đã tồn tại.');
+    var existing = null;
+    db.users.forEach(function (u) { if (u.email === s.email) existing = u; });
+    if (existing) throw new Error('Yêu cầu của bạn đã tồn tại.');
 
-  var nowStr = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm:ss');
-  db.users.push({
-    email: s.email,
-    name: String((data && data.name) || '').trim() || s.name || s.email.split('@')[0],
-    unit: String((data && data.unit) || '').trim(),
-    role: 'member',
-    status: 'pending',
-    createdAt: nowStr,
-    photo: '',
-    avatar: '',
-    showPresence: true
+    var nowStr = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm:ss');
+    db.users.push({
+      email: s.email,
+      name: String((data && data.name) || '').trim() || s.name || s.email.split('@')[0],
+      unit: String((data && data.unit) || '').trim(),
+      role: 'member',
+      status: 'pending',
+      createdAt: nowStr,
+      photo: '',
+      avatar: '',
+      showPresence: true
+    });
+    saveDatabase_(db);
+    addLog_(s.email, 'request_access', '', s.email);
+    return { ok: true };
   });
-  saveDatabase_(db);
-  addLog_(s.email, 'request_access', '', s.email);
-  return { ok: true };
 }
 
 function api_saveMeeting(token, input) {
@@ -986,109 +1016,117 @@ function api_moveMeeting(token, mid, patch) {
 }
 
 function api_cancelMeeting(token, mid, scope, reason) {
-  var c = ctx_(token);
-  var db = c.db, user = c.user, email = c.email;
+  return locked_(function () {
+    var c = ctx_(token);
+    var db = c.db, user = c.user, email = c.email;
 
-  var m = null;
-  db.meetings.forEach(function (x) { if (x.id === mid) m = x; });
-  if (!m) throw new Error('Không tìm thấy cuộc họp.');
-  if (user.role !== 'admin' && m.createdBy !== email && m.chair !== email) {
-    throw new Error('Bạn không có quyền hủy.');
-  }
+    var m = null;
+    db.meetings.forEach(function (x) { if (x.id === mid) m = x; });
+    if (!m) throw new Error('Không tìm thấy cuộc họp.');
+    if (user.role !== 'admin' && m.createdBy !== email && m.chair !== email) {
+      throw new Error('Bạn không có quyền hủy.');
+    }
 
-  var nowStr = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm:ss');
-  var targets = (scope === 'series' && m.seriesId)
-    ? db.meetings.filter(function (x) { return x.seriesId === m.seriesId && x.date >= m.date && x.status !== 'cancelled'; })
-    : [m];
+    var nowStr = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm:ss');
+    var targets = (scope === 'series' && m.seriesId)
+      ? db.meetings.filter(function (x) { return x.seriesId === m.seriesId && x.date >= m.date && x.status !== 'cancelled'; })
+      : [m];
 
-  targets.forEach(function (x) {
-    x.status = 'cancelled';
-    x.cancelReason = String(reason || '').trim();
-    x.updatedAt = nowStr;
+    targets.forEach(function (x) {
+      x.status = 'cancelled';
+      x.cancelReason = String(reason || '').trim();
+      x.updatedAt = nowStr;
+    });
+
+    saveDatabase_(db);
+    addLog_(email, 'cancel', mid, targets.length + ' buổi');
+    return { ok: true, ids: targets.map(function (x) { return x.id; }), data: appPayload_(db, user) };
   });
-
-  saveDatabase_(db);
-  addLog_(email, 'cancel', mid, targets.length + ' buổi');
-  return { ok: true, ids: targets.map(function (x) { return x.id; }), data: appPayload_(db, user) };
 }
 
 function api_restoreMeeting(token, ids) {
-  var c = ctx_(token);
-  var db = c.db, user = c.user, email = c.email;
+  return locked_(function () {
+    var c = ctx_(token);
+    var db = c.db, user = c.user, email = c.email;
 
-  var idList = [].concat(ids);
-  var done = [];
-  idList.forEach(function (mid) {
-    var m = null;
-    db.meetings.forEach(function (x) { if (x.id === mid) m = x; });
-    if (!m) return;
-    if (user.role !== 'admin' && m.createdBy !== email && m.chair !== email) {
-      throw new Error('Bạn không có quyền khôi phục.');
-    }
-    var room = null;
-    db.rooms.forEach(function (r) { if (r.id === m.room) room = r; });
-    var clash = null;
-    if (room && !room.online) {
-      db.meetings.forEach(function (x) {
-        if (!clash && x.status !== 'cancelled' && x.id !== m.id && x.room === m.room && x.date === m.date &&
-            LHN.overlap(LHN.toMin(m.start), LHN.toMin(m.end), LHN.toMin(x.start), LHN.toMin(x.end))) clash = x;
-      });
-    }
-    if (clash) throw new Error('Không khôi phục được buổi ' + LHN.fmtDM(m.date) + ': ' + room.name + ' đã được đặt cho "' + clash.title + '".');
-    m.status = 'active';
-    m.cancelReason = '';
-    done.push(mid);
+    var idList = [].concat(ids);
+    var done = [];
+    idList.forEach(function (mid) {
+      var m = null;
+      db.meetings.forEach(function (x) { if (x.id === mid) m = x; });
+      if (!m) return;
+      if (user.role !== 'admin' && m.createdBy !== email && m.chair !== email) {
+        throw new Error('Bạn không có quyền khôi phục.');
+      }
+      var room = null;
+      db.rooms.forEach(function (r) { if (r.id === m.room) room = r; });
+      var clash = null;
+      if (room && !room.online) {
+        db.meetings.forEach(function (x) {
+          if (!clash && x.status !== 'cancelled' && x.id !== m.id && x.room === m.room && x.date === m.date &&
+              LHN.overlap(LHN.toMin(m.start), LHN.toMin(m.end), LHN.toMin(x.start), LHN.toMin(x.end))) clash = x;
+        });
+      }
+      if (clash) throw new Error('Không khôi phục được buổi ' + LHN.fmtDM(m.date) + ': ' + room.name + ' đã được đặt cho "' + clash.title + '".');
+      m.status = 'active';
+      m.cancelReason = '';
+      done.push(mid);
+    });
+
+    saveDatabase_(db);
+    addLog_(email, 'restore', done[0], done.length + ' buổi');
+    return { ok: true, ids: done, data: appPayload_(db, user) };
   });
-
-  saveDatabase_(db);
-  addLog_(email, 'restore', done[0], done.length + ' buổi');
-  return { ok: true, ids: done, data: appPayload_(db, user) };
 }
 
 function api_rsvp(token, mid, response, note) {
-  var c = ctx_(token);
-  var db = c.db, email = c.email;
+  return locked_(function () {
+    var c = ctx_(token);
+    var db = c.db, email = c.email;
 
-  var m = null;
-  db.meetings.forEach(function (x) { if (x.id === mid) m = x; });
-  if (!m) throw new Error('Không tìm thấy cuộc họp.');
-  if (['yes', 'maybe', 'no'].indexOf(response) < 0) throw new Error('Phản hồi không hợp lệ.');
-  if (LHN.participants(m).indexOf(email) < 0) throw new Error('Bạn không có trong thành phần cuộc họp này.');
+    var m = null;
+    db.meetings.forEach(function (x) { if (x.id === mid) m = x; });
+    if (!m) throw new Error('Không tìm thấy cuộc họp.');
+    if (['yes', 'maybe', 'no'].indexOf(response) < 0) throw new Error('Phản hồi không hợp lệ.');
+    if (LHN.participants(m).indexOf(email) < 0) throw new Error('Bạn không có trong thành phần cuộc họp này.');
 
-  var nowStr = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm:ss');
-  var att = null;
-  db.attendance.forEach(function (a) { if (a.meetingId === mid && a.email === email) att = a; });
-  if (!att) {
-    att = { meetingId: mid, email: email };
-    db.attendance.push(att);
-  }
-  att.response = response;
-  att.note = String(note || '').trim();
-  att.updatedAt = nowStr;
+    var nowStr = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm:ss');
+    var att = null;
+    db.attendance.forEach(function (a) { if (a.meetingId === mid && a.email === email) att = a; });
+    if (!att) {
+      att = { meetingId: mid, email: email };
+      db.attendance.push(att);
+    }
+    att.response = response;
+    att.note = String(note || '').trim();
+    att.updatedAt = nowStr;
 
-  saveDatabase_(db);
-  addLog_(email, 'rsvp', mid, response);
-  return { ok: true, data: appPayload_(db, c.user) };
+    saveDatabase_(db);
+    addLog_(email, 'rsvp', mid, response);
+    return { ok: true, data: appPayload_(db, c.user) };
+  });
 }
 
 function api_saveMinutes(token, mid, text) {
-  var c = ctx_(token);
-  var db = c.db, user = c.user, email = c.email;
+  return locked_(function () {
+    var c = ctx_(token);
+    var db = c.db, user = c.user, email = c.email;
 
-  var m = null;
-  db.meetings.forEach(function (x) { if (x.id === mid) m = x; });
-  if (!m) throw new Error('Không tìm thấy cuộc họp.');
-  if (user.role !== 'admin' && m.chair !== email && m.secretary !== email) {
-    throw new Error('Chỉ chủ trì, thư ký hoặc admin được ghi biên bản.');
-  }
+    var m = null;
+    db.meetings.forEach(function (x) { if (x.id === mid) m = x; });
+    if (!m) throw new Error('Không tìm thấy cuộc họp.');
+    if (user.role !== 'admin' && m.chair !== email && m.secretary !== email) {
+      throw new Error('Chỉ chủ trì, thư ký hoặc admin được ghi biên bản.');
+    }
 
-  m.minutes = String(text || '').slice(0, 20000);
-  m.minutesBy = email;
-  m.minutesAt = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm:ss');
+    m.minutes = String(text || '').slice(0, 20000);
+    m.minutesBy = email;
+    m.minutesAt = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm:ss');
 
-  saveDatabase_(db);
-  addLog_(email, 'minutes', mid, m.minutes.length + ' ký tự');
-  return { ok: true, data: appPayload_(db, user) };
+    saveDatabase_(db);
+    addLog_(email, 'minutes', mid, m.minutes.length + ' ký tự');
+    return { ok: true, data: appPayload_(db, user) };
+  });
 }
 
 /** Thư mục Drive chứa tài liệu cuộc họp, tạo một lần rồi dùng lại (thay vì rải ở thư mục gốc). */
@@ -1116,27 +1154,29 @@ function api_uploadDoc(token, fileData) {
 }
 
 function api_saveRoom(token, x) {
-  var c = ctx_(token);
-  requireAdmin_(c);
-  var db = c.db;
+  locked_(function () {
+    var c = ctx_(token);
+    requireAdmin_(c);
+    var db = c.db;
 
-  var rid = String(x.id || '').trim().replace(/[^\w\-.]/g, '-');
-  var r = null;
-  db.rooms.forEach(function (y) { if (y.id === rid) r = y; });
-  if (x.isNew && r) throw new Error('Mã phòng đã tồn tại.');
-  if (!r) { r = { id: rid }; db.rooms.push(r); }
-  Object.assign(r, {
-    name: String(x.name || '').trim(),
-    capacity: Math.max(0, Number(x.capacity || 0)),
-    building: String(x.building || '').trim() || 'Khác',
-    equipment: String(x.equipment || '').trim(),
-    online: Boolean(x.online),
-    active: x.active !== false,
-    sample: false
+    var rid = String(x.id || '').trim().replace(/[^\w\-.]/g, '-');
+    var r = null;
+    db.rooms.forEach(function (y) { if (y.id === rid) r = y; });
+    if (x.isNew && r) throw new Error('Mã phòng đã tồn tại.');
+    if (!r) { r = { id: rid }; db.rooms.push(r); }
+    Object.assign(r, {
+      name: String(x.name || '').trim(),
+      capacity: Math.max(0, Number(x.capacity || 0)),
+      building: String(x.building || '').trim() || 'Khác',
+      equipment: String(x.equipment || '').trim(),
+      online: Boolean(x.online),
+      active: x.active !== false,
+      sample: false
+    });
+
+    saveDatabase_(db);
+    addLog_(c.email, 'room_save', '', rid);
   });
-
-  saveDatabase_(db);
-  addLog_(c.email, 'room_save', '', rid);
   return { ok: true, data: api_bootstrap(token) };
 }
 
@@ -1145,42 +1185,46 @@ function api_saveRoom(token, x) {
  * Mã phòng đã có thì bỏ qua, không ghi đè. opts.deactivate: mã các phòng mẫu muốn tạm ngưng.
  */
 function api_importRooms(token, list, opts) {
-  var c = ctx_(token);
-  requireAdmin_(c);
-  var db = c.db;
-  list = Array.isArray(list) ? list : [];
-  if (list.length > 1000) throw new Error('Mỗi lần thêm tối đa 1000 phòng.');
-  var byId = {};
-  db.rooms.forEach(function (r) { byId[r.id] = r; });
-  var added = [], skipped = [], paused = [];
-  list.forEach(function (x) {
-    x = x || {};
-    var id = String(x.id || x.name || '').trim().replace(/[^\w\-.]/g, '-').slice(0, 40);
-    if (!id) return;
-    if (byId[id]) { skipped.push(id); return; }
-    var r = {
-      id: id,
-      name: String(x.name || id).trim().slice(0, 80),
-      capacity: Math.max(0, Math.floor(Number(x.capacity) || 0)),   // 0 = chưa rõ
-      building: String(x.building || '').trim().slice(0, 80) || 'Khác',
-      equipment: String(x.equipment || '').trim().slice(0, 200),
-      online: false,
-      active: x.active !== false,
-      sample: x.sample === true
-    };
-    db.rooms.push(r); byId[id] = r; added.push(id);
+  var res = locked_(function () {
+    var c = ctx_(token);
+    requireAdmin_(c);
+    var db = c.db;
+    list = Array.isArray(list) ? list : [];
+    if (list.length > 1000) throw new Error('Mỗi lần thêm tối đa 1000 phòng.');
+    var byId = {};
+    db.rooms.forEach(function (r) { byId[r.id] = r; });
+    var added = [], skipped = [], paused = [];
+    list.forEach(function (x) {
+      x = x || {};
+      var id = String(x.id || x.name || '').trim().replace(/[^\w\-.]/g, '-').slice(0, 40);
+      if (!id) return;
+      if (byId[id]) { skipped.push(id); return; }
+      var r = {
+        id: id,
+        name: String(x.name || id).trim().slice(0, 80),
+        capacity: Math.max(0, Math.floor(Number(x.capacity) || 0)),   // 0 = chưa rõ
+        building: String(x.building || '').trim().slice(0, 80) || 'Khác',
+        equipment: String(x.equipment || '').trim().slice(0, 200),
+        online: false,
+        active: x.active !== false,
+        sample: x.sample === true
+      };
+      db.rooms.push(r); byId[id] = r; added.push(id);
+    });
+    ((opts && opts.deactivate) || []).forEach(function (id) {
+      var r = byId[String(id)];
+      if (r && r.active && !r.online) { r.active = false; paused.push(r.id); }
+    });
+    if (added.length || paused.length) {
+      saveDatabase_(db);
+      addLog_(c.email, 'room_import', '', 'Thêm ' + added.length + ' phòng' +
+        (added.length ? ' (' + added.slice(0, 4).join(', ') + (added.length > 4 ? '…' : '') + ')' : '') +
+        (paused.length ? ', tạm ngưng ' + paused.join(', ') : ''));
+    }
+    return { ok: true, added: added.length, skipped: skipped, paused: paused };
   });
-  ((opts && opts.deactivate) || []).forEach(function (id) {
-    var r = byId[String(id)];
-    if (r && r.active && !r.online) { r.active = false; paused.push(r.id); }
-  });
-  if (added.length || paused.length) {
-    saveDatabase_(db);
-    addLog_(c.email, 'room_import', '', 'Thêm ' + added.length + ' phòng' +
-      (added.length ? ' (' + added.slice(0, 4).join(', ') + (added.length > 4 ? '…' : '') + ')' : '') +
-      (paused.length ? ', tạm ngưng ' + paused.join(', ') : ''));
-  }
-  return { ok: true, added: added.length, skipped: skipped, paused: paused, data: api_bootstrap(token) };
+  res.data = api_bootstrap(token);
+  return res;
 }
 
 /**
@@ -1394,58 +1438,62 @@ function seedHcmute_() {
 }
 
 function api_saveUser(token, x) {
-  var c = ctx_(token);
-  requireAdmin_(c);
-  var db = c.db;
+  locked_(function () {
+    var c = ctx_(token);
+    requireAdmin_(c);
+    var db = c.db;
 
-  var targetEmail = String(x.email || '').toLowerCase().trim();
-  if (!targetEmail) throw new Error('Thiếu email.');
-  var u = null;
-  db.users.forEach(function (y) { if (y.email === targetEmail) u = y; });
-  if (x.isNew && u) throw new Error('Email đã có trong danh sách.');
+    var targetEmail = String(x.email || '').toLowerCase().trim();
+    if (!targetEmail) throw new Error('Thiếu email.');
+    var u = null;
+    db.users.forEach(function (y) { if (y.email === targetEmail) u = y; });
+    if (x.isNew && u) throw new Error('Email đã có trong danh sách.');
 
-  // Không cho phép tự hạ quyền admin cuối cùng
-  var next = {
-    name: String(x.name || '').trim() || targetEmail.split('@')[0],
-    unit: String(x.unit || '').trim(),
-    role: x.role === 'admin' ? 'admin' : 'member',
-    status: ['active', 'pending', 'disabled'].indexOf(x.status) >= 0 ? x.status : 'active'
-  };
-  if (u && u.role === 'admin' && next.role !== 'admin') {
-    var admins = db.users.filter(function (y) { return y.role === 'admin' && y.status === 'active'; });
-    if (admins.length <= 1) throw new Error('Phải còn ít nhất một quản trị viên đang hoạt động.');
-  }
+    // Không cho phép tự hạ quyền admin cuối cùng
+    var next = {
+      name: String(x.name || '').trim() || targetEmail.split('@')[0],
+      unit: String(x.unit || '').trim(),
+      role: x.role === 'admin' ? 'admin' : 'member',
+      status: ['active', 'pending', 'disabled'].indexOf(x.status) >= 0 ? x.status : 'active'
+    };
+    if (u && u.role === 'admin' && next.role !== 'admin') {
+      var admins = db.users.filter(function (y) { return y.role === 'admin' && y.status === 'active'; });
+      if (admins.length <= 1) throw new Error('Phải còn ít nhất một quản trị viên đang hoạt động.');
+    }
 
-  if (!u) {
-    u = { email: targetEmail, createdAt: Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm:ss') };
-    db.users.push(u);
-  }
-  Object.assign(u, next);
+    if (!u) {
+      u = { email: targetEmail, createdAt: Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm:ss') };
+      db.users.push(u);
+    }
+    Object.assign(u, next);
 
-  saveDatabase_(db);
-  addLog_(c.email, 'user_save', '', targetEmail + ' · ' + next.status);
+    saveDatabase_(db);
+    addLog_(c.email, 'user_save', '', targetEmail + ' · ' + next.status);
+  });
   return { ok: true, data: api_bootstrap(token) };
 }
 
 function api_saveSettings(token, x) {
-  var c = ctx_(token);
-  requireAdmin_(c);
-  var db = c.db;
+  locked_(function () {
+    var c = ctx_(token);
+    requireAdmin_(c);
+    var db = c.db;
 
-  Object.assign(db.settings, {
-    APP_NAME: String(x.APP_NAME || '').trim() || 'Lịch Họp Nhóm',
-    ORG_NAME: String(x.ORG_NAME || '').trim(),
-    SCHOOL_NAME: String(x.SCHOOL_NAME || '').trim() || DEFAULT_SCHOOL,
-    DAY_START: Number(x.DAY_START || 7),
-    DAY_END: Number(x.DAY_END || 18),
-    SEND_EMAIL: Boolean(x.SEND_EMAIL),
-    CREATE_CALENDAR_EVENT: Boolean(x.CREATE_CALENDAR_EVENT),
-    ALLOW_SELF_REGISTER: Boolean(x.ALLOW_SELF_REGISTER),
-    MAX_REPEAT_WEEKS: Number(x.MAX_REPEAT_WEEKS || 12)
+    Object.assign(db.settings, {
+      APP_NAME: String(x.APP_NAME || '').trim() || 'Lịch Họp Nhóm',
+      ORG_NAME: String(x.ORG_NAME || '').trim(),
+      SCHOOL_NAME: String(x.SCHOOL_NAME || '').trim() || DEFAULT_SCHOOL,
+      DAY_START: Number(x.DAY_START || 7),
+      DAY_END: Number(x.DAY_END || 18),
+      SEND_EMAIL: Boolean(x.SEND_EMAIL),
+      CREATE_CALENDAR_EVENT: Boolean(x.CREATE_CALENDAR_EVENT),
+      ALLOW_SELF_REGISTER: Boolean(x.ALLOW_SELF_REGISTER),
+      MAX_REPEAT_WEEKS: Number(x.MAX_REPEAT_WEEKS || 12)
+    });
+
+    saveDatabase_(db);
+    addLog_(c.email, 'settings', '', 'Cập nhật cài đặt');
   });
-
-  saveDatabase_(db);
-  addLog_(c.email, 'settings', '', 'Cập nhật cài đặt');
   return { ok: true, data: api_bootstrap(token) };
 }
 
@@ -1557,11 +1605,14 @@ function api_heartbeat(token) {
 
 /** Bật/tắt hiển thị trạng thái hoạt động của chính mình. */
 function api_setPresence(token, on) {
-  var c = ctx_(token);
-  c.user.showPresence = !!on;
-  saveDatabase_(c.db);
-  presenceTouch_(c.email, !!on);
-  addLog_(c.email, 'presence', '', on ? 'hiện' : 'ẩn');
+  var email = locked_(function () {
+    var c = ctx_(token);
+    c.user.showPresence = !!on;
+    saveDatabase_(c.db);
+    return c.email;
+  });
+  presenceTouch_(email, !!on);
+  addLog_(email, 'presence', '', on ? 'hiện' : 'ẩn');
   return { ok: true, visible: !!on };
 }
 
@@ -1588,35 +1639,40 @@ function avatarFolder_() {
  */
 function api_saveAvatar(token, fileData) {
   var c = ctx_(token);
+  var url = '';
 
-  var oldUrl = String(c.user.avatar || '');
+  if (fileData && fileData !== 'none') {
+    var mime = String(fileData.mimeType || '');
+    if (mime.indexOf('image/') !== 0) throw new Error('Chỉ nhận tệp ảnh (PNG, JPG, GIF, WebP).');
 
-  if (!fileData || fileData === 'none') {
-    c.user.avatar = '';
-    saveDatabase_(c.db);
-    trashAvatar_(oldUrl);
-    addLog_(c.email, 'avatar', '', 'dùng chữ viết tắt');
-    return { ok: true, url: '', data: api_bootstrap(token) };
+    var bytes = Utilities.base64Decode(String(fileData.data || ''));
+    if (!bytes || !bytes.length) throw new Error('Không đọc được nội dung ảnh.');
+    if (bytes.length > 2 * 1024 * 1024) throw new Error('Ảnh tối đa 2 MB. Hãy chọn ảnh nhỏ hơn hoặc giảm kích thước trước.');
+
+    var safe = c.email.replace(/[^\w]/g, '_');
+    var blob = Utilities.newBlob(bytes, mime, 'avatar_' + safe + '_' + Date.now());
+    var file = avatarFolder_().createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    url = 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w240';
   }
 
-  var mime = String(fileData.mimeType || '');
-  if (mime.indexOf('image/') !== 0) throw new Error('Chỉ nhận tệp ảnh (PNG, JPG, GIF, WebP).');
-
-  var bytes = Utilities.base64Decode(String(fileData.data || ''));
-  if (!bytes || !bytes.length) throw new Error('Không đọc được nội dung ảnh.');
-  if (bytes.length > 2 * 1024 * 1024) throw new Error('Ảnh tối đa 2 MB. Hãy chọn ảnh nhỏ hơn hoặc giảm kích thước trước.');
-
-  var safe = c.email.replace(/[^\w]/g, '_');
-  var blob = Utilities.newBlob(bytes, mime, 'avatar_' + safe + '_' + Date.now());
-  var file = avatarFolder_().createFile(blob);
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-
-  c.user.avatar = 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w240';
-  saveDatabase_(c.db);
+  var oldUrl;
+  try {
+    oldUrl = locked_(function () {
+      var cur = ctx_(token);
+      var old = String(cur.user.avatar || '');
+      cur.user.avatar = url;
+      saveDatabase_(cur.db);
+      return old;
+    });
+  } catch (err) {
+    trashAvatar_(url);   // không lưu được thì bỏ ảnh vừa tải lên
+    throw err;
+  }
   trashAvatar_(oldUrl);
-  addLog_(c.email, 'avatar', '', 'đổi ảnh đại diện');
+  addLog_(c.email, 'avatar', '', url ? 'đổi ảnh đại diện' : 'dùng chữ viết tắt');
 
-  return { ok: true, url: c.user.avatar, data: api_bootstrap(token) };
+  return { ok: true, url: url, data: api_bootstrap(token) };
 }
 
 /** Dọn ảnh đại diện cũ trên Drive cho đỡ rác. Lỗi ở đây không quan trọng. */
@@ -1637,7 +1693,14 @@ function trashAvatar_(url) {
  */
 function setup() {
   var ss = getSpreadsheet_();
-  var myEmail = initData_(ss);
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  var myEmail;
+  try {
+    myEmail = initData_(ss);
+  } finally {
+    lock.releaseLock();
+  }
 
   var url = '';
   try { url = ScriptApp.getService().getUrl() || ''; } catch (e) {}
@@ -1684,7 +1747,7 @@ function initData_(ss) {
   var db = getDatabase_(ss);
   if (db.users.length === 0 && myEmail) {
     db.users = [{
-      email: myEmail, name: myEmail.split('@')[0], unit: 'Ban Quản trị',
+      email: myEmail, name: '', unit: 'Ban Quản trị',   // tên lấy từ tài khoản Google lúc mở app
       role: 'admin', status: 'active',
       createdAt: Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm:ss')
     }];

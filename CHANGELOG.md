@@ -12,6 +12,13 @@ Nhật ký thay đổi của repo. Mục mới nhất nằm trên cùng.
 
 ## 2026-09-23
 
+- [Claude] lỗi: `apps-script/lich-hop-nhom/`: bản 3.11, hai người lưu cùng lúc không còn đè mất dữ liệu của nhau
+  - Mọi thao tác đọc–sửa–lưu chạy trong khoá (`locked_`), đọc lại dữ liệu bên trong khoá: huỷ/khôi phục, phản hồi, biên bản, phòng, thành viên, cài đặt, trạng thái, ảnh đại diện, xin tham gia, `setup()`; trước đây chỉ đặt/dời lịch và xoá phòng có khoá
+  - `syncUser_` chỉ ghi khi cần (hồ sơ mới hoặc điền tên Google cho hồ sơ trống tên / tên là phần đầu email), không ghi lại mỗi lần mở app; ảnh đại diện tải lên Drive trước, lưu không được thì dọn ảnh
+- [Claude] giao diện: `apps-script/lich-hop-nhom/`: bản 3.11, rà soát ở trạng thái sheet mới
+  - Lịch ngày/tuần trống không lặp tiêu đề; thống kê chỉ vẽ phòng có lịch và đếm phòng chưa được đặt
+  - Form đặt lịch: sau giờ làm việc mặc định ngày mai, nhớ phòng vừa đặt; quản trị: hướng dẫn mời thành viên, ô chữ rộng hơn, nhãn nhật ký "Tạo dữ liệu"
+  - Menu tài khoản luôn thấy dòng phiên bản; thanh nhắc cuộc họp trên điện thoại gọn một dòng
 - [Claude] thêm: `apps-script/lich-hop-nhom/`: bản 3.10, làm lại dữ liệu từ đầu an toàn
   - `taoSheetMoi()`: tạo Google Sheet mới, chuyển app sang, giữ cấu hình đăng nhập; không xoá sheet cũ, báo có xoá được hay không (script nằm trong sheet thì không)
   - `doiLinkChinh()`: đổi link chính sang triển khai mới mà không phải nhập lại client secret

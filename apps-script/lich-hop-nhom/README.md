@@ -15,7 +15,7 @@ Làm đủ 4 bước mỗi lần dán code mới. Chỉ dán code mà bỏ bư�
 1. Mở dự án Apps Script, dán đè toàn bộ nội dung `Code.gs` và `Index.html`, bấm Lưu.
 2. Chọn **Triển khai (Deploy) → Quản lý triển khai (Manage deployments)**. Chọn triển khai có **Mã triển khai (Deployment ID) trùng mã in ở dòng "Mã triển khai link chính"** của `kiemTraCauHinh()`.
 3. Bấm **bút chì (Edit) → Phiên bản (Version): Phiên bản mới (New version) → Triển khai (Deploy)**. Link `/exec` giữ nguyên, không cần cấu hình lại OAuth.
-4. Chạy `kiemTraCauHinh()`: dòng **Link chính đang chạy** phải có dấu ✓. Hoặc mở **link chính**: chân trang đăng nhập phải ghi **Phiên bản 3.10**.
+4. Chạy `kiemTraCauHinh()`: dòng **Link chính đang chạy** phải có dấu ✓. Hoặc mở **link chính**: chân trang đăng nhập phải ghi **Phiên bản 3.11**.
 
 > **Vì sao đăng xuất rồi đăng nhập lại thì thấy giao diện cũ:**
 > - Link thử (Test deployments, đuôi `/dev`) luôn chạy code mới nhất, nhưng chỉ chủ dự án mở được.
@@ -53,6 +53,24 @@ Thay vào đó, trong Apps Script chọn hàm **`taoSheetMoi`** rồi bấm **Ch
 3. Thêm link đó vào Google Cloud Console → Credentials → OAuth client → **Authorized redirect URIs**.
 
 Không cần nhập lại client secret.
+
+## Bản 3.11: an toàn khi nhiều người cùng lưu, gọn hơn khi sheet còn trống
+
+- **Không còn mất dữ liệu khi hai người lưu cùng lúc.**
+  - Trước đây mỗi lần lưu ghi lại cả bảng. Nếu hai người lưu gần như cùng lúc (VD một người đặt lịch, người kia bấm phản hồi), lịch vừa đặt có thể bị mất.
+  - Nay mọi thao tác lưu lần lượt chờ nhau: đặt/dời/huỷ/khôi phục lịch, phản hồi, biên bản, phòng, thành viên, cài đặt, ảnh đại diện, xin tham gia.
+  - Hệ thống bận quá 10 giây thì app báo "Vui lòng thử lại sau vài giây", không ghi đè.
+- **Tên lấy từ tài khoản Google.** Hồ sơ còn trống tên, hoặc chỉ có phần đầu email (VD thành viên do quản trị viên thêm), được điền tên Google khi người đó mở app. Sau `taoSheetMoi()` không cần đăng nhập lại.
+- **Sheet mới còn trống:**
+  - Lịch ngày chỉ hiện một dòng gợi ý và nút "Đặt lịch họp", không lặp tiêu đề.
+  - Lịch tuần ghi "chưa có cuộc họp" ở tiêu đề thay vì lặp ở từng ngày.
+  - Thống kê chỉ vẽ phòng có lịch (tối đa 12) và đếm số phòng chưa được đặt.
+- **Form đặt lịch:** mở sau giờ làm việc thì mặc định ngày mai; nhớ phòng vừa đặt cho lần sau.
+- **Quản trị:**
+  - Mục Thành viên hướng dẫn cách mời người mới (gửi link app, không cần chia sẻ Google Sheet).
+  - Ô nhập tên app, tên trường rộng hơn.
+  - Nhật ký ghi rõ "Tạo dữ liệu", "Tạo quản trị viên".
+- Menu tài khoản luôn thấy dòng phiên bản. Trên điện thoại, thanh nhắc cuộc họp sắp tới gọn một dòng, nút đóng ở góc.
 
 ## Bản 3.7–3.8: link chính và giao diện gọn hơn
 

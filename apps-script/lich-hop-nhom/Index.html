@@ -440,7 +440,8 @@ details.acc .acc-body{padding:0 16px 16px 142px;display:grid;gap:12px}
 .switch:first-of-type{border-top:0}
 .switch small{display:block;color:var(--muted)}
 .switch input[type=checkbox]{width:40px;height:22px;accent-color:var(--pri)}
-.switch input[type=number],.switch input[type=text]{width:220px;max-width:50vw;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);padding:7px 10px}
+.switch input[type=number]{width:220px;max-width:50vw;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);padding:7px 10px}
+.switch input[type=text]{width:360px;max-width:55vw;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);padding:7px 10px}
 .logrow{display:grid;grid-template-columns:150px 200px 110px 1fr;gap:12px;padding:10px 18px;border-top:1px solid var(--line);font-size:13px}
 .logrow:first-child{border-top:0}
 
@@ -711,7 +712,9 @@ kbd{font-family:inherit;font-size:12px;border:1px solid var(--line);border-botto
   .linkrow{grid-template-columns:1fr}
   .dual-list{max-height:132px;min-height:96px}
   .rs-item{grid-template-columns:100px 1fr auto;gap:8px}
-  .banner{padding:8px 12px;font-size:13px}
+  .banner{position:relative;padding:8px 40px 8px 12px;font-size:13px}
+  .banner-msg{flex:1 1 200px}
+  .banner .x{position:absolute;top:4px;right:4px}
   .bar{grid-template-columns:90px 1fr 70px}
   .logrow{grid-template-columns:1fr}
   .sheet{padding:14px}
@@ -796,7 +799,7 @@ kbd{font-family:inherit;font-size:12px;border:1px solid var(--line);border-botto
     <button class="btn primary" id="newBtn" title="Đặt lịch họp (N)"><svg width="16" height="16"><use href="#i-plus"/></svg><span class="hide-sm">Đặt lịch họp</span></button>
     <div class="acct">
       <button class="avatar-btn" id="acctBtn" aria-haspopup="menu" aria-expanded="false" aria-label="Tài khoản"><span class="avatar" id="meAvatar"></span></button>
-      <div class="popover" id="acctMenu" hidden style="width:280px" role="menu"></div>
+      <div class="popover" id="acctMenu" hidden style="width:280px;max-height:calc(100dvh - 90px)" role="menu"></div>
     </div>
   </header>
 
@@ -1260,7 +1263,7 @@ const MockAPI=(()=>{
   const canEdit=(u,m)=>u.role==='admin'||m.createdBy===u.email||m.chair===u.email;
   function payload(){
     const u=me();
-    return {state:'ok',mode:'demo',email:u.email,me:u,settings:db.settings,today:today(),nowMin:nowMin(),version:'3.10-demo',
+    return {state:'ok',mode:'demo',email:u.email,me:u,settings:db.settings,today:today(),nowMin:nowMin(),version:'3.11-demo',
       users:u.role==='admin'?db.users:db.users.filter(x=>x.status==='active'),rooms:db.rooms,meetings:db.meetings,docs:db.docs,attendance:db.attendance};
   }
   function guard(admin){load();const u=me();if(!u)throw new Error('Phiên đăng nhập đã hết. Hãy đăng nhập lại.');if(admin&&u.role!=='admin')throw new Error('Chỉ quản trị viên được thực hiện thao tác này.');return u;}
@@ -1274,7 +1277,7 @@ const MockAPI=(()=>{
     setPresence(){return ok({ok:true,visible:true});},
     saveAvatar(x){return run(()=>{const u=guard();u.avatar=x===null||x==='none'?'':'data:'+x.mimeType+';base64,'+x.data;log('avatar','',u.avatar?'ảnh tải lên':'chữ viết tắt');save();return {ok:true,url:u.avatar,data:payload()};});},
     reset(){const s=db&&db.session;db=seed();db.session=s;save();},
-    bootstrap(){load();if(!me())return ok({state:'login',mode:'demo',settings:db.settings,version:'3.10-demo'});return ok(payload());},
+    bootstrap(){load();if(!me())return ok({state:'login',mode:'demo',settings:db.settings,version:'3.11-demo'});return ok(payload());},
     requestAccess(){return fail('Bản demo không hỗ trợ đăng ký.');},
     saveMeeting(input){return run(()=>{
       const u=guard();
@@ -1839,7 +1842,7 @@ function dayView(){
   const H=hourPx(),ds=S.settings.DAY_START,de=S.settings.DAY_END;
   const mine=ms.filter(isMine).length;
   let h=`<div class="toolbar"><h2>${ms.length?`${ms.length} cuộc họp · ${mine} liên quan đến bạn`:allKhuShown()?'Chưa có cuộc họp nào trong ngày':'Chưa có cuộc họp nào ở khu đang xem'}</h2>${clashChip(ms)}${otherKhuChip(active().filter(m=>m.date===S.date))}<div class="spacer"></div><div class="tbar-ctrls">${roomTools(true)}${scopeSeg()}</div>${infoPop(['Bấm ô trống để đặt nhanh.','Kéo cuộc họp để dời giờ hoặc đổi phòng; kéo mép dưới để đổi giờ kết thúc.','Vùng sọc xám là giờ đã qua.','Rê chuột lên tên phòng để xem sức chứa, khu, thiết bị.'])}</div>`;
-  if(!rooms.length)return h+`<div class="empty"><b>Không có phòng nào để hiển thị</b>${S.roomQ?`Không phòng nào khớp "${esc(S.roomQ)}".`:hideEmptyOn()?'Ngày này chưa phòng nào có lịch. Chọn một khu, hoặc tắt "Ẩn phòng trống" để thấy phòng trống và đặt lịch.<div class="row"><button type="button" class="btn" data-go-rooms>Xem sơ đồ khu</button><button type="button" class="btn primary" data-new>Đặt lịch họp</button></div>':'Hãy chọn ít nhất một khu.'}</div>`;
+  if(!rooms.length)return h+`<div class="empty">${S.roomQ?`<b>Không có phòng nào để hiển thị</b>Không phòng nào khớp "${esc(S.roomQ)}".`:hideEmptyOn()?'Bấm "Đặt lịch họp", hoặc xem sơ đồ khu để chọn phòng còn trống.<div class="row"><button type="button" class="btn" data-go-rooms>Xem sơ đồ khu</button><button type="button" class="btn primary" data-new>Đặt lịch họp</button></div>':'<b>Không có phòng nào để hiển thị</b>Hãy chọn ít nhất một khu.'}</div>`;
   h+=`<div class="scroll"><div class="daygrid" style="--cols:${rooms.length}"><div class="corner"></div>`;
   // Một dòng: tên phòng + sức chứa. Khu, thiết bị xem ở tooltip — dành chỗ cho lưới giờ.
   h+=rooms.map(r=>`<div class="colhead" title="${esc([r.name,roomSub(r),r.equipment].filter(Boolean).join(' · '))}"><strong><span class="rn">${esc(r.name)}</span>${r.active?'':'<span class="chip neutral">Tạm ngưng</span>'}${r.online?'<small class="cap">Online</small>':Number(r.capacity)>0?`<small class="cap">${icon('i-user',11)}${esc(String(r.capacity))}</small>`:''}</strong></div>`).join('');
@@ -1885,13 +1888,13 @@ function slotAt(col,e){
 function weekView(){
   const m0=L.monday(S.date);
   const weekMs=active().filter(m=>m.date>=m0&&m.date<=L.addDays(m0,6)&&inFilter(m)).sort(sortM);
-  let h=`<div class="toolbar"><h2>Tuần ${fmtShort(m0)} – ${fmtShort(L.addDays(m0,6))}</h2>${clashChip(weekMs)}${otherKhuChip(active().filter(m=>m.date>=m0&&m.date<=L.addDays(m0,6)))}<div class="spacer"></div><div class="tbar-ctrls">${scopeSeg()}</div>${infoPop(['Kéo thẻ sang ngày khác để dời lịch.','Bấm tên ngày để mở lịch ngày đó.'])}</div><div class="scroll"><div class="week">`;
+  let h=`<div class="toolbar"><h2>Tuần ${fmtShort(m0)} – ${fmtShort(L.addDays(m0,6))}${weekMs.length?'':' · chưa có cuộc họp'}</h2>${clashChip(weekMs)}${otherKhuChip(active().filter(m=>m.date>=m0&&m.date<=L.addDays(m0,6)))}<div class="spacer"></div><div class="tbar-ctrls">${scopeSeg()}</div>${infoPop(['Kéo thẻ sang ngày khác để dời lịch.','Bấm tên ngày để mở lịch ngày đó.'])}</div><div class="scroll"><div class="week">`;
   for(let i=0;i<7;i++){
     const d=L.addDays(m0,i);
     const ms=active().filter(m=>m.date===d&&inFilter(m)).sort(sortM);
     const cN=ms.filter(m=>clashOf(m)).length;
     h+=`<div class="wcol" data-date="${d}"><button class="whead${d===today()?' is-today':''}" data-goto="${d}" aria-label="Xem ${fmtLong(d)}"><small>${DOW[L.dow(d)]}</small><div class="dnum">${L.fmtDM(d)}</div><small>${ms.length?ms.length+' cuộc họp':'Trống'}${cN?` · <span class="clash-txt">⚠ ${cN} bị trùng</span>`:''}</small></button><div class="wlist">`;
-    h+=ms.length?ms.map(m=>{const c=clashOf(m);const dec=hasDeclined(m);return `<button class="${['wcard',isMine(m)&&!dec?'mine':(room(m.room)?.online?'online':''),dec?'declined':'',isPast(m)?'past':'',c?'clash':'',needsReply(m)?'flagged':'',canDrag(m)?'can-drag':''].filter(Boolean).join(' ')}" data-id="${esc(m.id)}" ${c?`title="${esc(clashTitle(m))}"`:canDrag(m)?'title="Kéo sang ngày khác để dời lịch"':''}>${needsReply(m)?'<i class="flag" title="Bạn chưa phản hồi"></i>':''}${c?`<em class="clash-tag">⚠ ${clashLabel(m)}</em>`:''}<span>${m.start}–${m.end} · ${esc(room(m.room)?.name||m.room)}</span><b>${esc(m.title)}</b><span>Chủ trì: ${esc(nameOf(m.chair))}${dec?' · Bạn đã báo vắng':''}</span></button>`;}).join(''):`<div class="empty-day">Không có cuộc họp</div>`;
+    h+=ms.length?ms.map(m=>{const c=clashOf(m);const dec=hasDeclined(m);return `<button class="${['wcard',isMine(m)&&!dec?'mine':(room(m.room)?.online?'online':''),dec?'declined':'',isPast(m)?'past':'',c?'clash':'',needsReply(m)?'flagged':'',canDrag(m)?'can-drag':''].filter(Boolean).join(' ')}" data-id="${esc(m.id)}" ${c?`title="${esc(clashTitle(m))}"`:canDrag(m)?'title="Kéo sang ngày khác để dời lịch"':''}>${needsReply(m)?'<i class="flag" title="Bạn chưa phản hồi"></i>':''}${c?`<em class="clash-tag">⚠ ${clashLabel(m)}</em>`:''}<span>${m.start}–${m.end} · ${esc(room(m.room)?.name||m.room)}</span><b>${esc(m.title)}</b><span>Chủ trì: ${esc(nameOf(m.chair))}${dec?' · Bạn đã báo vắng':''}</span></button>`;}).join(''):'';
     h+=`</div></div>`;
   }
   return h+`</div></div>`;
@@ -2109,6 +2112,7 @@ function statsView(){
   const withMin=past.filter(m=>m.minutes).length;
   const span=(S.settings.DAY_END-S.settings.DAY_START)*60*5;
   const usage=S.rooms.filter(r=>!r.online).map(r=>{const mins=ms.filter(m=>m.room===r.id).reduce((a,m)=>a+dur(m),0);return {r,mins,pct:Math.min(100,Math.round(mins/span*100))};}).sort((a,b)=>b.mins-a.mins);
+  const usedRooms=usage.filter(u=>u.mins>0);
   const chairs={};ms.forEach(m=>chairs[m.chair]=(chairs[m.chair]||0)+1);
   const topChairs=Object.entries(chairs).sort((a,b)=>b[1]-a[1]).slice(0,5);
   const maxC=topChairs.length?topChairs[0][1]:1;
@@ -2119,7 +2123,7 @@ function statsView(){
     <div class="stat"><b>${invited?Math.round(replied/invited*100):0}%</b><span>lời mời đã được phản hồi</span></div>
     <div class="stat"><b>${past.length?Math.round(withMin/past.length*100):0}%</b><span>cuộc họp đã qua có biên bản</span></div>
   </div>
-  <div class="panel"><div class="panel-h"><h3>Mức sử dụng phòng (giờ hành chính T2–T6)</h3></div><div class="bars">${usage.length?usage.map(u=>`<div class="bar"><span>${esc(u.r.name)}</span><div class="track" role="img" aria-label="${u.pct}%"><div class="fill" style="width:${u.pct}%"></div></div><span class="v">${(u.mins/60).toFixed(1).replace('.',',')} giờ · ${u.pct}%</span></div>`).join(''):'<span class="muted">Chưa có phòng.</span>'}</div></div>
+  <div class="panel"><div class="panel-h"><h3>Mức sử dụng phòng (giờ hành chính T2–T6)</h3></div><div class="bars">${usedRooms.length?usedRooms.slice(0,12).map(u=>`<div class="bar"><span>${esc(u.r.name)}</span><div class="track" role="img" aria-label="${u.pct}%"><div class="fill" style="width:${u.pct}%"></div></div><span class="v">${(u.mins/60).toFixed(1).replace('.',',')} giờ · ${u.pct}%</span></div>`).join('')+`<span class="muted" style="font-size:12.5px">${usedRooms.length>12?`Còn ${usedRooms.length-12} phòng khác có lịch. `:''}${usage.length-usedRooms.length} phòng chưa được đặt trong tuần.</span>`:'<span class="muted">Tuần này chưa có phòng nào được đặt.</span>'}</div></div>
   <div class="panel"><div class="panel-h"><h3>Chủ trì nhiều nhất tuần này</h3></div><div class="bars">${topChairs.length?topChairs.map(([e,c])=>`<div class="bar"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(nameOf(e))}</span><div class="track"><div class="fill" style="width:${c/maxC*100}%;background:var(--warn)"></div></div><span class="v">${c} cuộc họp</span></div>`).join(''):'<span class="muted">Chưa có cuộc họp trong tuần.</span>'}</div></div>`;
 }
 function usersView(){
@@ -2131,7 +2135,7 @@ function usersView(){
   ${list.map(u=>`<tr><td><span class="row" style="flex-wrap:nowrap">${avatar(u.email,26)} ${esc(u.name)}</span></td><td>${esc(u.email)}</td><td>${esc(u.unit)||'—'}</td><td>${u.role==='admin'?'<span class="chip solid">Quản trị</span>':'Thành viên'}</td><td>${st(u)}</td>
   <td style="white-space:nowrap;text-align:right">${u.status==='pending'?`<button class="btn sm primary" data-user-approve="${esc(u.email)}">Duyệt</button> <button class="btn sm danger" data-user-reject="${esc(u.email)}">Từ chối</button> `:''}<button class="btn sm" data-user-edit="${esc(u.email)}">Sửa</button></td></tr>`).join('')}
   </tbody></table></div></div>
-  <div class="note info">Mẹo: thành viên tự gửi yêu cầu khi mở app lần đầu (nếu bật "Cho phép tự đăng ký"). Nếu web app chạy dưới quyền người dùng, hãy chia sẻ Google Sheet cho thành viên — xem hướng dẫn triển khai.</div>`;
+  <div class="note info">${S.settings.ALLOW_SELF_REGISTER?'Thêm thành viên: gửi họ link app. Họ đăng nhập Google rồi gửi yêu cầu tham gia, bạn duyệt ở đây. Không cần chia sẻ Google Sheet.':'Đang tắt tự đăng ký: thêm thành viên bằng nút "Thêm thành viên" (nhập email Google của họ).'}</div>`;
 }
 function roomsAdminView(){
   const list=sortRooms(S.rooms.filter(r=>khuVisible(r.building)&&roomMatch(r)));
@@ -2176,7 +2180,7 @@ function settingsView(){
   </form>`;
 }
 function logsView(){
-  const A={room_import:'Thêm phòng',room_seed:'Nạp phòng HCMUTE',room_delete:'Xoá phòng',login:'Đăng nhập',avatar:'Ảnh đại diện',presence:'Trạng thái online',create:'Tạo lịch',update:'Sửa lịch',move:'Dời lịch',cancel:'Hủy lịch',restore:'Khôi phục',rsvp:'Phản hồi',minutes:'Biên bản',upload:'Tải tệp',room_save:'Lưu phòng',room_create:'Thêm phòng',room_update:'Sửa phòng',user_save:'Lưu thành viên',user_create:'Thêm thành viên',user_update:'Sửa thành viên',settings:'Cài đặt',request_access:'Xin tham gia',seed:'Khởi tạo',mail_error:'Lỗi email',calendar_error:'Lỗi Calendar'};
+  const A={setup:'Tạo dữ liệu',admin_created:'Tạo quản trị viên',room_import:'Thêm phòng',room_seed:'Nạp phòng HCMUTE',room_delete:'Xoá phòng',login:'Đăng nhập',avatar:'Ảnh đại diện',presence:'Trạng thái online',create:'Tạo lịch',update:'Sửa lịch',move:'Dời lịch',cancel:'Hủy lịch',restore:'Khôi phục',rsvp:'Phản hồi',minutes:'Biên bản',upload:'Tải tệp',room_save:'Lưu phòng',room_create:'Thêm phòng',room_update:'Sửa phòng',user_save:'Lưu thành viên',user_create:'Thêm thành viên',user_update:'Sửa thành viên',settings:'Cài đặt',request_access:'Xin tham gia',seed:'Khởi tạo',mail_error:'Lỗi email',calendar_error:'Lỗi Calendar'};
   if(!S.logs)return `<div class="panel empty"><div class="spinner"></div><br>Đang tải nhật ký…</div>`;
   return `<div class="panel"><div class="panel-h"><h3>Nhật ký hoạt động gần đây</h3><div class="spacer"></div><button class="btn sm" data-logs-reload>Tải lại</button></div>
   ${S.logs.length?S.logs.map(l=>`<div class="logrow"><span class="muted">${esc(l.time)}</span><span>${esc(user(l.email)?.name||l.email)}</span><span><span class="chip neutral">${esc(A[l.action]||l.action)}</span></span><span>${esc(l.detail)}</span></div>`).join(''):'<div class="empty">Chưa có hoạt động.</div>'}</div>`;
@@ -2657,7 +2661,10 @@ function openForm(pre={}){
     $('#fTitle').textContent=pre.copy?'Nhân bản cuộc họp':'Đặt lịch họp';$('#saveBtn').textContent='Đặt lịch họp';$('#fNote').textContent='';
     const src=pre.copy||{};
     let date=pre.date||S.date;if(date<today())date=today();
-    const roomId=pre.room||src.room||(visibleRooms().find(r=>r.active&&!r.online)||S.rooms.find(r=>r.active)||{}).id||'';
+    if(!pre.date&&pre.start==null&&date===today()&&nowMin()+30>de*60)date=L.addDays(today(),1);   // hôm nay đã hết giờ đặt
+    let last='';try{last=localStorage.getItem('lhn-last-room')||'';}catch(x){}
+    const roomId=pre.room||src.room||(room(last)&&room(last).active?last:'')
+      ||(visibleRooms().find(r=>r.active&&!r.online)||sortRooms(S.rooms.filter(r=>r.active&&!r.online))[0]||S.rooms.find(r=>r.active)||{}).id||'';
     let s=pre.start!=null?pre.start:nextFreeStart(roomId,date);
     const len=src.start?L.toMin(src.end)-L.toMin(src.start):60;
     let e=Math.min(s+len,de*60);if(e<=s){s=Math.max(ds*60,de*60-60);e=de*60;}
@@ -2791,6 +2798,7 @@ F.addEventListener('submit',async e=>{
   const d=readForm();const wasEdit=!!S.editingId;
   try{
     const r=await call(API.saveMeeting(d),$('#saveBtn'));
+    try{localStorage.setItem('lhn-last-room',d.room);}catch(x){}
     $('#formDialog').close();
     ingest(r.data);
     S.date=wasEdit?d.date:res.dates[0];S.miniMonth=null;
