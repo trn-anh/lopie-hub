@@ -1,7 +1,7 @@
 /**
  * LỊCH HỌP NHÓM — BACKEND GOOGLE APPS SCRIPT (Code.gs)
- * Phiên bản 3.8 — Đăng nhập bằng Google OAuth 2.0 thật, phòng HCMUTE nạp sẵn,
- * tự kiểm tra link chính (/exec) có đang chạy đúng phiên bản không
+ * Phiên bản 3.9 — Đăng nhập bằng Google OAuth 2.0 thật, phòng HCMUTE nạp sẵn.
+ * kiemTraCauHinh() cho biết link chính (/exec) có đang chạy đúng phiên bản không.
  *
  * KIẾN TRÚC XÁC THỰC
  * ------------------
@@ -27,7 +27,7 @@
 var SESSION_HOURS = 12;              // Session token sống bao lâu
 var SCRIPT_PROPS = PropertiesService.getScriptProperties();
 var APP_TIME_ZONE = 'Asia/Ho_Chi_Minh';
-var APP_VERSION = '3.8';
+var APP_VERSION = '3.9';
 var DEFAULT_SCHOOL = 'Trường Đại học Công nghệ Kỹ thuật TP.HCM';
 var TEXT_SETTINGS = ['APP_NAME', 'ORG_NAME', 'SCHOOL_NAME'];   // luôn là chữ, kể cả khi gõ toàn số
 
@@ -1225,6 +1225,7 @@ function api_deleteRooms(token, ids) {
    thấy bản mới, đăng nhập lại lại rơi về bản cũ.
    Máy chủ hỏi thẳng link chính (?lhn_probe=1): từ bản 3.7 trở đi link trả về
    "LHN-VERSION:x.y"; bản cũ hơn trả về trang HTML bình thường.
+   Chỉ dùng trong kiemTraCauHinh() — giao diện app không hiện thông báo nào về việc này.
    ===================================================================== */
 function deployIdOf_(url) {
   var m = /\/s\/([\w-]+)\/exec/.exec(String(url || ''));
@@ -1296,31 +1297,6 @@ function deployState_(force) {
   pr.version = seen;
   pr.state = seen === APP_VERSION ? 'ok' : 'old';
   return pr;
-}
-
-/** Quản trị viên: link chính có đang chạy đúng phiên bản của code hiện tại không. */
-function api_checkDeploy(token, force) {
-  var c = ctx_(token);
-  requireAdmin_(c);
-  var r = deployState_(!!force);
-  try { r.scriptId = ScriptApp.getScriptId(); } catch (e) {}
-  return r;
-}
-
-/**
- * Trang đăng nhập (chưa có phiên): chỉ báo khi hỏi thẳng được và link chính đúng là bản khác,
- * để trang công khai không bao giờ báo nhầm. Hỏi lại ngay (force) tối đa 20 giây một lần.
- */
-function api_deployStatus(token, force) {
-  try {
-    var cache = CacheService.getScriptCache();
-    var go = !!force && !cache.get('lhn_probe_force');
-    if (go) cache.put('lhn_probe_force', '1', 20);
-    var pr = probeExec_(go);
-    return { state: pr.state === 'old' ? 'old' : 'ok', version: pr.version, current: APP_VERSION, url: pr.url, deployId: pr.deployId };
-  } catch (e) {
-    return { state: 'ok', current: APP_VERSION };
-  }
 }
 
 /* =====================================================================
@@ -1765,10 +1741,12 @@ function kiemTraCauHinh() {
     'Phòng HCMUTE       : ' + ({ '1': 'đã nạp', off: 'đã tắt tự nạp' }[prop_('HCMUTE_SEED')] || 'chưa nạp (tự nạp khi mở app lần tới)'),
     '',
     'Code trong trình soạn thảo: bản ' + APP_VERSION,
-    'Link chính đang chạy      : ' + (pr.state === 'ok' ? 'bản ' + pr.version + '  ✓ khớp, không cần làm gì'
-      : (pr.version ? 'bản ' + pr.version : 'BẢN CŨ') + '  ✗ CẦN CẬP NHẬT TRIỂN KHAI (xem 4 bước bên dưới)') +
-      (pr.via === 'login' ? '\n  (Link chính bắt đăng nhập Google nên không hỏi thẳng được; app dựa vào lần đăng nhập gần nhất.' +
-        '\n   Vừa cập nhật xong thì mở link chính, đăng nhập lại một lần rồi chạy lại hàm này.)' : ''),
+    'Link chính đang chạy      : ' + (pr.via === 'login'
+      ? 'không hỏi thẳng được (link bắt đăng nhập Google). Lần đăng nhập gần nhất qua link chính: ' +
+        (pr.version ? 'bản ' + pr.version + (pr.version === APP_VERSION ? '  ✓' : '') : 'chưa ghi nhận') +
+        '\n  → Mở link chính: chân trang đăng nhập phải ghi "Phiên bản ' + APP_VERSION + '".'
+      : pr.state === 'ok' ? 'bản ' + pr.version + '  ✓ khớp, không cần làm gì'
+      : (pr.version ? 'bản ' + pr.version : 'BẢN CŨ') + '  ✗ CẦN CẬP NHẬT TRIỂN KHAI (xem 4 bước bên dưới)'),
     'Mã triển khai link chính  : ' + (pr.deployId || '(chưa có)'),
     '',
     'Sẵn sàng đăng nhập: ' + (AUTH.isConfigured() ? 'CÓ' : 'CHƯA'),

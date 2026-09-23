@@ -12,6 +12,9 @@ Nhật ký thay đổi của repo. Mục mới nhất nằm trên cùng.
 
 ## 2026-09-23
 
+- [Claude] dọn: `apps-script/lich-hop-nhom/`: bản 3.9, bỏ thông báo "Cập nhật link chính" theo yêu cầu
+  - Bỏ thanh cảnh báo màu cam, hộp hướng dẫn tự mở và lời nhắc trên trang đăng nhập; bỏ `api_checkDeploy`, `api_deployStatus`
+  - Chỉ còn kiểm tra trong `kiemTraCauHinh()`; link bắt đăng nhập Google thì hàm chỉ nêu thông tin, không kết luận "cần cập nhật"
 - [Claude] lỗi: `apps-script/lich-hop-nhom/`: bản 3.8, báo chắc chắn khi link chính còn chạy bản cũ
   - Bản 3.7 không báo vì đoán theo nội dung trang (trang app nào cũng có link ServiceLogin); nay hỏi link chính và tự đi theo từng bước chuyển hướng
   - Link bắt đăng nhập Google: dựa vào phiên bản đã xử lý lần đăng nhập gần nhất (`EXEC_VERSION`, ghi ở bước đổi mã đăng nhập)

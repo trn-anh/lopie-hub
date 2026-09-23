@@ -133,8 +133,6 @@ h1,h2{letter-spacing:-.01em}
 .gate-note{margin:12px 0 0;font-size:12.5px;color:var(--muted);text-align:center}
 .gate-switch{display:block;margin:16px auto 0;font-size:13px}
 .gate-foot{margin:0;color:var(--muted);font-size:12.5px;text-align:center}
-.gate-deploy{margin:0 0 16px;display:grid;gap:6px;font-size:13px;line-height:1.5;box-shadow:inset 3px 0 0 var(--brand-red)}
-.gate-deploy .linkbtn{justify-self:start;font-size:13px}
 @media (max-width:560px){
   .gate{gap:18px;padding:28px 14px 20px}
   .gate-logo{width:64px}
@@ -611,15 +609,6 @@ kbd{font-family:inherit;font-size:12px;border:1px solid var(--line);border-botto
 .banner .btn.bad{background:var(--bad);border-color:var(--bad);color:var(--on-bad)}
 .banner .x{margin-left:auto;border:0;background:transparent;color:inherit;display:grid;place-items:center;width:28px;height:28px;border-radius:6px;flex:none}
 .banner .x:hover{background:var(--hover-tint)}
-/* Quản trị viên: link chính (/exec) còn chạy bản cũ — đăng nhập lại sẽ rơi về giao diện cũ */
-.deploybar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 20px;background:var(--warn-soft);color:var(--warn);border-bottom:1px solid color-mix(in srgb,var(--warn) 30%,var(--line));box-shadow:inset 4px 0 0 var(--brand-red);font-size:13.5px}
-.deploybar svg{flex:none}
-.deploybar .banner-msg{flex:1 1 320px;min-width:0}
-.deploybar .btn{height:30px;font-size:12.5px;background:var(--surface);border-color:var(--line);color:var(--ink)}
-.steps{display:grid;gap:10px}
-.steps p{margin:0}
-.steps ol{margin:0;padding-left:20px;display:grid;gap:6px}
-.steps code{background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:0 5px;font-size:12.5px;overflow-wrap:anywhere}
 .live-dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none;animation:livepulse 1.8s ease-out infinite}
 @keyframes livepulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,currentColor 50%,transparent)}100%{box-shadow:0 0 0 7px transparent}}
 /* Lịch của người khác mờ hơn lịch của mình */
@@ -722,7 +711,7 @@ kbd{font-family:inherit;font-size:12px;border:1px solid var(--line);border-botto
   .linkrow{grid-template-columns:1fr}
   .dual-list{max-height:132px;min-height:96px}
   .rs-item{grid-template-columns:100px 1fr auto;gap:8px}
-  .banner,.deploybar{padding:8px 12px;font-size:13px}
+  .banner{padding:8px 12px;font-size:13px}
   .bar{grid-template-columns:90px 1fr 70px}
   .logrow{grid-template-columns:1fr}
   .sheet{padding:14px}
@@ -1198,8 +1187,6 @@ const ServerAPI={
   saveRoom:x=>gas('api_saveRoom',x),
   importRooms:(l,o)=>gas('api_importRooms',l,o),
   deleteRooms:ids=>gas('api_deleteRooms',ids),
-  checkDeploy:f=>gas('api_checkDeploy',f),
-  deployStatus:f=>gas('api_deployStatus',f),
   saveUser:x=>gas('api_saveUser',x),
   saveSettings:x=>gas('api_saveSettings',x),
   getLogs:n=>gas('api_getLogs',n),
@@ -1273,7 +1260,7 @@ const MockAPI=(()=>{
   const canEdit=(u,m)=>u.role==='admin'||m.createdBy===u.email||m.chair===u.email;
   function payload(){
     const u=me();
-    return {state:'ok',mode:'demo',email:u.email,me:u,settings:db.settings,today:today(),nowMin:nowMin(),version:'3.8-demo',
+    return {state:'ok',mode:'demo',email:u.email,me:u,settings:db.settings,today:today(),nowMin:nowMin(),version:'3.9-demo',
       users:u.role==='admin'?db.users:db.users.filter(x=>x.status==='active'),rooms:db.rooms,meetings:db.meetings,docs:db.docs,attendance:db.attendance};
   }
   function guard(admin){load();const u=me();if(!u)throw new Error('Phiên đăng nhập đã hết. Hãy đăng nhập lại.');if(admin&&u.role!=='admin')throw new Error('Chỉ quản trị viên được thực hiện thao tác này.');return u;}
@@ -1287,7 +1274,7 @@ const MockAPI=(()=>{
     setPresence(){return ok({ok:true,visible:true});},
     saveAvatar(x){return run(()=>{const u=guard();u.avatar=x===null||x==='none'?'':'data:'+x.mimeType+';base64,'+x.data;log('avatar','',u.avatar?'ảnh tải lên':'chữ viết tắt');save();return {ok:true,url:u.avatar,data:payload()};});},
     reset(){const s=db&&db.session;db=seed();db.session=s;save();},
-    bootstrap(){load();if(!me())return ok({state:'login',mode:'demo',settings:db.settings,version:'3.8-demo'});return ok(payload());},
+    bootstrap(){load();if(!me())return ok({state:'login',mode:'demo',settings:db.settings,version:'3.9-demo'});return ok(payload());},
     requestAccess(){return fail('Bản demo không hỗ trợ đăng ký.');},
     saveMeeting(input){return run(()=>{
       const u=guard();
@@ -1662,20 +1649,7 @@ function showLogin(d){
     const g=$('#gLogin');if(g)g.onclick=()=>chooseAccount(d&&d.accounts);
     const c=$('#chooseAccBtn');if(c)c.onclick=()=>chooseAccount(d&&d.accounts);
   }
-  if(IS_GAS&&authUrl)loginDeployNotice(false);
 }
-/* Trang đăng nhập đang chạy bản mới hơn link chính (VD mở bằng link thử /dev):
-   báo trước rằng đăng nhập xong Google sẽ đưa về link chính — nơi còn giao diện cũ. */
-async function loginDeployNotice(force){
-  let r=null;try{r=await API.deployStatus(!!force);}catch(e){}
-  const card=$('#gate .gate-card'),btn=card&&card.querySelector('.gbtn');
-  const old=card&&card.querySelector('.gate-deploy');if(old)old.remove();
-  if(!btn||!r||r.state!=='old'){if(force&&r&&btn)toast(r.state==='old'?'Link chính vẫn đang chạy bản cũ.':'Link chính đã chạy đúng bản mới.',{type:r.state==='old'?'alert':undefined});return;}
-  S.deploy=Object.assign({via:'probe'},r);
-  btn.insertAdjacentHTML('beforebegin',`<div class="note gate-deploy" role="status"><span><b>Link chính của app đang chạy ${r.version?'bản '+esc(r.version):'bản cũ'}</b>, trang này là bản ${esc(r.current)}. Đăng nhập xong, Google sẽ đưa bạn về link chính nên bạn sẽ thấy giao diện cũ.</span><button type="button" class="linkbtn" data-deploy-help>Quản trị viên: xem cách cập nhật</button></div>`);
-  if(force)toast('Link chính vẫn đang chạy bản cũ.',{type:'alert'});
-}
-$('#gate').addEventListener('click',e=>{if(e.target.closest('[data-deploy-help]'))deployHelp();});
 async function chooseAccount(customAccounts){
   let accts = customAccounts || (IS_GAS ? (S.users.length ? S.users : null) : MockAPI.accounts());
   if(!accts || !accts.length){
@@ -1828,48 +1802,7 @@ function refreshBanner(){
   const old=el.querySelector(':scope > .banner');
   const tmp=document.createElement('div');tmp.innerHTML=bannerHtml();const nb=tmp.firstElementChild;
   if(old&&nb&&old.isEqualNode(nb))return;
-  const top=el.querySelector(':scope > .deploybar');
-  if(old&&nb)old.replaceWith(nb);else if(old)old.remove();else if(nb){if(top)top.after(nb);else el.prepend(nb);}
-}
-
-/* ---------- Link chính (/exec) đang chạy bản nào ----------
-   Đăng nhập Google luôn quay về link chính. Quên "Quản lý triển khai → Phiên bản mới" thì link thử (/dev)
-   hiện bản mới nhưng đăng nhập lại rơi về bản cũ. Máy chủ hỏi thẳng link chính, lệch thì báo quản trị viên. */
-async function checkDeploy(force){
-  if(!IS_GAS||!isAdmin())return;
-  try{S.deploy=await API.checkDeploy(!!force);}catch(e){S.deploy=null;}
-  refreshDeploy();
-  if(!force&&S.deploy&&S.deploy.state==='old'){
-    const k='lhn-deploy-guide-'+S.deploy.current;let shown=false;
-    try{shown=sessionStorage.getItem(k)==='1';sessionStorage.setItem(k,'1');}catch(e){}
-    if(!shown&&!document.querySelector('dialog[open]'))deployHelp();
-  }
-  if(force&&S.deploy)toast(S.deploy.state==='ok'?`Link chính đã chạy bản ${S.deploy.version}.`:S.deploy.state==='old'?'Link chính vẫn đang chạy bản cũ.':'Chưa kiểm tra được link chính.',{type:S.deploy.state==='old'?'alert':undefined});
-}
-function deployHtml(){
-  const d=S.deploy;if(!d||d.state!=='old'||!isAdmin())return '';
-  return `<div class="deploybar" role="status">${icon('i-info',16)}<span class="banner-msg"><b>Link chính của app đang chạy ${d.version?'bản '+esc(d.version):'bản cũ'}</b>, còn trang này là bản ${esc(d.current)}. Ai mở link chính, kể cả bạn sau khi đăng nhập lại, sẽ thấy giao diện cũ.${d.via==='login'?' <i>Nếu bạn vừa cập nhật triển khai: đăng xuất rồi đăng nhập lại một lần để app ghi nhận.</i>':''}</span><button type="button" class="btn sm" data-deploy-help>Cách cập nhật</button><button type="button" class="btn sm" data-deploy-recheck>Kiểm tra lại</button></div>`;
-}
-function refreshDeploy(){
-  const el=$('#main');if(!el||$('#app').hidden)return;
-  const old=el.querySelector(':scope > .deploybar');if(old)old.remove();
-  const h=deployHtml();if(h)el.insertAdjacentHTML('afterbegin',h);
-}
-async function deployHelp(){
-  const d=S.deploy||{},id=d.deployId||'';
-  const again=await ask({title:'Cập nhật link chính lên bản '+(d.current||''),ok:'Kiểm tra lại',cancel:'Đóng',bodyHtml:`<div class="steps">
-    <p>Code trong Apps Script đã là bản mới, nhưng link chính (đuôi <code>/exec</code>) vẫn gắn với một phiên bản cũ. Đăng nhập Google luôn quay về link chính, nên sau khi đăng nhập bạn thấy giao diện cũ.</p>
-    <ol>
-      <li>Trong Apps Script: <b>Triển khai</b> (Deploy) → <b>Quản lý triển khai</b> (Manage deployments).</li>
-      <li>Chọn triển khai có <b>Mã triển khai</b> (Deployment ID) là <code>${esc(id||'…')}</code>.</li>
-      <li>Bấm <b>bút chì</b> (Edit) → mục <b>Phiên bản</b> (Version) chọn <b>Phiên bản mới</b> (New version) → <b>Triển khai</b> (Deploy).</li>
-      <li>Quay lại đây bấm <b>Kiểm tra lại</b>.</li>
-    </ol>
-    <p class="muted">Không bấm "Triển khai mới" (New deployment): sẽ tạo ra link khác. Link thử đuôi <code>/dev</code> chỉ để bạn xem trước, không dùng để chia sẻ. Không thấy mã triển khai trên trong danh sách thì link chính thuộc một dự án Apps Script khác.</p>
-    <p class="row">${d.scriptId?`<a class="btn sm" href="https://script.google.com/home/projects/${encodeURIComponent(d.scriptId)}/edit" target="_blank" rel="noopener">Mở dự án Apps Script</a>`:''}${d.url?`<a class="btn sm" href="${esc(d.url)}" target="_blank" rel="noopener">Mở link chính</a>`:''}</p>
-  </div>`});
-  if(!again)return;
-  if($('#app').hidden)loginDeployNotice(true);else checkDeploy(true);
+  if(old&&nb)old.replaceWith(nb);else if(old)old.remove();else if(nb)el.prepend(nb);
 }
 
 function renderMain(){
@@ -1878,7 +1811,7 @@ function renderMain(){
   const key=S.section+'|'+S.view+'|'+S.date+'|'+S.adminTab+'|'+S.mineTab;
   const body=S.section==='calendar'?(S.view==='day'?dayView():S.view==='week'?weekView():tableView())
     :S.section==='rooms'?roomsView():S.section==='mine'?mineView():S.section==='docs'?docsView():adminView();
-  el.innerHTML=deployHtml()+bannerHtml()+body;
+  el.innerHTML=bannerHtml()+body;
   el.dataset.key=key;
   const sc=el.querySelector('.scroll');
   if(sc&&prevKey===key&&prevTop!=null)sc.scrollTop=prevTop;
@@ -2915,8 +2848,6 @@ main.addEventListener('click',async e=>{
   const kh=t.closest('[data-khu]');if(kh){onlyKhu(kh.dataset.khu);render();const sc=$('#main .scroll');if(sc)sc.scrollTop=0;return;}
   if(t.closest('[data-khu-all]')){S.hidden=new Set();saveHidden();render();return;}
   if(t.closest('[data-go-rooms]')){go('rooms');return;}
-  if(t.closest('[data-deploy-help]')){deployHelp();return;}
-  const dr=t.closest('[data-deploy-recheck]');if(dr){dr.disabled=true;dr.textContent='Đang kiểm tra…';checkDeploy(true);return;}
   if(t.closest('[data-new]')){openForm();return;}
   const sc=t.closest('[data-scope]');if(sc){S.onlyMine=sc.dataset.scope==='mine';try{localStorage.setItem('lhn-scope',sc.dataset.scope);}catch(x){}renderMain();return;}
   if(t.closest('[data-hide-empty]')){S.hideEmpty=!hideEmptyOn();try{localStorage.setItem('lhn-hide-empty',S.hideEmpty?'1':'0');}catch(x){}renderMain();return;}
@@ -3334,7 +3265,6 @@ async function boot(fresh){
   greet(fresh);
   if(d.seeded&&d.seeded.added)toast(`Đã nạp ${d.seeded.added} phòng theo sơ đồ HCMUTE${(d.seeded.paused||[]).length?`, tạm ngưng ${d.seeded.paused.length} phòng mẫu cũ`:''}. Phòng học là phòng mẫu (chưa đúng số phòng thật): thay trong Quản trị › Phòng họp.`,{ms:12000,action:{label:'Xem sơ đồ',fn:()=>go('rooms')}});
   beat();
-  checkDeploy();
 }
 boot();
 })();
