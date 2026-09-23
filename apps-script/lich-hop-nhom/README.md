@@ -13,18 +13,69 @@ Thư mục này **không phải** một trang của hub, chỉ để lưu mã v�
 1. Mở dự án Apps Script, dán đè toàn bộ nội dung `Code.gs` và `Index.html`.
 2. Chọn **Triển khai → Quản lý triển khai**. Chọn **đúng triển khai có URL trùng `WEBAPP_URL`**, là URL đã khai trong `setOAuthCredentials`. Chạy `kiemTraCauHinh()` nếu không nhớ.
 3. Bấm **✏️ Sửa → Phiên bản: Phiên bản mới → Triển khai**. URL `/exec` giữ nguyên, không cần cấu hình lại OAuth.
-4. Kiểm tra: mở app, bấm ảnh đại diện góc phải. Dòng cuối menu phải ghi **Phiên bản 3.5**.
+4. Kiểm tra: mở app, bấm ảnh đại diện góc phải. Dòng cuối menu phải ghi **Phiên bản 3.6**.
 
 > **Vì sao phải đúng triển khai:** đăng nhập Google xong luôn quay về `WEBAPP_URL`.
 > Nếu cập nhật nhầm triển khai khác, hoặc chỉ thử bằng link `/dev`, thì lúc đăng nhập lại sẽ rơi về giao diện cũ.
-> Phần lấy ảnh Google chạy trong bước đăng nhập, nên cũng không có tác dụng.
 
 > **Bảo mật:** hàm `napCauHinh()` trong repo để trống, vì client secret thật đã nằm trong Script Properties.
 > Không commit client secret lên GitHub.
 
-## Dùng cho HCMUTE (bản 3.5)
+## Bản 3.6: nhận diện HCM-UTE
 
-Vào **Quản trị → Phòng họp → Thêm hàng loạt**. Hộp thoại có 3 tab:
+- **Trang đăng nhập theo bố cục cổng thông tin của trường:**
+  - Nền xám, logo HCM-UTE, tên trường viết hoa, thẻ trắng "ĐĂNG NHẬP", chân trang.
+  - Chỉ còn một nút **Đăng nhập với Google Giảng viên**. Đây là nhãn cho bản demo: tài khoản Google nào cũng đăng nhập được, người mới vẫn phải gửi yêu cầu để quản trị viên duyệt.
+  - Không có ô tên đăng nhập hay mật khẩu; app chỉ dùng đăng nhập Google.
+  - Trang không còn hiện lịch họp trong ngày trước khi đăng nhập. Máy chủ chỉ trả tên app, tên trường, tên tổ chức.
+  - Màn hình đăng ký, chờ duyệt, báo lỗi dùng chung khung này. Có thêm nút **Đăng nhập bằng tài khoản khác** khi lỡ chọn nhầm tài khoản.
+- **Tên trường** là cài đặt mới (Quản trị → Cài đặt → Tên trường). Mặc định "Trường Đại học Công nghệ Kỹ thuật TP.HCM".
+  - Hiện ở trang đăng nhập.
+  - Thanh trên cùng hiện tên rút gọn "ĐH Công nghệ Kỹ thuật TP.HCM".
+  - Hiện ở đầu bảng lịch tuần khi in.
+- **Chữ:** dùng Segoe UI (phông hệ thống của Windows), bỏ tải phông Inter từ Google Fonts.
+  - Máy Mac và điện thoại tự dùng phông hệ thống tương đương.
+  - Tiêu đề màu xanh đậm; nhãn mục nhỏ viết hoa (VD "CƠ SỞ 1 · VÕ VĂN NGÂN").
+  - Độ đậm chỉ dùng 400 / 600 / 700, nên hiển thị giống nhau trên mọi máy.
+- **Ảnh đại diện:** bỏ lựa chọn ảnh tài khoản Google. Chỉ còn ảnh tự tải lên hoặc chữ viết tắt; ảnh Google cũ trong sheet không còn được dùng.
+
+## Phòng HCMUTE (bản 3.5–3.6)
+
+**Tự nạp (từ bản 3.6).** Lần đầu có người mở app sau khi cập nhật, máy chủ tự thêm phòng theo sơ đồ trường, đúng một lần:
+
+| Loại | Phòng |
+|---|---|
+| Địa điểm có tên trên sơ đồ, bảng sân GDTC | Hội trường lớn, Nhà mái vòm khu A, Nhà tập khu E, Sân quần vợt khu E, Sân bóng đá, Hội trường CS2, Sân bóng CS2, Sân cầu lông CS2 |
+| Phòng học **mẫu** theo khu (122 phòng) | Khu A2–A5: tầng 1–3 × 4 phòng · Khối B, C, D: tầng 1–3 × 3 · Khối E4: 4 phòng · Khối F1, G: tầng 1–2 × 3 · Khối V (CS2): tầng 1–9 × 3 · Khối phòng học (CS2): 4 phòng |
+
+- **Phòng mẫu chưa phải số phòng thật.**
+  - Sơ đồ chỉ ghi tên khu, không ghi số phòng hay sức chứa.
+  - Mã phòng mẫu có dạng `A4-101`, sức chứa "chưa rõ", cột `sample` = TRUE trong sheet Rooms.
+  - Quản trị viên thấy nhãn **mẫu** cạnh tên phòng.
+- **Thay bằng danh sách thật:** vào **Quản trị → Phòng họp**.
+  1. Bấm **Xoá phòng mẫu**. Nếu đang lọc một khu thì chỉ xoá phòng mẫu của khu đó.
+  2. Chọn **Thêm hàng loạt → Dán danh sách**.
+  - Phòng đã có lịch họp không bị xoá mà chuyển sang tạm ngưng, để lịch cũ vẫn đúng tên phòng.
+  - Mỗi dòng trong bảng cũng có nút Xoá riêng.
+- Khu nào đã có phòng do quản trị viên tự thêm thì không thêm phòng mẫu cho khu đó.
+- **4 phòng mẫu cũ** (Phòng họp 1, Phòng họp 2, Hội trường A5, Phòng CLB) được tạm ngưng, nếu tên chưa bị sửa. Lịch họp cũ vẫn hiện.
+- **Trong trình soạn thảo Apps Script:**
+  - Chạy `napPhongHCMUTE()` để nạp lại phần còn thiếu.
+  - Muốn tắt hẳn việc tự nạp: đặt Script Property `HCMUTE_SEED` = `off`.
+  - `kiemTraCauHinh()` có dòng "Phòng HCMUTE" cho biết đã nạp chưa.
+
+**Tab Phòng họp = sơ đồ khu.**
+- Mỗi khu là một thẻ, gom theo Cơ sở 1 · Võ Văn Ngân và Cơ sở 2 · Lê Văn Việt. Xếp theo thứ tự trên sơ đồ: A2–A5, B, C, D, E4, F1, G, rồi hội trường, thể thao.
+- Viền thẻ tô màu theo chú thích bản đồ: cam = phòng học, hồng = hội trường, xanh dương = xưởng/PTN; thêm xanh lá = thể thao, tím = online.
+- Thẻ ghi số phòng, số lượt đặt trong ngày, số cuộc họp đang diễn ra.
+- Bấm một khu để xem các phòng và giờ trống, bấm **Tất cả khu** để quay lại.
+- Dưới sơ đồ chỉ liệt kê phòng có lịch trong ngày, vì liệt kê hơn 100 phòng thì quá dài.
+
+**Lịch ngày khi xem cả trường** tự bật "Ẩn phòng trống", chỉ hiện cột của phòng có lịch.
+- Chọn một khu hoặc tìm phòng thì hiện đủ phòng để đặt.
+- Bấm nút "Ẩn phòng trống" để đổi, lựa chọn được nhớ lại.
+
+**Thêm phòng bằng tay (từ bản 3.5):** vào **Quản trị → Phòng họp → Thêm hàng loạt**. Hộp thoại có 3 tab:
 
 | Tab | Việc làm |
 |---|---|
@@ -57,10 +108,8 @@ Vào **Quản trị → Phòng họp → Thêm hàng loạt**. Hộp thoại có
   - *Tải lên*: kéo thả, chọn nhiều tệp; tệp tự lưu vào thư mục Drive "Lich Hop Nhom — Tai lieu".
   - *Dán link*.
   - *Đã dùng gần đây*: lấy lại tài liệu đã gắn ở cuộc họp khác.
-- **Ảnh đại diện**: chọn ảnh Google, ảnh tự chọn hoặc chữ viết tắt.
+- **Ảnh đại diện**: ảnh tự chọn hoặc chữ viết tắt (bản 3.6 bỏ lựa chọn ảnh Google).
   - Ảnh tự chọn được tự cắt vuông và thu nhỏ còn 256px, nên ảnh điện thoại vài MB vẫn dùng được.
-  - Ảnh Google lấy lúc đăng nhập. id_token của Google không bảo đảm có ảnh, nên thiếu thì app hỏi thêm userinfo (bản 3.4).
-    Nhật ký ghi "Đăng nhập · có ảnh Google" hoặc "Google không trả ảnh đại diện".
 - **Giờ đã qua** trong lịch ngày được tô sọc xám phía trên đường đỏ và không đặt lịch được. Đường đỏ cập nhật mỗi 30 giây.
 - **Cuộc họp đã báo vắng** hiện gạch ngang trên lịch.
 

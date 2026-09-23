@@ -12,6 +12,16 @@ Nhật ký thay đổi của repo. Mục mới nhất nằm trên cùng.
 
 ## 2026-09-23
 
+- [Claude] thêm: `apps-script/lich-hop-nhom/`: bản 3.6, nhận diện HCM-UTE và phòng theo sơ đồ trường
+  - Trang đăng nhập theo bố cục cổng trường (logo, tên trường, thẻ "ĐĂNG NHẬP"), chỉ một nút "Đăng nhập với Google Giảng viên"; khung chung cho màn hình đăng ký, chờ duyệt, báo lỗi; nút đổi tài khoản
+  - Trang chưa đăng nhập không còn trả lịch họp trong ngày, chỉ tên app, trường, tổ chức
+  - Tự nạp một lần 8 địa điểm + 122 phòng học mẫu theo khu (cột `sample`); tạm ngưng phòng mẫu cũ; `napPhongHCMUTE()`, Script Property `HCMUTE_SEED`
+  - Tab Phòng họp thành sơ đồ khu theo cơ sở, màu theo chú thích bản đồ; khu xếp theo thứ tự sơ đồ; lịch ngày cả trường tự ẩn phòng trống
+  - Quản trị: nhãn "mẫu", nút "Xoá phòng mẫu", xoá từng phòng (phòng đã có lịch thì chỉ tạm ngưng); `api_deleteRooms`
+  - Cài đặt "Tên trường" (`SCHOOL_NAME`); logo và tên trường trên thanh trên cùng, đầu bảng lịch tuần
+  - Chữ: Segoe UI, thang cỡ chữ, độ đậm 400/600/700, tiêu đề xanh đậm, nhãn mục viết hoa; bỏ tải phông Inter
+  - Bỏ ảnh đại diện Google (không hỏi userinfo, không lưu ảnh Google)
+  - Sửa: chọn "chỉ một khu" vẫn lẫn phòng tạm ngưng của khu khác; thanh giờ phòng tạm ngưng lệch cột; thanh trên cùng trên điện thoại thừa khoảng trống
 - [Claude] thêm: `apps-script/lich-hop-nhom/`: bản 3.5, dùng cho HCMUTE và trường nhiều phòng
   - Quản trị › Phòng họp › Thêm hàng loạt: địa điểm HCMUTE theo sơ đồ + bảng sân GDTC, tạo dãy phòng theo khu, dán danh sách từ Excel; `api_importRooms`
   - Sức chứa 0 = chưa rõ, không cảnh báo quá chỗ

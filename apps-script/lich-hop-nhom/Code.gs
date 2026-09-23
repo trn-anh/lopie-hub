@@ -1,6 +1,6 @@
 /**
  * LỊCH HỌP NHÓM — BACKEND GOOGLE APPS SCRIPT (Code.gs)
- * Phiên bản 3.0 — Đăng nhập bằng Google OAuth 2.0 thật
+ * Phiên bản 3.6 — Đăng nhập bằng Google OAuth 2.0 thật, phòng HCMUTE nạp sẵn
  *
  * KIẾN TRÚC XÁC THỰC
  * ------------------
@@ -26,6 +26,9 @@
 var SESSION_HOURS = 12;              // Session token sống bao lâu
 var SCRIPT_PROPS = PropertiesService.getScriptProperties();
 var APP_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+var APP_VERSION = '3.6';
+var DEFAULT_SCHOOL = 'Trường Đại học Công nghệ Kỹ thuật TP.HCM';
+var TEXT_SETTINGS = ['APP_NAME', 'ORG_NAME', 'SCHOOL_NAME'];   // luôn là chữ, kể cả khi gõ toàn số
 
 function prop_(key) {
   return String(SCRIPT_PROPS.getProperty(key) || '').trim();
@@ -263,7 +266,6 @@ var AUTH = (function () {
     var body = encodeStr(JSON.stringify({
       e: String(profile.email || '').toLowerCase(),
       n: String(profile.name || ''),
-      p: String(profile.picture || ''),   // ảnh Google, để tài khoản mới duyệt cũng có ảnh ngay
       x: Date.now() + SESSION_HOURS * 3600 * 1000
     }));
     return body + '.' + sign(body);
@@ -278,7 +280,7 @@ var AUTH = (function () {
     try { data = JSON.parse(decodeStr(parts[0])); } catch (e) { return null; }
     if (!data || !data.e || !data.x) return null;
     if (Number(data.x) < Date.now()) return null;      // hết hạn
-    return { email: String(data.e).toLowerCase().trim(), name: String(data.n || ''), picture: String(data.p || '') };
+    return { email: String(data.e).toLowerCase().trim(), name: String(data.n || '') };
   }
 
   /* ---- Bước 1: tạo URL đăng nhập Google ---- */
@@ -318,24 +320,7 @@ var AUTH = (function () {
     if (res.getResponseCode() !== 200 || !body.id_token) {
       throw new Error(body.error_description || body.error || 'Google từ chối mã đăng nhập (HTTP ' + res.getResponseCode() + ').');
     }
-    var profile = readIdToken(body.id_token);
-    // Google ghi rõ id_token "không bảo đảm" có ảnh và tên. Thiếu thì hỏi thêm userinfo
-    // bằng access token vừa nhận (cùng quyền openid email profile, không xin thêm quyền).
-    if ((!profile.picture || !profile.name) && body.access_token) {
-      try {
-        var info = UrlFetchApp.fetch('https://openidconnect.googleapis.com/v1/userinfo', {
-          headers: { Authorization: 'Bearer ' + body.access_token }, muteHttpExceptions: true
-        });
-        if (info.getResponseCode() === 200) {
-          var u = JSON.parse(info.getContentText() || '{}');
-          if (!profile.picture && u.picture) profile.picture = String(u.picture);
-          if (!profile.name && u.name) profile.name = String(u.name).trim();
-        }
-      } catch (e) {}
-    }
-    // Ảnh Google mặc định chỉ 96px, lấy bản 256px cho rõ
-    if (profile.picture) profile.picture = profile.picture.replace(/=s\d+(-c)?$/, '=s256-c');
-    return profile;
+    return readIdToken(body.id_token);
   }
 
   /* ---- Bước 3: đọc & kiểm tra id_token ---- */
@@ -351,8 +336,7 @@ var AUTH = (function () {
     if (!c.email) throw new Error('Không lấy được email từ tài khoản Google.');
     return {
       email: String(c.email).toLowerCase().trim(),
-      name: String(c.name || c.given_name || '').trim(),
-      picture: String(c.picture || '')
+      name: String(c.name || c.given_name || '').trim()
     };
   }
 
@@ -465,6 +449,7 @@ function getDatabase_(ss) {
   var settings = {
     APP_NAME: 'Lịch Họp Nhóm',
     ORG_NAME: 'CLB Khởi nghiệp HCMUTE',
+    SCHOOL_NAME: DEFAULT_SCHOOL,
     DAY_START: 7,
     DAY_END: 18,
     SEND_EMAIL: true,
@@ -476,7 +461,7 @@ function getDatabase_(ss) {
     if (s.key) {
       if (s.value === 'true') settings[s.key] = true;
       else if (s.value === 'false') settings[s.key] = false;
-      else if (!isNaN(Number(s.value)) && s.key !== 'APP_NAME' && s.key !== 'ORG_NAME') settings[s.key] = Number(s.value);
+      else if (!isNaN(Number(s.value)) && TEXT_SETTINGS.indexOf(s.key) < 0) settings[s.key] = Number(s.value);
       else settings[s.key] = s.value;
     }
   });
@@ -512,7 +497,8 @@ function getDatabase_(ss) {
       building: String(r.building || ''),
       equipment: String(r.equipment || ''),
       online: flag(r.online, false),
-      active: flag(r.active, true)
+      active: flag(r.active, true),
+      sample: flag(r.sample, false)
     };
   });
 
@@ -577,7 +563,7 @@ function saveDatabase_(db, ss) {
   ss = ss || getSpreadsheet_();
   dirInvalidate_();
   saveSheetData_('Users', db.users, ['email', 'name', 'unit', 'role', 'status', 'createdAt', 'photo', 'avatar', 'showPresence'], ss);
-  saveSheetData_('Rooms', db.rooms, ['id', 'name', 'capacity', 'building', 'equipment', 'online', 'active'], ss);
+  saveSheetData_('Rooms', db.rooms, ['id', 'name', 'capacity', 'building', 'equipment', 'online', 'active', 'sample'], ss);
 
   var meetHeaders = ['id', 'seriesId', 'requestId', 'title', 'desc', 'date', 'start', 'end', 'room', 'chair', 'secretary', 'members', 'remind', 'status', 'createdBy', 'createdAt', 'updatedAt', 'minutes', 'minutesBy', 'minutesAt', 'cancelReason'];
   var meetRows = db.meetings.map(function (m) {
@@ -631,7 +617,7 @@ function doGet(e) {
       }
       var profile = AUTH.exchangeCode(p.code);
       syncUser_(profile);
-      addLog_(profile.email, 'login', '', profile.picture ? 'có ảnh Google' : 'Google không trả ảnh đại diện');
+      addLog_(profile.email, 'login', '', '');
       var handoff = AUTH.putHandoff(AUTH.makeToken(profile));
       return redirectPage_(AUTH.webAppUrl() + '?t=' + handoff, profile.email);
     } catch (err) {
@@ -657,7 +643,7 @@ function shellPage_(inner) {
     '<!doctype html><html lang="vi"><head><base target="_top"><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#F4F8FB;' +
-    'font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#102A3A}' +
+    'font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Roboto,Arial,sans-serif;color:#102A3A}' +
     '.card{width:min(440px,calc(100% - 32px));background:#fff;border:1px solid #C9D9E5;border-top:5px solid #0072BC;' +
     'border-radius:10px;padding:32px;box-shadow:0 4px 16px rgba(16,42,58,.08)}' +
     'h1{font-size:22px;margin:0 0 10px}p{color:#526C7B;margin:0 0 18px;line-height:1.55}' +
@@ -691,20 +677,14 @@ function errorPage_(title, message) {
    5. PHIÊN LÀM VIỆC — mọi API đều đi qua đây
    ===================================================================== */
 
-/**
- * Tạo hồ sơ lần đầu đăng nhập, đồng thời đồng bộ ảnh đại diện Google.
- * Ảnh Google được cập nhật lại mỗi lần đăng nhập, phòng khi người dùng đổi ảnh.
- */
+/** Tạo hồ sơ lần đầu đăng nhập; hồ sơ đã có thì chỉ bổ sung tên nếu còn trống. */
 function syncUser_(profile) {
   var db = getDatabase_();
   var found = null;
   db.users.forEach(function (u) { if (u.email === profile.email) found = u; });
 
   if (found) {
-    var changed = false;
-    if (profile.picture && found.photo !== profile.picture) { found.photo = profile.picture; changed = true; }
-    if (!found.name && profile.name) { found.name = profile.name; changed = true; }
-    if (changed) saveDatabase_(db);
+    if (!found.name && profile.name) { found.name = profile.name; saveDatabase_(db); }
     return found;
   }
 
@@ -724,7 +704,7 @@ function syncUser_(profile) {
       role: 'admin',
       status: 'active',
       createdAt: nowStr,
-      photo: profile.picture || '',
+      photo: '',
       avatar: '',
       showPresence: true
     };
@@ -755,6 +735,14 @@ function requireAdmin_(c) {
   return c.user;
 }
 
+/** Phần cài đặt được hiện trước khi đăng nhập. */
+function publicSettings_(st) {
+  return {
+    APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME,
+    ALLOW_SELF_REGISTER: st.ALLOW_SELF_REGISTER
+  };
+}
+
 function appPayload_(db, user) {
   var now = new Date();
   var nowTime = Utilities.formatDate(now, APP_TIME_ZONE, 'HH:mm').split(':').map(Number);
@@ -766,7 +754,7 @@ function appPayload_(db, user) {
     settings: db.settings,
     today: Utilities.formatDate(now, APP_TIME_ZONE, 'yyyy-MM-dd'),
     nowMin: nowTime[0] * 60 + nowTime[1],
-    version: '3.5',
+    version: APP_VERSION,
     users: user.role === 'admin' ? db.users : db.users.filter(function (x) { return x.status === 'active'; }),
     rooms: db.rooms,
     meetings: db.meetings,
@@ -788,35 +776,26 @@ function api_bootstrap(token) {
     }
 
     var db = getDatabase_();
-    var todayStr = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd');
-    var previewList = db.meetings.filter(function (m) { return m.date === todayStr && m.status === 'active'; });
+    // Màn hình chưa đăng nhập chỉ cần tên app/trường, không lộ lịch họp hay cài đặt khác
+    var brand = publicSettings_(db.settings);
 
     var s = AUTH.readToken(token);
     if (!s) {
-      return {
-        state: 'login',
-        mode: 'gas',
-        authUrl: AUTH.loginUrl(),
-        settings: db.settings,
-        preview: previewList
-      };
+      return { state: 'login', mode: 'gas', authUrl: AUTH.loginUrl(), settings: brand };
     }
 
     var user = null;
     db.users.forEach(function (u) { if (u.email === s.email) user = u; });
-    if (!user) {
-      user = syncUser_({ email: s.email, name: s.name, picture: s.picture });
-    } else if (!user.photo && s.picture) {
-      user.photo = s.picture;   // hồ sơ chưa có ảnh Google (VD tài khoản vừa được duyệt): lấy từ phiên đăng nhập
-      saveDatabase_(db);
-    }
-    if (!user) {
-      return { state: 'unregistered', email: s.email, settings: db.settings, preview: previewList };
-    }
-    if (user.status === 'pending') return { state: 'pending', email: user.email, settings: db.settings };
-    if (user.status === 'disabled') return { state: 'disabled', email: user.email, settings: db.settings };
+    if (!user) user = syncUser_({ email: s.email, name: s.name });
+    if (!user) return { state: 'unregistered', email: s.email, settings: brand };
+    if (user.status === 'pending') return { state: 'pending', email: user.email, settings: brand };
+    if (user.status === 'disabled') return { state: 'disabled', email: user.email, settings: brand };
 
-    return appPayload_(db, user);
+    var seeded = seedHcmute_();
+    if (seeded) db = getDatabase_();
+    var out = appPayload_(db, user);
+    if (seeded && seeded.added && user.role === 'admin') out.seeded = seeded;
+    return out;
   } catch (err) {
     return {
       state: 'error',
@@ -843,7 +822,7 @@ function api_requestAccess(token, data) {
     role: 'member',
     status: 'pending',
     createdAt: nowStr,
-    photo: s.picture || '',
+    photo: '',
     avatar: '',
     showPresence: true
   });
@@ -1139,7 +1118,8 @@ function api_saveRoom(token, x) {
     building: String(x.building || '').trim() || 'Khác',
     equipment: String(x.equipment || '').trim(),
     online: Boolean(x.online),
-    active: x.active !== false
+    active: x.active !== false,
+    sample: false
   });
 
   saveDatabase_(db);
@@ -1172,7 +1152,8 @@ function api_importRooms(token, list, opts) {
       building: String(x.building || '').trim().slice(0, 80) || 'Khác',
       equipment: String(x.equipment || '').trim().slice(0, 200),
       online: false,
-      active: x.active !== false
+      active: x.active !== false,
+      sample: x.sample === true
     };
     db.rooms.push(r); byId[id] = r; added.push(id);
   });
@@ -1187,6 +1168,133 @@ function api_importRooms(token, list, opts) {
       (paused.length ? ', tạm ngưng ' + paused.join(', ') : ''));
   }
   return { ok: true, added: added.length, skipped: skipped, paused: paused, data: api_bootstrap(token) };
+}
+
+/**
+ * Xoá phòng. Phòng đã từng có lịch họp (kể cả lịch cũ, lịch đã huỷ) không bị xoá
+ * mà chuyển sang tạm ngưng, để lịch sử vẫn hiện đúng tên phòng.
+ */
+function api_deleteRooms(token, ids) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Hệ thống đang xử lý một thao tác khác. Vui lòng thử lại sau vài giây.');
+  try {
+    var c = ctx_(token);
+    requireAdmin_(c);
+    var db = c.db;
+    var want = {}, used = {};
+    [].concat(ids || []).forEach(function (id) { want[String(id)] = true; });
+    db.meetings.forEach(function (m) { used[m.room] = true; });
+    var deleted = [], paused = [];
+    db.rooms = db.rooms.filter(function (r) {
+      if (!want[r.id]) return true;
+      if (!used[r.id]) { deleted.push(r.id); return false; }
+      if (r.active) { r.active = false; paused.push(r.id); }
+      return true;
+    });
+    if (!db.rooms.some(function (r) { return r.active; })) throw new Error('Phải còn ít nhất một phòng đang sử dụng.');
+    if (deleted.length || paused.length) {
+      saveDatabase_(db);
+      addLog_(c.email, 'room_delete', '', 'Xoá ' + deleted.length + ' phòng' +
+        (deleted.length ? ' (' + deleted.slice(0, 4).join(', ') + (deleted.length > 4 ? '…' : '') + ')' : '') +
+        (paused.length ? ', tạm ngưng ' + paused.length + ' phòng đã có lịch họp' : ''));
+    }
+    return { ok: true, deleted: deleted.length, paused: paused, data: appPayload_(db, c.user) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* =====================================================================
+   6A. PHÒNG HCMUTE NẠP SẴN (từ bản 3.6)
+   ---------------------------------------------------------------------
+   Theo "Bản đồ hiện trạng" cơ sở 1 (1 Võ Văn Ngân), cơ sở 2 (Lê Văn Việt)
+   và bảng phân bố sân GDTC. Sơ đồ chỉ ghi tên khu, không ghi số phòng hay
+   sức chứa, nên:
+   - places: địa điểm có tên rõ trên sơ đồ;
+   - blocks: phòng học MẪU theo từng khu (cột sample = TRUE, sức chứa 0 =
+     chưa rõ) để đặt thử được ngay. Có danh sách phòng thật thì vào
+     Quản trị > Phòng họp > "Xoá phòng mẫu", rồi "Thêm hàng loạt > Dán danh sách".
+   Tự nạp đúng một lần (Script Property HCMUTE_SEED = 1). Đặt HCMUTE_SEED = off
+   để không bao giờ tự nạp; chạy napPhongHCMUTE() để nạp lại phần còn thiếu.
+   ===================================================================== */
+var HCMUTE_SEED = {
+  places: [
+    { id: 'CS1-HOITRUONG', name: 'Hội trường lớn', building: 'CS1 · Hội trường' },
+    { id: 'CS1-MAIVOM-A', name: 'Nhà mái vòm khu A', building: 'CS1 · Thể thao', equipment: 'Bóng rổ, bóng chuyền, cầu lông' },
+    { id: 'CS1-NHATAP-E', name: 'Nhà tập khu E', building: 'CS1 · Thể thao', equipment: 'Bóng chuyền, cầu lông' },
+    { id: 'CS1-QUANVOT-E', name: 'Sân quần vợt khu E', building: 'CS1 · Thể thao', equipment: 'Quần vợt' },
+    { id: 'CS1-SANBONG', name: 'Sân bóng đá', building: 'CS1 · Thể thao', equipment: 'Bóng đá, điền kinh' },
+    { id: 'CS2-HOITRUONG', name: 'Hội trường CS2', building: 'CS2 · Hội trường' },
+    { id: 'CS2-SANBONG', name: 'Sân bóng CS2', building: 'CS2 · Thể thao' },
+    { id: 'CS2-CAULONG', name: 'Sân cầu lông CS2', building: 'CS2 · Thể thao' }
+  ],
+  // [khu, tiền tố mã phòng, từ tầng, đến tầng, số phòng mỗi tầng] -> mã dạng A4-101
+  blocks: [
+    ['CS1 · Khu A2', 'A2', 1, 3, 4], ['CS1 · Khu A3', 'A3', 1, 3, 4],
+    ['CS1 · Khu A4', 'A4', 1, 3, 4], ['CS1 · Khu A5', 'A5', 1, 3, 4],
+    ['CS1 · Khối B', 'B', 1, 3, 3], ['CS1 · Khối C', 'C', 1, 3, 3], ['CS1 · Khối D', 'D', 1, 3, 3],
+    ['CS1 · Khối E4', 'E4', 1, 1, 4], ['CS1 · Khối F1', 'F1', 1, 2, 3], ['CS1 · Khối G', 'G', 1, 2, 3],
+    ['CS2 · Khối V', 'V', 1, 9, 3], ['CS2 · Khối phòng học', 'PH', 1, 1, 4]
+  ],
+  // Phòng mẫu do setup() bản cũ tạo: tạm ngưng khi đã có phòng trường (chỉ khi tên chưa bị sửa)
+  demo: { P1: 'Phòng họp 1', P2: 'Phòng họp 2', HT: 'Hội trường A5', CLB: 'Phòng CLB' }
+};
+
+function hcmuteRooms_() {
+  var out = HCMUTE_SEED.places.map(function (p) {
+    return { id: p.id, name: p.name, capacity: 0, building: p.building, equipment: p.equipment || '', online: false, active: true, sample: false };
+  });
+  HCMUTE_SEED.blocks.forEach(function (b) {
+    for (var f = b[2]; f <= b[3]; f++) {
+      for (var i = 1; i <= b[4]; i++) {
+        var code = b[1] + '-' + f + LHN.pad(i);
+        out.push({ id: code, name: code, capacity: 0, building: b[0], equipment: '', online: false, active: true, sample: true });
+      }
+    }
+  });
+  return out;
+}
+
+/**
+ * Thêm phòng HCMUTE còn thiếu vào db (chưa lưu). Địa điểm đã có mã thì bỏ qua;
+ * khu đã có phòng nào (do quản trị viên tự thêm) thì không thêm phòng mẫu cho khu đó.
+ */
+function applyHcmuteSeed_(db) {
+  var byId = {}, khuHas = {};
+  db.rooms.forEach(function (r) { byId[r.id] = r; khuHas[r.building] = true; });
+  var added = 0, paused = [];
+  hcmuteRooms_().forEach(function (r) {
+    if (byId[r.id] || (r.sample && khuHas[r.building])) return;
+    db.rooms.push(r); byId[r.id] = r; added++;
+  });
+  Object.keys(HCMUTE_SEED.demo).forEach(function (id) {
+    var r = byId[id];
+    if (r && r.active && !r.online && r.name === HCMUTE_SEED.demo[id]) { r.active = false; paused.push(id); }
+  });
+  return { added: added, paused: paused };
+}
+
+/** Gọi từ api_bootstrap: bản đã cài từ trước được nạp phòng HCMUTE đúng một lần. */
+function seedHcmute_() {
+  var st = prop_('HCMUTE_SEED');
+  if (st === '1' || st === 'off') return null;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return null;   // lần mở app sau sẽ thử lại
+  try {
+    st = prop_('HCMUTE_SEED');
+    if (st === '1' || st === 'off') return null;
+    var db = getDatabase_();
+    var res = applyHcmuteSeed_(db);
+    if (res.added || res.paused.length) {
+      saveDatabase_(db);
+      addLog_('system', 'room_seed', '', 'Nạp ' + res.added + ' phòng HCMUTE' +
+        (res.paused.length ? ', tạm ngưng phòng mẫu cũ ' + res.paused.join(', ') : ''));
+    }
+    SCRIPT_PROPS.setProperty('HCMUTE_SEED', '1');
+    return res;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function api_saveUser(token, x) {
@@ -1231,6 +1339,7 @@ function api_saveSettings(token, x) {
   Object.assign(db.settings, {
     APP_NAME: String(x.APP_NAME || '').trim() || 'Lịch Họp Nhóm',
     ORG_NAME: String(x.ORG_NAME || '').trim(),
+    SCHOOL_NAME: String(x.SCHOOL_NAME || '').trim() || DEFAULT_SCHOOL,
     DAY_START: Number(x.DAY_START || 7),
     DAY_END: Number(x.DAY_END || 18),
     SEND_EMAIL: Boolean(x.SEND_EMAIL),
@@ -1275,7 +1384,7 @@ function directory_() {
   db.users.forEach(function (u) {
     dir[u.email] = {
       email: u.email, name: u.name, unit: u.unit, role: u.role,
-      status: u.status, photo: u.photo, avatar: u.avatar,
+      status: u.status, avatar: u.avatar,
       showPresence: u.showPresence !== false
     };
   });
@@ -1338,7 +1447,7 @@ function api_heartbeat(token) {
         email: u.email,
         name: u.name || u.email.split('@')[0],
         unit: u.unit || '',
-        photo: u.avatar === 'none' ? '' : (u.avatar || u.photo || ''),
+        photo: avatarUrl_(u),
         isMe: email === s.email
       });
     });
@@ -1360,6 +1469,12 @@ function api_setPresence(token, on) {
   return { ok: true, visible: !!on };
 }
 
+/** Ảnh đại diện đang dùng: chỉ ảnh người dùng tự tải lên (từ bản 3.6 bỏ ảnh Google). */
+function avatarUrl_(u) {
+  var a = String((u && u.avatar) || '');
+  return /^https:\/\//.test(a) ? a : '';
+}
+
 /** Thư mục Drive chứa ảnh đại diện, tạo một lần rồi dùng lại. */
 function avatarFolder_() {
   var id = prop_('AVATAR_FOLDER_ID');
@@ -1372,7 +1487,7 @@ function avatarFolder_() {
 }
 
 /**
- * Lưu ảnh đại diện tự chọn. Truyền fileData = null để quay lại ảnh Google.
+ * Lưu ảnh đại diện tự chọn. fileData = null (hoặc 'none') để bỏ ảnh, chỉ hiện chữ viết tắt.
  * fileData: { name, mimeType, data (base64 không kèm tiền tố data:) }
  */
 function api_saveAvatar(token, fileData) {
@@ -1380,14 +1495,12 @@ function api_saveAvatar(token, fileData) {
 
   var oldUrl = String(c.user.avatar || '');
 
-  // null = dùng ảnh tài khoản Google, 'none' = chỉ hiện chữ viết tắt
   if (!fileData || fileData === 'none') {
-    var none = fileData === 'none';
-    c.user.avatar = none ? 'none' : '';
+    c.user.avatar = '';
     saveDatabase_(c.db);
     trashAvatar_(oldUrl);
-    addLog_(c.email, 'avatar', '', none ? 'dùng chữ viết tắt' : 'dùng lại ảnh Google');
-    return { ok: true, url: none ? '' : (c.user.photo || ''), data: api_bootstrap(token) };
+    addLog_(c.email, 'avatar', '', 'dùng chữ viết tắt');
+    return { ok: true, url: '', data: api_bootstrap(token) };
   }
 
   var mime = String(fileData.mimeType || '');
@@ -1431,17 +1544,12 @@ function setup() {
   var myEmail = String(Session.getEffectiveUser().getEmail() || '').toLowerCase().trim();
   if (myEmail) SCRIPT_PROPS.setProperty('ADMIN_EMAIL', myEmail);
 
-  var defaultRooms = [
-    { id: 'P1', name: 'Phòng họp 1', capacity: 20, building: 'Tòa A4', equipment: 'Máy chiếu, loa · A4-201', online: false, active: true },
-    { id: 'P2', name: 'Phòng họp 2', capacity: 12, building: 'Tòa A4', equipment: 'TV 55", bảng trắng · A4-202', online: false, active: true },
-    { id: 'HT', name: 'Hội trường A5', capacity: 40, building: 'Tòa A5', equipment: 'Máy chiếu, micro · A5-101', online: false, active: true },
-    { id: 'CLB', name: 'Phòng CLB', capacity: 8, building: 'Nhà điều hành', equipment: 'Bảng trắng', online: false, active: true },
-    { id: 'ONL', name: 'Online', capacity: 100, building: 'Google Meet', equipment: 'Link Meet gửi kèm lời mời', online: true, active: true }
-  ];
+  var onlineRoom = { id: 'ONL', name: 'Online', capacity: 100, building: 'Google Meet', equipment: 'Link Meet gửi kèm lời mời', online: true, active: true, sample: false };
 
   var defaultSettings = {
     APP_NAME: 'Lịch Họp Nhóm',
     ORG_NAME: 'CLB Khởi nghiệp HCMUTE',
+    SCHOOL_NAME: DEFAULT_SCHOOL,
     DAY_START: 7, DAY_END: 18,
     SEND_EMAIL: true, CREATE_CALENDAR_EVENT: false,
     ALLOW_SELF_REGISTER: true, MAX_REPEAT_WEEKS: 12
@@ -1455,12 +1563,17 @@ function setup() {
       createdAt: Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm:ss')
     }];
   }
-  if (db.rooms.length === 0) db.rooms = defaultRooms;
+  var freshRooms = db.rooms.length === 0;
+  if (freshRooms) {
+    db.rooms = [onlineRoom];
+    applyHcmuteSeed_(db);
+  }
   db.meetings = db.meetings || [];
   db.docs = db.docs || [];
   db.attendance = db.attendance || [];
   db.settings = Object.assign({}, defaultSettings, db.settings || {});
   saveDatabase_(db, ss);
+  if (freshRooms) SCRIPT_PROPS.setProperty('HCMUTE_SEED', '1');
 
   var url = '';
   try { url = ScriptApp.getService().getUrl() || ''; } catch (e) {}
@@ -1529,6 +1642,7 @@ function kiemTraCauHinh() {
     'WEBAPP_URL         : ' + (prop_('WEBAPP_URL') || '(CHƯA CÓ)'),
     'ADMIN_EMAIL        : ' + (prop_('ADMIN_EMAIL') || '(chưa có)'),
     'SESSION_SECRET     : ' + (prop_('SESSION_SECRET') ? '(đã có)' : '(sẽ tự tạo khi đăng nhập lần đầu)'),
+    'Phòng HCMUTE       : ' + ({ '1': 'đã nạp', off: 'đã tắt tự nạp' }[prop_('HCMUTE_SEED')] || 'chưa nạp (tự nạp khi mở app lần tới)'),
     '',
     'Sẵn sàng đăng nhập: ' + (AUTH.isConfigured() ? 'CÓ' : 'CHƯA'),
     'URL đăng nhập thử : ' + (AUTH.loginUrl() || '(chưa cấu hình)'),
@@ -1540,7 +1654,7 @@ function kiemTraCauHinh() {
     '  > Sửa > Phiên bản: Phiên bản mới > Triển khai.',
     '- Không bấm "Triển khai mới" (sẽ ra URL khác). Không dùng link /dev để dùng thật: link /dev',
     '  chạy code mới nhất, nhưng đăng nhập lại sẽ đưa về bản /exec cũ.',
-    '- Kiểm tra: mở app, bấm ảnh đại diện góc phải, dòng "Phiên bản" phải là ' + '3.5' + '.'
+    '- Kiểm tra: mở app, bấm ảnh đại diện góc phải, dòng "Phiên bản" phải là ' + APP_VERSION + '.'
   ].join('\n');
   Logger.log(out);
   return out;
@@ -1551,6 +1665,28 @@ function dangXuatTatCa() {
   SCRIPT_PROPS.deleteProperty('SESSION_SECRET');
   Logger.log('Đã huỷ mọi phiên đăng nhập. Mọi người cần đăng nhập lại.');
   return 'OK';
+}
+
+/**
+ * Nạp lại phòng HCMUTE theo sơ đồ. Chỉ thêm phần còn thiếu: địa điểm chưa có mã,
+ * và phòng mẫu cho khu chưa có phòng nào. Không sửa, không xoá phòng đang có.
+ */
+function napPhongHCMUTE() {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var db = getDatabase_();
+    var res = applyHcmuteSeed_(db);
+    if (res.added || res.paused.length) saveDatabase_(db);
+    SCRIPT_PROPS.setProperty('HCMUTE_SEED', '1');
+    var msg = 'Đã thêm ' + res.added + ' phòng HCMUTE' +
+      (res.paused.length ? ', tạm ngưng phòng mẫu cũ ' + res.paused.join(', ') : '') + '.';
+    addLog_('system', 'room_seed', '', msg);
+    Logger.log(msg);
+    return msg;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**
