@@ -13,7 +13,7 @@
 :root{
   --bg:#FFFFFF;--surface:#FFFFFF;--surface-2:#F4F8FB;--ink:#102A3A;--muted:#526C7B;--line:#C9D9E5;--line-soft:#E8F0F5;
   --pri:#0072BC;--pri-hover:#005F9E;--pri-ink:#FFFFFF;--pri-soft:#DCEEFA;--pri-soft-ink:#00548A;--brand-red:#ED1C24;
-  --ok:#137A55;--ok-soft:#DDF3EA;--warn:#945509;--warn-soft:#FCEBCF;--bad:#B91C24;--bad-soft:#FDE5E7;--vio:#0B5B84;--vio-soft:#E1EFF7;
+  --ok:#137A55;--ok-soft:#DDF3EA;--warn:#945509;--warn-soft:#FCEBCF;--bad:#B91C24;--bad-soft:#FDE5E7;--on-bad:#FFFFFF;--vio:#0B5B84;--vio-soft:#E1EFF7;
   --white:#FFFFFF;--black:#000000;--status-yes:#15803D;--status-no:#B91C1C;--status-maybe:#A65B00;--status-none:#64748B;
   --overlay:rgba(16,42,58,.30);--overlay-strong:rgba(16,42,58,.44);--hover-tint:rgba(0,84,138,.08);--print-line:#7A8790;
   --shadow-sm:0 4px 16px rgba(16,42,58,.08);--shadow:0 20px 52px rgba(16,42,58,.18);--h:64px;--hours:11;
@@ -23,7 +23,7 @@
 :root[data-theme="dark"]{
   --bg:#071722;--surface:#0C2433;--surface-2:#102E40;--ink:#EAF3F8;--muted:#A8BECC;--line:#29485B;--line-soft:#17384A;
   --pri:#4AA7E3;--pri-hover:#70B9E8;--pri-ink:#061A27;--pri-soft:#123E58;--pri-soft-ink:#CDEAFB;--brand-red:#FF4A50;
-  --ok:#58D4A6;--ok-soft:#073727;--warn:#F6BE60;--warn-soft:#3A290B;--bad:#FF7B80;--bad-soft:#421316;--vio:#75C3EC;--vio-soft:#12394E;
+  --ok:#58D4A6;--ok-soft:#073727;--warn:#F6BE60;--warn-soft:#3A290B;--bad:#FF7B80;--bad-soft:#421316;--on-bad:#2A0709;--vio:#75C3EC;--vio-soft:#12394E;
   --white:#FFFFFF;--black:#000000;--status-yes:#4ADE80;--status-no:#FB7185;--status-maybe:#FBBF24;--status-none:#94A3B8;
   --overlay:rgba(0,0,0,.46);--overlay-strong:rgba(0,0,0,.58);--hover-tint:rgba(74,167,227,.12);--print-line:#7A8790;
   --shadow-sm:0 5px 18px rgba(0,0,0,.22);--shadow:0 22px 54px rgba(0,0,0,.52);color-scheme:dark;
@@ -132,7 +132,9 @@ h1,h2,h3,h4{text-wrap:balance;letter-spacing:-.015em}
 .avatar-btn{border:0;background:transparent;padding:0;border-radius:50%}
 .demo-flag{background:var(--warn-soft);color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 28%,transparent)}
 
-.side{background:var(--surface);border-right:1px solid var(--line);padding:16px 12px;overflow:auto;display:flex;flex-direction:column;gap:20px}
+/* scrollbar-gutter: luôn chừa chỗ cho thanh cuộn, để khi khung "Đang online" hiện ra
+   làm cột trái dài thêm thì lịch nhỏ không bị bóp hẹp đột ngột (nguyên nhân lịch lúc lệch lúc thẳng). */
+.side{background:var(--surface);border-right:1px solid var(--line);padding:16px 12px;overflow:auto;scrollbar-gutter:stable;scrollbar-width:thin;display:flex;flex-direction:column;gap:20px}
 .nav{display:grid;gap:2px}
 .nav button{display:flex;align-items:center;gap:10px;border:0;background:transparent;padding:10px 12px;border-radius:5px;text-align:left;color:var(--ink);font-weight:550}
 .nav button svg{width:18px;height:18px;color:var(--muted);flex:none}
@@ -144,17 +146,22 @@ h1,h2,h3,h4{text-wrap:balance;letter-spacing:-.015em}
 .side h3{font-size:11px;font-weight:700;color:var(--muted);margin:0 0 7px 4px;text-transform:uppercase;letter-spacing:.08em}
 .filters label{display:flex;gap:8px;align-items:center;padding:4px;cursor:pointer}
 .filters input{accent-color:var(--pri);width:16px;height:16px}
-.mini{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px;box-shadow:var(--shadow-sm)}
+.mini{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 10px;box-shadow:var(--shadow-sm)}
 .mini-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-weight:600}
 .mini-head button{border:0;background:transparent;width:28px;height:28px;border-radius:4px;color:var(--muted);display:grid;place-items:center}
-.mini-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;font-size:12px}
-.mini-grid .dow{color:var(--muted);font-size:11px;padding:2px 0}
-.mini-grid button{position:relative;border:0;background:transparent;height:28px;border-radius:4px;font-variant-numeric:tabular-nums;color:var(--ink)}
-.mini-grid button:hover{background:var(--line-soft)}
-.mini-grid button.out{color:var(--muted);opacity:.55}
-.mini-grid button.today{color:var(--pri);font-weight:700}
-.mini-grid button.sel{background:var(--pri);color:var(--pri-ink);font-weight:600}
-.mini-grid button.has::after{content:"";position:absolute;left:50%;bottom:3px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:currentColor;opacity:.6}
+/* minmax(0,1fr): 7 cột luôn chia đều bề rộng khung, không bị nội dung nút đẩy tràn ra ngoài.
+   Mỗi ô: ô số cố định 24×24 ở trên, chấm báo lịch nằm riêng bên dưới, nên số luôn thẳng hàng. */
+.mini-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));row-gap:2px;text-align:center;font-size:12px}
+.mini-grid .dow{color:var(--muted);font-size:11px;line-height:22px}
+.mini-grid button{position:relative;display:flex;justify-content:center;width:100%;min-width:0;height:32px;padding:2px 0 0;border:0;border-radius:6px;background:transparent;font-variant-numeric:tabular-nums;line-height:1;color:var(--ink)}
+.mini-grid button .n{display:grid;place-items:center;width:min(24px,100%);height:24px;border-radius:6px}
+.mini-grid button:hover .n{background:var(--line-soft)}
+.mini-grid button.out{color:var(--muted)}
+.mini-grid button.out .n{opacity:.55}
+.mini-grid button.today .n{color:var(--pri);font-weight:700;box-shadow:inset 0 0 0 1.5px var(--pri)}
+.mini-grid button.sel .n{background:var(--pri);color:var(--pri-ink);font-weight:700;box-shadow:none}
+.mini-grid button.has::after{content:"";position:absolute;left:50%;bottom:2px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--muted)}
+.mini-grid button.clash::after{width:5px;height:5px;margin-left:-2.5px;bottom:1.5px;background:var(--bad)}
 .side-foot{margin-top:auto;font-size:12px;color:var(--muted);padding:0 4px}
 
 .main{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--surface)}
@@ -381,18 +388,51 @@ kbd{font-family:inherit;font-size:12px;border:1px solid var(--line);border-botto
 .toast button{border:0;background:transparent;color:inherit;font-weight:700;text-decoration:underline;padding:0}
 @keyframes up{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
 
-/* Thanh nhắc lịch sắp tới */
-.banner{display:flex;align-items:center;gap:10px;padding:10px 20px;background:var(--pri);color:var(--pri-ink);border-bottom:1px solid var(--pri);flex-wrap:wrap;font-size:13.5px}
-.banner.live{background:var(--bad);color:var(--white)}
+/* Thanh nhắc lịch: tông dịu. Màu đỏ chỉ dành cho báo trùng lịch.
+   .live = đang họp và bạn đã xác nhận, .attn = đang/sắp họp mà bạn chưa phản hồi. */
+.banner{display:flex;align-items:center;gap:10px;padding:9px 20px;background:var(--pri-soft);color:var(--pri-soft-ink);border-bottom:1px solid color-mix(in srgb,var(--pri) 22%,var(--line));flex-wrap:wrap;font-size:13.5px}
+.banner.live{background:var(--ok-soft);color:var(--ok);border-bottom-color:color-mix(in srgb,var(--ok) 30%,var(--line))}
+.banner.attn{background:var(--warn-soft);color:var(--warn);border-bottom-color:color-mix(in srgb,var(--warn) 30%,var(--line))}
 .banner svg{flex:none}
 .banner b{font-weight:600}
-.banner .btn{height:30px;font-size:12.5px;background:var(--surface);border-color:transparent;color:var(--ink)}
+.banner-msg{min-width:0}
+.banner .btn{height:30px;font-size:12.5px;background:var(--surface);border-color:var(--line);color:var(--ink);max-width:300px}
+.banner .btn .trunc{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.banner .btn.bad{background:var(--bad);border-color:var(--bad);color:var(--on-bad)}
 .banner .x{margin-left:auto;border:0;background:transparent;color:inherit;display:grid;place-items:center;width:28px;height:28px;border-radius:6px;flex:none}
 .banner .x:hover{background:var(--hover-tint)}
+.live-dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none;animation:livepulse 1.8s ease-out infinite}
+@keyframes livepulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,currentColor 50%,transparent)}100%{box-shadow:0 0 0 7px transparent}}
 /* Lịch của người khác mờ hơn lịch của mình */
 .ev:not(.mine),.wcard:not(.mine){opacity:.68}
 .ev.past,.wcard.past{opacity:.42}
 .tbl tr.other td:not(.day){color:var(--muted)}
+/* Chấm "chưa phản hồi" trên thẻ tuần: chừa chỗ để chấm không đè lên chữ */
+.wcard .flag{position:absolute;top:8px;right:8px;width:8px;height:8px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 2px var(--surface)}
+.wcard.flagged{padding-right:24px}
+.ev.flagged{padding-right:18px}
+/* Cuộc họp bị trùng phòng hoặc trùng người: luôn báo đỏ, không làm mờ */
+.ev.clash,.wcard.clash{border:2px solid var(--bad);box-shadow:inset 4px 0 0 var(--bad)}
+.ev.clash:not(.mine),.wcard.clash:not(.mine){background:var(--bad-soft);color:var(--bad)}
+.ev.clash:not(.past),.wcard.clash:not(.past){opacity:1}
+.clash-tag{display:inline-block;align-self:flex-start;max-width:100%;padding:2px 6px;border-radius:3px;background:var(--bad);color:var(--on-bad);font-style:normal;font-size:11px;font-weight:700;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:1px}
+.clash-tag.icon{padding:1px 4px;margin-right:4px}
+.wcard .clash-tag{justify-self:start}
+.clash-txt{color:var(--bad);font-weight:700}
+.chip-btn{border:0;cursor:pointer}
+.tbl tr.clash td:not(.day){background:var(--bad-soft)}
+.timeline .tb.clash{background:var(--bad)}
+.clash-box{display:grid;gap:8px;background:var(--bad-soft);color:var(--bad);border:1px solid color-mix(in srgb,var(--bad) 40%,var(--line));border-left:4px solid var(--bad);border-radius:6px;padding:12px 14px}
+.clash-box ul{margin:0;padding:0;list-style:none;display:grid;gap:6px}
+.clash-item{display:grid;gap:4px;width:100%;text-align:left;border:1px solid color-mix(in srgb,var(--bad) 30%,var(--line));background:var(--surface);color:var(--ink);border-radius:5px;padding:7px 10px}
+.clash-item:hover{border-color:var(--bad)}
+.clash-item small{color:var(--muted)}
+.clash-item .row{gap:6px}
+.clash-box p{margin:0;font-size:12.5px}
+/* Đã phản hồi thì khung hỏi tham dự dịu lại */
+.rsvp.done{background:var(--surface)}
+.rsvp-state{font-weight:700}
+.rsvp-state.yes{color:var(--status-yes)}.rsvp-state.maybe{color:var(--status-maybe)}.rsvp-state.no{color:var(--status-no)}
 /* Chọn thành phần kiểu hai khung */
 .dual{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .dual-col{border:1px solid var(--line);border-radius:6px;background:var(--surface-2);display:flex;flex-direction:column;min-width:0;overflow:hidden}
@@ -411,7 +451,7 @@ kbd{font-family:inherit;font-size:12px;border:1px solid var(--line);border-botto
 .pick-empty{padding:14px 10px;color:var(--muted);font-size:12.5px;text-align:center}
 /* Tình trạng phòng ngay trong form */
 .roomstrip{display:grid;gap:6px;max-height:186px;overflow:auto}
-.rs-item{display:grid;grid-template-columns:132px 1fr 104px;gap:10px;align-items:center;border:1px solid var(--line);border-radius:6px;background:var(--surface-2);padding:6px 10px;text-align:left;color:var(--ink)}
+.rs-item{display:grid;grid-template-columns:132px 1fr auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:6px;background:var(--surface-2);padding:6px 10px;text-align:left;color:var(--ink)}
 .rs-item.sel{border-color:var(--pri);background:var(--pri-soft)}
 .rs-item.busy{border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}
 .rs-name{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -460,7 +500,7 @@ kbd{font-family:inherit;font-size:12px;border:1px solid var(--line);border-botto
   .stats{grid-template-columns:repeat(2,1fr)}
   .dual{grid-template-columns:1fr}
   .dual-list{max-height:132px;min-height:96px}
-  .rs-item{grid-template-columns:100px 1fr 86px;gap:8px}
+  .rs-item{grid-template-columns:100px 1fr auto;gap:8px}
   .banner{padding:8px 12px;font-size:13px}
   .bar{grid-template-columns:90px 1fr 70px}
   .logrow{grid-template-columns:1fr}
@@ -660,7 +700,7 @@ var LHN = (function () {
 
   /**
    * Kiểm tra một cuộc họp trước khi lưu.
-   * ctx: {rooms, userBy, meetings, dayStart, dayEnd, maxRepeat, today, nowMin, editingId, original}
+   * ctx: {rooms, userBy, meetings, attendance, dayStart, dayEnd, maxRepeat, today, nowMin, editingId, original}
    * Trả về {errors, warnings, freeRooms, dates, conflictDates}
    */
   function validate(input, ctx) {
@@ -735,12 +775,22 @@ var LHN = (function () {
           }).map(function (r) { return r.id; });
         }
       }
+      // Một người không thể dự hai cuộc họp cùng lúc. Cuộc họp người đó đã báo
+      // "Vắng" thì bỏ qua. Chủ trì hoặc thư ký bị trùng thì chặn lưu; thành viên
+      // bị trùng thì chỉ nhắc, để họ tự chọn buổi sẽ dự.
+      var declined = {};
+      (ctx.attendance || []).forEach(function (a) {
+        if (a && a.response === 'no') declined[a.meetingId + '|' + lc(a.email)] = true;
+      });
       var ppl = participants({ chair: chair, secretary: sec, members: members });
       var same = active.filter(function (m) { return dates.indexOf(m.date) >= 0 && overlap(s, e, toMin(m.start), toMin(m.end)); });
       ppl.forEach(function (p) {
         for (var k = 0; k < same.length; k++) {
-          if (participants(same[k]).indexOf(p) >= 0) {
-            warnings.push(nameOf(p) + ' đang có lịch "' + same[k].title + '" (' + fmtDM(same[k].date) + ', ' + same[k].start + '–' + same[k].end + ').');
+          if (participants(same[k]).indexOf(p) >= 0 && !declined[same[k].id + '|' + p]) {
+            var busy = nameOf(p) + ' đang có lịch "' + same[k].title + '" (' + fmtDM(same[k].date) + ', ' + same[k].start + '–' + same[k].end + ').';
+            if (p === chair) errors.push('Trùng lịch chủ trì: ' + busy);
+            else if (p === sec) errors.push('Trùng lịch thư ký: ' + busy);
+            else warnings.push(busy);
             break;
           }
         }
@@ -942,7 +992,7 @@ const MockAPI=(()=>{
       if(input.id&&!editing)throw new Error('Không tìm thấy cuộc họp cần sửa.');
       if(editing&&!canEdit(u,editing))throw new Error('Bạn không có quyền sửa cuộc họp này.');
       const s=db.settings;
-      const res=L.validate(input,{rooms:db.rooms,userBy:userBy(),meetings:db.meetings,dayStart:+s.DAY_START,dayEnd:+s.DAY_END,maxRepeat:+s.MAX_REPEAT_WEEKS,today:today(),nowMin:nowMin(),editingId:editing?editing.id:null,original:editing});
+      const res=L.validate(input,{rooms:db.rooms,userBy:userBy(),meetings:db.meetings,attendance:db.attendance,dayStart:+s.DAY_START,dayEnd:+s.DAY_END,maxRepeat:+s.MAX_REPEAT_WEEKS,today:today(),nowMin:nowMin(),editingId:editing?editing.id:null,original:editing});
       if(res.errors.length)throw new Error(res.errors.join('\n'));
       const members=input.members.filter(e=>e!==input.chair&&e!==input.secretary);
       const fields={title:input.title.trim(),desc:(input.desc||'').trim(),start:input.start,end:input.end,room:input.room,chair:input.chair,secretary:input.secretary||'',members,remind:+input.remind};
@@ -1030,10 +1080,14 @@ const API=IS_GAS?ServerAPI:MockAPI;
    ===================================================================== */
 const S={
   me:null,settings:{DAY_START:7,DAY_END:18,MAX_REPEAT_WEEKS:12},users:[],rooms:[],meetings:[],docs:[],attendance:[],
-  userBy:{},roomBy:{},docsBy:{},attBy:{},
+  userBy:{},roomBy:{},docsBy:{},attBy:{},clash:{},
   date:today(),view:'day',section:'calendar',hidden:new Set(),mineTab:'upcoming',adminTab:'stats',
-  openId:null,editingId:null,miniMonth:null,logs:null,busy:0,onlyMine:false,bannerOff:false
+  openId:null,editingId:null,miniMonth:null,logs:null,busy:0,onlyMine:false
 };
+/* Thanh nhắc bị ẩn thì chỉ ẩn đúng nội dung lúc đó; có nhắc mới (họp khác, lời mời mới, trùng lịch mới) sẽ hiện lại. */
+const BANNER_KEY='lhn-banner-off';
+let bannerOffSig='';
+try{bannerOffSig=localStorage.getItem(BANNER_KEY)||'';}catch(e){}
 try{const v=localStorage.getItem('lhn-view');if(['day','week','table'].includes(v))S.view=v;
   S.onlyMine=localStorage.getItem('lhn-scope')==='mine';}catch(e){}
 function ingest(d){
@@ -1053,6 +1107,7 @@ function ingest(d){
   S.roomBy=Object.fromEntries(S.rooms.map(r=>[r.id,r]));
   S.docsBy={};S.docs.forEach(x=>(S.docsBy[x.meetingId]=S.docsBy[x.meetingId]||[]).push(x));
   S.attBy={};S.attendance.forEach(a=>((S.attBy[a.meetingId]=S.attBy[a.meetingId]||{})[a.email]=a));
+  computeClashes();
   document.documentElement.style.setProperty('--hours',S.settings.DAY_END-S.settings.DAY_START);
   const brandEl=$('#brandName');if(brandEl)brandEl.textContent=S.settings.APP_NAME||'Lịch Họp Nhóm';
   document.title=S.settings.APP_NAME||'Lịch Họp Nhóm';
@@ -1088,6 +1143,53 @@ const avatar=(e,size,resp,photo)=>{const st=size?`width:${size}px;height:${size}
   return `<span class="avatar" style="${st}background:${colorOf(e)}" title="${esc(nameOf(e))}"><b>${esc(initials(nameOf(e)))}</b>${avatarImg(url)}${r}</span>`;};
 const roleChip=m=>{const v=involvement(m);return v==='chair'?'<span class="chip chair">Bạn chủ trì</span>':v==='sec'?'<span class="chip sec">Bạn là thư ký</span>':v==='mem'?'<span class="chip mem">Bạn tham dự</span>':v==='creator'?'<span class="chip neutral">Bạn tạo</span>':'';};
 const RESP={yes:'Tham dự',maybe:'Có thể',no:'Vắng'};
+
+/* =====================================================================
+   PHÁT HIỆN TRÙNG LỊCH
+   Hai cuộc họp cùng ngày, giao nhau về giờ, và:
+   - cùng một phòng thật (phòng Online không tính)  → trùng phòng;
+   - có chung ít nhất một người chưa báo "Vắng" ở cả hai → trùng người.
+   Tính trên toàn bộ dữ liệu, nên lịch cũ bị trùng (tạo trước khi có kiểm tra,
+   hoặc sửa tay trong Google Sheet) cũng được báo đỏ.
+   ===================================================================== */
+function computeClashes(){
+  const C={},byDay={};
+  const get=id=>C[id]||(C[id]={room:[],ppl:[]});
+  const declined=(mid,e)=>((S.attBy[mid]||{})[e]||{}).response==='no';
+  active().forEach(m=>{if(L.isDate(m.date)&&L.isTime(m.start)&&L.isTime(m.end))(byDay[m.date]=byDay[m.date]||[]).push(m);});
+  Object.values(byDay).forEach(list=>{
+    list.sort(sortM);
+    for(let i=0;i<list.length;i++){
+      const a=list[i],aEnd=L.toMin(a.end),pa=ppl(a);
+      for(let j=i+1;j<list.length;j++){
+        const b=list[j];
+        if(L.toMin(b.start)>=aEnd)break; // đã sắp theo giờ bắt đầu: các buổi sau không còn giao với a
+        const r=room(a.room);
+        if(a.room===b.room&&r&&!r.online){get(a.id).room.push(b);get(b.id).room.push(a);}
+        const pb=ppl(b);
+        const who=pa.filter(e=>pb.includes(e)&&!declined(a.id,e)&&!declined(b.id,e));
+        if(who.length){get(a.id).ppl.push({m:b,who});get(b.id).ppl.push({m:a,who});}
+      }
+    }
+  });
+  S.clash=C;
+}
+const clashOf=m=>S.clash[m.id]||null;
+/* Gộp theo từng cuộc họp bị trùng: {m, room: trùng phòng?, who: người bị trùng} */
+function clashItems(m){
+  const c=clashOf(m);if(!c)return [];
+  const map=new Map();
+  c.room.forEach(o=>map.set(o.id,{m:o,room:true,who:[]}));
+  c.ppl.forEach(x=>{const it=map.get(x.m.id)||{m:x.m,room:false,who:[]};it.who=x.who;map.set(x.m.id,it);});
+  return [...map.values()].sort((a,b)=>sortM(a.m,b.m));
+}
+const whoTxt=list=>{const me=ME();const names=[...list].sort((a,b)=>(b===me)-(a===me)).map(e=>e===me?'Bạn':nameOf(e));return names.length>3?names.slice(0,3).join(', ')+' +'+(names.length-3):names.join(', ');};
+const clashReason=it=>[it.room?'trùng phòng':'',it.who.length?'trùng người: '+whoTxt(it.who):''].filter(Boolean).join(' · ');
+const clashLabel=m=>{const c=clashOf(m);if(!c)return '';return c.room.length?'Trùng phòng':c.ppl.some(x=>x.who.includes(ME()))?'Trùng lịch của bạn':'Trùng người';};
+const clashTitle=m=>clashItems(m).map(it=>`"${it.m.title}" ${it.m.start}–${it.m.end}: ${clashReason(it)}`).join('\n');
+/* Trùng lịch "của bạn": cuộc họp của bạn bị trùng phòng, hoặc chính bạn phải có mặt ở hai nơi */
+const myClash=m=>{const c=clashOf(m);return !!c&&((isMine(m)&&!hasDeclined(m)&&c.room.length>0)||c.ppl.some(x=>x.who.includes(ME())));};
+const myUpcomingClashes=()=>active().filter(m=>!isPast(m)&&myClash(m)).sort(sortM);
 
 /* =====================================================================
    TIỆN ÍCH GIAO DIỆN
@@ -1239,12 +1341,14 @@ function renderMini(){
   const base=S.miniMonth||S.date.slice(0,7)+'-01';
   const [y,mo]=base.split('-').map(Number);
   const start=L.monday(base);
-  const days=new Set(active().filter(inFilter).map(m=>m.date));
+  const shown=active().filter(inFilter);
+  const days=new Set(shown.map(m=>m.date));
+  const clashDays=new Set(shown.filter(m=>clashOf(m)).map(m=>m.date));
   let h=`<div class="mini-head"><button data-mm="-1" aria-label="Tháng trước">${icon('i-left',14)}</button><span>Tháng ${mo} / ${y}</span><button data-mm="1" aria-label="Tháng sau">${icon('i-right',14)}</button></div><div class="mini-grid">`;
   h+=['T2','T3','T4','T5','T6','T7','CN'].map(d=>`<span class="dow">${d}</span>`).join('');
   for(let i=0;i<42;i++){const d=L.addDays(start,i);const m=+d.split('-')[1];
-    const cls=[m!==mo?'out':'',d===today()?'today':'',d===S.date?'sel':'',days.has(d)?'has':''].join(' ');
-    h+=`<button class="${cls}" data-date="${d}" aria-label="${fmtLong(d)}${days.has(d)?', có cuộc họp':''}" ${d===S.date?'aria-current="date"':''}>${+d.slice(8)}</button>`;}
+    const cls=[m!==mo?'out':'',d===today()?'today':'',d===S.date?'sel':'',days.has(d)?'has':'',clashDays.has(d)?'clash':''].filter(Boolean).join(' ');
+    h+=`<button class="${cls}" data-date="${d}" aria-label="${fmtLong(d)}${clashDays.has(d)?', có lịch bị trùng':days.has(d)?', có cuộc họp':''}" ${d===S.date?'aria-current="date"':''}><span class="n">${+d.slice(8)}</span></button>`;}
   $('#mini').innerHTML=h+'</div>';
 }
 function renderTop(){
@@ -1264,24 +1368,46 @@ function renderTop(){
 }
 function render(){renderTop();renderNav();renderFilters();renderMini();renderPresence();renderMain();}
 
-function legend(){return `<div class="legend"><span><i style="background:var(--pri)"></i>Lịch của bạn</span><span><i style="background:var(--pri-soft);box-shadow:inset 2px 0 0 var(--pri);opacity:.68"></i>Lịch chung (mờ hơn)</span><span><i style="background:var(--vio-soft);box-shadow:inset 2px 0 0 var(--vio)"></i>Online</span><span><i style="background:var(--bad);border-radius:50%"></i>Chưa phản hồi</span></div>`;}
+function legend(){return `<div class="legend"><span><i style="background:var(--pri)"></i>Lịch của bạn</span><span><i style="background:var(--pri-soft);box-shadow:inset 2px 0 0 var(--pri);opacity:.68"></i>Lịch chung (mờ hơn)</span><span><i style="background:var(--vio-soft);box-shadow:inset 2px 0 0 var(--vio)"></i>Online</span><span><i style="background:var(--bad);border-radius:50%"></i>Chưa phản hồi</span><span><i style="background:var(--bad-soft);box-shadow:inset 0 0 0 2px var(--bad)"></i>Bị trùng</span></div>`;}
 function scopeSeg(){return `<div class="seg" role="group" aria-label="Phạm vi lịch"><button type="button" data-scope="all" aria-pressed="${!S.onlyMine}">Tất cả lịch</button><button type="button" data-scope="mine" aria-pressed="${S.onlyMine}">Chỉ lịch của tôi</button></div>`;}
 function bannerHtml(){
-  if(S.bannerOff)return '';
   const n=nowMin(),t=today();
   const mine=active().filter(m=>isParticipant(m)&&!hasDeclined(m));
   const live=mine.find(m=>m.date===t&&L.toMin(m.start)<=n&&n<L.toMin(m.end));
   const soon=mine.filter(m=>m.date===t&&L.toMin(m.start)>n).sort(sortM)[0];
   const next=soon||mine.filter(m=>m.date>t).sort(sortM)[0];
-  const pending=active().filter(needsReply).length;
-  let cls='',body='',id='';
-  if(live){cls=' live';id=live.id;body=`<b>Đang diễn ra:</b> "${esc(live.title)}" tại ${esc(room(live.room)?.name||live.room)}, đến ${live.end}`;}
-  else if(soon){const mins=L.toMin(soon.start)-n;id=soon.id;
-    body=`<b>Sắp tới:</b> "${esc(soon.title)}" lúc ${soon.start} tại ${esc(room(soon.room)?.name||soon.room)} — còn ${mins>=60?Math.floor(mins/60)+' giờ '+(mins%60?mins%60+' phút':''):mins+' phút'}`;}
-  else if(next){id=next.id;body=`<b>Cuộc họp tới của bạn:</b> "${esc(next.title)}" · ${esc(fmtShort(next.date))} lúc ${next.start}`;}
-  else if(!pending)return '';
+  const focus=live||next;
+  const id=focus?focus.id:'';
+  const unreplied=!!focus&&needsReply(focus);
+  // Lời mời chưa phản hồi KHÁC với cuộc họp đang nhắc — để không lẫn là cuộc họp vừa xác nhận
+  const pend=active().filter(m=>needsReply(m)&&m.id!==id).sort(sortM);
+  const clash=myUpcomingClashes();
+  const where=m=>esc(room(m.room)?.name||m.room);
+  let cls='',lead=icon('i-bell',16),body='';
+  if(live){
+    cls=unreplied?' attn':' live';lead='<i class="live-dot" aria-hidden="true"></i>';
+    body=`<b>${unreplied?'Đang diễn ra':'Bạn đang họp'}:</b> "${esc(live.title)}" · ${where(live)} · đến ${live.end}`;
+  }else if(soon){const mins=L.toMin(soon.start)-n;cls=unreplied?' attn':'';
+    body=`<b>Sắp tới:</b> "${esc(soon.title)}" lúc ${soon.start} tại ${where(soon)} — còn ${mins>=60?Math.floor(mins/60)+' giờ'+(mins%60?' '+mins%60+' phút':''):mins+' phút'}`;}
+  else if(next){cls=unreplied?' attn':'';body=`<b>Cuộc họp tới của bạn:</b> "${esc(next.title)}" · ${esc(fmtShort(next.date))} lúc ${next.start}`;}
+  else if(!pend.length&&!clash.length)return '';
   else body='<b>Hôm nay bạn không có lịch họp.</b>';
-  return `<div class="banner${cls}">${icon('i-bell',16)}<span>${body}</span>${id?`<button type="button" class="btn sm" data-id="${esc(id)}">Xem chi tiết</button>`:''}${pending?`<button type="button" class="btn sm" data-pending>${pending} lời mời chưa phản hồi</button>`:''}<button type="button" class="x" data-banner-off aria-label="Ẩn thanh nhắc">${icon('i-x',15)}</button></div>`;
+  if(unreplied)body+=' · <b>bạn chưa phản hồi</b>';
+  const sig=[id,live?'live':soon?'soon':'next',focus?((myResponse(focus)||{}).response||''):'',pend.map(m=>m.id).join(','),clash.map(m=>m.id).join(',')].join('|');
+  if(sig===bannerOffSig)return '';
+  const pendBtn=pend.length===1
+    ?`<button type="button" class="btn sm" data-id="${esc(pend[0].id)}" title="Mở lời mời để phản hồi"><span class="trunc">Chưa phản hồi: "${esc(pend[0].title)}" · ${esc(fmtShort(pend[0].date))}</span></button>`
+    :pend.length?`<button type="button" class="btn sm" data-pending>${pend.length} lời mời khác chưa phản hồi</button>`:'';
+  const clashBtn=clash.length?`<button type="button" class="btn sm bad" data-clash title="${esc(clash.map(m=>fmtShort(m.date)+' '+m.start+' "'+m.title+'"').join('\n'))}">⚠ ${clash.length} cuộc họp bị trùng</button>`:'';
+  return `<div class="banner${cls}" data-sig="${esc(sig)}">${lead}<span class="banner-msg">${body}</span>${id?`<button type="button" class="btn sm" data-id="${esc(id)}">${unreplied?'Phản hồi':'Xem chi tiết'}</button>`:''}${pendBtn}${clashBtn}<button type="button" class="x" data-banner-off aria-label="Ẩn thanh nhắc" title="Ẩn cho tới khi có nhắc mới">${icon('i-x',15)}</button></div>`;
+}
+/* Cập nhật riêng thanh nhắc mỗi phút (họp kết thúc, sắp tới giờ…) mà không vẽ lại cả trang */
+function refreshBanner(){
+  const el=$('#main');if(!el||$('#app').hidden)return;
+  const old=el.querySelector(':scope > .banner');
+  const tmp=document.createElement('div');tmp.innerHTML=bannerHtml();const nb=tmp.firstElementChild;
+  if(old&&nb&&old.isEqualNode(nb))return;
+  if(old&&nb)old.replaceWith(nb);else if(old)old.remove();else if(nb)el.prepend(nb);
 }
 
 function renderMain(){
@@ -1306,13 +1432,18 @@ function renderMain(){
 const hourPx=()=>parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--h'))||64;
 
 /* ---------- Lịch ngày ---------- */
-function evClass(m){return ['ev',isMine(m)?'mine':(room(m.room)?.online?'online':''),isPast(m)?'past':''].join(' ');}
+function evClass(m){return ['ev',isMine(m)?'mine':(room(m.room)?.online?'online':''),isPast(m)?'past':'',clashOf(m)?'clash':'',needsReply(m)?'flagged':''].filter(Boolean).join(' ');}
+/* Nút đỏ "⚠ N cuộc họp bị trùng" trên thanh công cụ, bấm để mở cuộc họp bị trùng đầu tiên */
+function clashChip(ms){
+  const list=ms.filter(m=>clashOf(m));if(!list.length)return '';
+  return `<button type="button" class="chip bad chip-btn" data-id="${esc(list[0].id)}" title="${esc(list.map(m=>(S.view==='day'?'':fmtShort(m.date)+' ')+m.start+'–'+m.end+' "'+m.title+'": '+clashLabel(m).toLowerCase()).join('\n'))}">⚠ ${list.length} cuộc họp bị trùng</button>`;
+}
 function dayView(){
   const rooms=visibleRooms();
   const ms=active().filter(m=>m.date===S.date&&inFilter(m));
   const H=hourPx(),ds=S.settings.DAY_START,de=S.settings.DAY_END;
   const mine=ms.filter(isMine).length;
-  let h=`<div class="toolbar"><h2>${ms.length?`${ms.length} cuộc họp · ${mine} liên quan đến bạn`:'Chưa có cuộc họp nào trong ngày'}</h2><span class="muted" style="font-size:12.5px">Bấm vào ô trống để đặt nhanh</span><div class="spacer"></div>${scopeSeg()}${legend()}</div>`;
+  let h=`<div class="toolbar"><h2>${ms.length?`${ms.length} cuộc họp · ${mine} liên quan đến bạn`:'Chưa có cuộc họp nào trong ngày'}</h2>${clashChip(ms)}<span class="muted" style="font-size:12.5px">Bấm vào ô trống để đặt nhanh</span><div class="spacer"></div>${scopeSeg()}${legend()}</div>`;
   if(!rooms.length)return h+`<div class="empty"><b>Không có phòng nào để hiển thị</b>Hãy bật ít nhất một khu ở mục "Lọc theo khu".</div>`;
   h+=`<div class="scroll"><div class="daygrid" style="--cols:${rooms.length}"><div class="corner"></div>`;
   h+=rooms.map(r=>`<div class="colhead"><strong>${esc(r.name)}${r.active?'':` <span class="chip neutral" style="display:inline-flex">Tạm ngưng</span>`}</strong><span>${r.online?esc(r.building):r.capacity+' chỗ · '+esc(r.building)}</span></div>`).join('');
@@ -1325,9 +1456,12 @@ function dayView(){
     list.forEach(m=>{
       const top=(L.toMin(m.start)-ds*60)/60*H,ht=Math.max((L.toMin(m.end)-L.toMin(m.start))/60*H-4,22);
       const compact=ht<46;const w=100/lanes;
-      h+=`<button class="${evClass(m)}${compact?' compact':''}" data-id="${esc(m.id)}" style="top:${top+2}px;height:${ht}px;left:calc(${m._lane*w}% + 5px);width:calc(${w}% - 10px)" aria-label="${esc(m.title)}, ${m.start} đến ${m.end}">
+      const c=clashOf(m),narrow=compact||lanes>1; // khung hẹp thì chỉ hiện dấu ⚠, chi tiết nằm ở tooltip
+      const tagLine=c&&!narrow&&ht>=76,tagIn=c&&!tagLine?(narrow?'<em class="clash-tag icon" aria-hidden="true">⚠</em>':`<em class="clash-tag icon">⚠ ${clashLabel(m)}</em>`):'';
+      h+=`<button class="${evClass(m)}${compact?' compact':''}" data-id="${esc(m.id)}" style="top:${top+2}px;height:${ht}px;left:calc(${m._lane*w}% + 5px);width:calc(${w}% - 10px)" ${c?`title="${esc(clashLabel(m)+':\n'+clashTitle(m))}"`:''} aria-label="${esc(m.title)}, ${m.start} đến ${m.end}${c?', '+clashLabel(m).toLowerCase():''}">
         ${needsReply(m)?'<i class="flag" title="Bạn chưa phản hồi"></i>':''}
-        <strong>${m.seriesId?icon('i-repeat',11)+' ':''}${esc(m.title)}</strong><span>${m.start}–${m.end}${compact?'':' · '+esc(nameOf(m.chair))}</span>${!compact&&ht>84?`<span>${ppl(m).length} người${docsOf(m).length?' · 📎 '+docsOf(m).length:''}${m.minutes?' · Có biên bản':''}</span>`:''}</button>`;
+        ${tagLine?`<em class="clash-tag">⚠ ${clashLabel(m)}</em>`:''}
+        <strong>${tagIn}${m.seriesId?icon('i-repeat',11)+' ':''}${esc(m.title)}</strong><span>${m.start}–${m.end}${compact?'':' · '+esc(nameOf(m.chair))}</span>${!compact&&ht>84?`<span>${ppl(m).length} người${docsOf(m).length?' · 📎 '+docsOf(m).length:''}${m.minutes?' · Có biên bản':''}</span>`:''}</button>`;
     });
     h+=`<div class="ghost" hidden></div></div>`;
   });
@@ -1351,12 +1485,14 @@ function slotAt(col,e){
 /* ---------- Lịch tuần ---------- */
 function weekView(){
   const m0=L.monday(S.date);
-  let h=`<div class="toolbar"><h2>Tuần ${fmtShort(m0)} – ${fmtShort(L.addDays(m0,6))}</h2><div class="spacer"></div>${scopeSeg()}${legend()}</div><div class="scroll"><div class="week">`;
+  const weekMs=active().filter(m=>m.date>=m0&&m.date<=L.addDays(m0,6)&&inFilter(m)).sort(sortM);
+  let h=`<div class="toolbar"><h2>Tuần ${fmtShort(m0)} – ${fmtShort(L.addDays(m0,6))}</h2>${clashChip(weekMs)}<div class="spacer"></div>${scopeSeg()}${legend()}</div><div class="scroll"><div class="week">`;
   for(let i=0;i<7;i++){
     const d=L.addDays(m0,i);
     const ms=active().filter(m=>m.date===d&&inFilter(m)).sort(sortM);
-    h+=`<div class="wcol"><button class="whead${d===today()?' is-today':''}" data-goto="${d}" aria-label="Xem ${fmtLong(d)}"><small>${DOW[L.dow(d)]}</small><div class="dnum">${L.fmtDM(d)}</div><small>${ms.length?ms.length+' cuộc họp':'Trống'}</small></button><div class="wlist">`;
-    h+=ms.length?ms.map(m=>`<button class="wcard ${isMine(m)?'mine':(room(m.room)?.online?'online':'')} ${isPast(m)?'past':''}" data-id="${esc(m.id)}">${needsReply(m)?'<i class="flag" style="position:absolute;top:8px;right:8px;width:8px;height:8px;border-radius:50%;background:var(--bad)"></i>':''}<span>${m.start}–${m.end} · ${esc(room(m.room)?.name||m.room)}</span><b>${esc(m.title)}</b><span>Chủ trì: ${esc(nameOf(m.chair))}</span></button>`).join(''):`<div class="empty-day">Không có cuộc họp</div>`;
+    const cN=ms.filter(m=>clashOf(m)).length;
+    h+=`<div class="wcol"><button class="whead${d===today()?' is-today':''}" data-goto="${d}" aria-label="Xem ${fmtLong(d)}"><small>${DOW[L.dow(d)]}</small><div class="dnum">${L.fmtDM(d)}</div><small>${ms.length?ms.length+' cuộc họp':'Trống'}${cN?` · <span class="clash-txt">⚠ ${cN} bị trùng</span>`:''}</small></button><div class="wlist">`;
+    h+=ms.length?ms.map(m=>{const c=clashOf(m);return `<button class="${['wcard',isMine(m)?'mine':(room(m.room)?.online?'online':''),isPast(m)?'past':'',c?'clash':'',needsReply(m)?'flagged':''].filter(Boolean).join(' ')}" data-id="${esc(m.id)}" ${c?`title="${esc(clashTitle(m))}"`:''}>${needsReply(m)?'<i class="flag" title="Bạn chưa phản hồi"></i>':''}${c?`<em class="clash-tag">⚠ ${clashLabel(m)}</em>`:''}<span>${m.start}–${m.end} · ${esc(room(m.room)?.name||m.room)}</span><b>${esc(m.title)}</b><span>Chủ trì: ${esc(nameOf(m.chair))}</span></button>`;}).join(''):`<div class="empty-day">Không có cuộc họp</div>`;
     h+=`</div></div>`;
   }
   return h+`</div></div>`;
@@ -1373,7 +1509,8 @@ function tableView(){
     if(!ms.length){rows+=`<tr>${dayCell}<td colspan="6" class="none">Không có lịch họp</td></tr>`;continue;}
     ms.forEach((m,k)=>{
       const members=[m.secretary?nameOf(m.secretary)+' (thư ký)':'',...(m.members||[]).map(nameOf)].filter(Boolean).join(', ');
-      rows+=`<tr class="clickable${isMine(m)?'':' other'}" data-id="${esc(m.id)}" tabindex="0">${k===0?dayCell:''}<td>${L.toMin(m.start)<720?'Sáng':'Chiều'}</td><td class="time">${m.start}–${m.end}</td><td><b>${esc(m.title)}</b>${m.desc?`<div class="muted" style="font-size:12.5px;white-space:pre-line">${esc(m.desc)}</div>`:''}</td><td>${esc(nameOf(m.chair))}</td><td>${esc(members)||'—'}</td><td>${esc(room(m.room)?.name||m.room)}</td></tr>`;
+      const c=clashOf(m);
+      rows+=`<tr class="clickable${isMine(m)?'':' other'}${c?' clash':''}" data-id="${esc(m.id)}" tabindex="0" ${c?`title="${esc(clashTitle(m))}"`:''}>${k===0?dayCell:''}<td>${L.toMin(m.start)<720?'Sáng':'Chiều'}</td><td class="time">${m.start}–${m.end}</td><td>${c?`<em class="clash-tag">⚠ ${clashLabel(m)}</em><br>`:''}<b>${esc(m.title)}</b>${m.desc?`<div class="muted" style="font-size:12.5px;white-space:pre-line">${esc(m.desc)}</div>`:''}</td><td>${esc(nameOf(m.chair))}</td><td>${esc(members)||'—'}</td><td>${esc(room(m.room)?.name||m.room)}</td></tr>`;
     });
   }
   return `<div class="toolbar"><h2>Bảng lịch họp tuần</h2><span class="muted" style="font-size:12.5px">Theo mẫu lịch công tác tuần, in được khổ A4 ngang</span><div class="spacer"></div>${scopeSeg()}<button class="btn" id="printBtn">${icon('i-print')}In lịch tuần</button></div>
@@ -1402,7 +1539,9 @@ function roomsView(){
       else if(n>=de*60)status='<span class="chip neutral">Hết giờ đặt hôm nay</span>';
       else{const nx=ms.find(m=>L.toMin(m.start)>n);status=`<span class="chip ok">Trống${nx?' đến '+nx.start:' đến hết ngày'}</span>`;}
     } else status=`<span class="chip neutral">${ms.length} lượt đặt · ${Math.round(booked/span*100)}% thời gian</span>`;
-    const segs=ms.map(m=>`<button class="tb${r.online?' online':''}${isMine(m)?' mine':''}" data-id="${esc(m.id)}" title="${esc(m.start+'–'+m.end+' · '+m.title)}" aria-label="${esc(m.start+'–'+m.end+' '+m.title)}" style="left:${(L.toMin(m.start)-ds*60)/span*100}%;width:${(L.toMin(m.end)-L.toMin(m.start))/span*100}%"></button>`).join('');
+    const roomClash=ms.filter(m=>(clashOf(m)||{room:[]}).room.length);
+    if(roomClash.length)status+=` <span class="chip bad" title="${esc(roomClash.map(m=>m.start+'–'+m.end+' "'+m.title+'"').join('\n'))}">⚠ Trùng phòng · ${roomClash.length} cuộc họp</span>`;
+    const segs=ms.map(m=>`<button class="tb${r.online?' online':''}${isMine(m)?' mine':''}${roomClash.includes(m)?' clash':''}" data-id="${esc(m.id)}" title="${esc(m.start+'–'+m.end+' · '+m.title+(roomClash.includes(m)?' · TRÙNG PHÒNG':''))}" aria-label="${esc(m.start+'–'+m.end+' '+m.title)}" style="left:${(L.toMin(m.start)-ds*60)/span*100}%;width:${(L.toMin(m.end)-L.toMin(m.start))/span*100}%"></button>`).join('');
     const now=isToday&&n>=ds*60&&n<=de*60?`<i class="tnow" style="left:${(n-ds*60)/span*100}%"></i>`:'';
     h+=`<div class="roomrow"><div><h4>${esc(r.name)}</h4><p>${r.online?'':r.capacity+' chỗ · '}${esc(r.building)}</p><p>${esc(r.equipment)}</p><div class="status">${status}</div></div>
       <div><div class="timeline${r.active?'':' off'}">${segs}${now}</div><div class="ticks">${ticks.map(t=>`<span>${t}</span>`).join('')}</div></div>
@@ -1443,7 +1582,7 @@ function mineView(){
     h+=`<div class="dategroup"><h3>${esc(lab)}</h3><div class="panel">`+groups[d].map(m=>{
       const r=myResponse(m);
       const rc=m.status==='cancelled'?'<span class="chip bad">Đã hủy</span>':r?`<span class="chip ${r.response==='yes'?'ok':r.response==='no'?'bad':'warn'}">${RESP[r.response]}</span>`:isParticipant(m)&&!isPast(m)?'<span class="chip bad">Chưa phản hồi</span>':'';
-      return `<button class="mrow" data-id="${esc(m.id)}"><span class="time">${m.start} – ${m.end}</span><span><b>${esc(m.title)}</b><span class="sub">${esc(room(m.room)?.name||m.room)} · Chủ trì ${esc(nameOf(m.chair))}${docsOf(m).length?' · 📎 '+docsOf(m).length:''}${m.minutes?' · Có biên bản':''}</span></span><span class="chips">${roleChip(m)}${rc}</span></button>`;
+      return `<button class="mrow" data-id="${esc(m.id)}"><span class="time">${m.start} – ${m.end}</span><span><b>${esc(m.title)}</b><span class="sub">${esc(room(m.room)?.name||m.room)} · Chủ trì ${esc(nameOf(m.chair))}${docsOf(m).length?' · 📎 '+docsOf(m).length:''}${m.minutes?' · Có biên bản':''}</span></span><span class="chips">${clashOf(m)&&m.status!=='cancelled'?`<span class="chip bad" title="${esc(clashTitle(m))}">⚠ ${clashLabel(m)}</span>`:''}${roleChip(m)}${rc}</span></button>`;
     }).join('')+`</div></div>`;
   });
   return h+`</div></div>`;
@@ -1632,14 +1771,23 @@ function openDrawer(id){
   const participant=isParticipant(m);
   const series=m.seriesId?S.meetings.filter(x=>x.seriesId===m.seriesId&&x.status!=='cancelled').sort(sortM):[];
   const remindTxt=m.remind>=1440?(m.remind/1440)+' ngày':m.remind>=60?(m.remind/60)+' giờ':m.remind+' phút';
+  const clashes=m.status==='cancelled'?[]:clashItems(m);
+  const clashHint=[
+    editable?'Bấm "Sửa" để đổi phòng hoặc giờ, hoặc hủy bớt cuộc họp bị trùng.':clashes.some(it=>it.room)?'Báo người tạo hoặc chủ trì để đổi phòng hoặc giờ.':'',
+    involvement(m)==='mem'&&!isPast(m)&&clashes.some(it=>it.who.includes(ME()))?'Nếu không dự được hết, hãy chọn "Vắng" ở cuộc họp bạn không dự.':''
+  ].filter(Boolean).join(' ');
+  const clashBox=clashes.length?`<section class="clash-box" role="alert"><b>⚠ Cuộc họp này đang bị trùng với ${clashes.length} cuộc họp khác</b>
+      <ul>${clashes.map(it=>`<li><button type="button" class="clash-item" data-open-id="${esc(it.m.id)}"><span><b>${esc(it.m.title)}</b></span><small>${it.m.start}–${it.m.end} · ${esc(room(it.m.room)?.name||it.m.room)} · Chủ trì ${esc(nameOf(it.m.chair))}</small><span class="row">${it.room?'<span class="chip bad">Trùng phòng</span>':''}${it.who.length?`<span class="chip bad">Trùng người: ${esc(whoTxt(it.who))}</span>`:''}</span></button></li>`).join('')}</ul>
+      ${clashHint?`<p>${esc(clashHint)}</p>`:''}</section>`:'';
   $('#drawer').innerHTML=`<div class="d-head"><div class="row">${roleChip(m)||'<span class="chip neutral">Bạn không có trong thành phần</span>'}${isPast(m)&&m.status!=='cancelled'?'<span class="chip neutral">Đã diễn ra</span>':''}${m.seriesId?`<span class="chip neutral">${icon('i-repeat',12)} Lặp hằng tuần · ${series.length} buổi</span>`:''}<div class="spacer"></div><button class="btn ghost icon-btn" id="dClose" aria-label="Đóng">${icon('i-x',18)}</button></div>
     <h2 id="dTitle">${esc(m.title)}</h2>
     <div class="meta"><div>${icon('i-clock',15)}${m.start} – ${m.end} · ${esc(fmtLong(m.date))}</div><div>${icon('i-pin',15)}${esc(r?.name||m.room)}${r?(r.online?' · '+esc(r.equipment):' · '+r.capacity+' chỗ · '+esc(r.building)):''}</div>${m.remind?`<div>${icon('i-bell',15)}Nhắc qua email trước ${remindTxt}</div>`:''}</div></div>
     <div class="d-body">
       ${m.status==='cancelled'?`<div class="cancelled-banner"><b>Cuộc họp đã bị hủy.</b>${m.cancelReason?' Lý do: '+esc(m.cancelReason):''}</div>`:''}
-      ${participant&&m.status!=='cancelled'?`<section class="rsvp"><div class="row"><b>Bạn sẽ tham dự chứ?</b>${mine&&mine.note?`<span class="muted" style="font-size:12.5px">Ghi chú: ${esc(mine.note)}</span>`:''}</div>
+      ${clashBox}
+      ${participant&&m.status!=='cancelled'?`<section class="rsvp${mine?' done':''}"><div class="row"><b>${mine?`Bạn đã phản hồi: <span class="rsvp-state ${esc(mine.response)}">${RESP[mine.response]||esc(mine.response)}</span>`:'Bạn sẽ tham dự chứ?'}</b>${mine&&mine.note?`<span class="muted" style="font-size:12.5px">Ghi chú: ${esc(mine.note)}</span>`:''}</div>
         <div class="seg" role="group" aria-label="Phản hồi tham dự">${['yes','maybe','no'].map(k=>`<button data-r="${k}" aria-pressed="${!!mine&&mine.response===k}" ${isPast(m)?'disabled':''}>${RESP[k]}</button>`).join('')}</div>
-        ${isPast(m)?'<span class="muted" style="font-size:12.5px">Cuộc họp đã diễn ra, không thể thay đổi phản hồi.</span>':''}</section>`:''}
+        ${isPast(m)?'<span class="muted" style="font-size:12.5px">Cuộc họp đã diễn ra, không thể thay đổi phản hồi.</span>':mine?'<span class="muted" style="font-size:12.5px">Muốn đổi thì bấm lựa chọn khác.</span>':''}</section>`:''}
       ${m.desc?`<section><h3>Nội dung</h3><p class="desc">${esc(m.desc)}</p></section>`:''}
       <section><h3>Vai trò</h3>
         <div class="person">${avatar(m.chair,32,att[m.chair]?att[m.chair].response:null)}<div class="name">${esc(nameOf(m.chair))}<small>${esc(user(m.chair)?.unit||m.chair)}</small></div><span class="chip chair">Chủ trì</span></div>
@@ -1679,6 +1827,7 @@ function closeDrawer(silent){
   if(!silent&&lastFocus&&document.contains(lastFocus))lastFocus.focus();
 }
 $('#scrim').onclick=()=>closeDrawer();
+$('#drawer').addEventListener('click',e=>{const b=e.target instanceof Element?e.target.closest('[data-open-id]'):null;if(b)openDrawer(b.dataset.openId);});
 function refreshAfter(r){ingest(r.data);render();if(S.openId)openDrawer(S.openId);}
 
 async function doRsvp(m,resp,btn){
@@ -1824,7 +1973,7 @@ function readForm(){
 function validate(){
   const d=readForm();
   const s=S.settings;
-  const res=L.validate(d,{rooms:S.rooms,userBy:S.userBy,meetings:S.meetings,dayStart:s.DAY_START,dayEnd:s.DAY_END,maxRepeat:s.MAX_REPEAT_WEEKS,today:today(),nowMin:nowMin(),editingId:S.editingId,original:formBase});
+  const res=L.validate(d,{rooms:S.rooms,userBy:S.userBy,meetings:S.meetings,attendance:S.attendance,dayStart:s.DAY_START,dayEnd:s.DAY_END,maxRepeat:s.MAX_REPEAT_WEEKS,today:today(),nowMin:nowMin(),editingId:S.editingId,original:formBase});
   renderPicker();
   renderRoomStrip(d,res);
   $('#pplCount').textContent='· '+L.participants(d).length+' người (gồm chủ trì, thư ký)';
@@ -1937,7 +2086,8 @@ main.addEventListener('click',async e=>{
   const br=t.closest('[data-book-room]');if(br){openForm({room:br.dataset.bookRoom});return;}
   if(t.closest('[data-new]')){openForm();return;}
   const sc=t.closest('[data-scope]');if(sc){S.onlyMine=sc.dataset.scope==='mine';try{localStorage.setItem('lhn-scope',sc.dataset.scope);}catch(x){}renderMain();return;}
-  if(t.closest('[data-banner-off]')){S.bannerOff=true;renderMain();return;}
+  const bo=t.closest('[data-banner-off]');if(bo){const bn=bo.closest('.banner');bannerOffSig=bn?bn.dataset.sig||'':'';try{localStorage.setItem(BANNER_KEY,bannerOffSig);}catch(x){}if(bn)bn.remove();return;}
+  if(t.closest('[data-clash]')){const first=myUpcomingClashes()[0];if(first){S.date=first.date;S.miniMonth=null;S.section='calendar';S.view='day';render();openDrawer(first.id);}return;}
   if(t.closest('[data-pending]')){S.mineTab='reply';go('mine');return;}
   const mt=t.closest('[data-mtab]');if(mt){S.mineTab=mt.dataset.mtab;renderMain();return;}
   const at=t.closest('[data-atab]');if(at){S.adminTab=at.dataset.atab;render();return;}
@@ -2157,7 +2307,7 @@ function greet(fresh){
   if(soon)toast(`Sắp đến giờ họp: "${soon.title}" lúc ${soon.start} tại ${room(soon.room)?.name||soon.room}.`,{type:'alert',ms:9000,action:{label:'Xem',fn:()=>{S.date=soon.date;S.section='calendar';S.view='day';render();openDrawer(soon.id);}}});
   else if(fresh)toast(`Xin chào ${S.me.name}!`,{ms:2600});
 }
-setInterval(()=>{placeNow();if(S.section==='rooms'&&$('#drawerWrap').hidden&&!document.querySelector('dialog[open]'))renderMain();},60000);
+setInterval(()=>{placeNow();refreshBanner();if(S.section==='rooms'&&$('#drawerWrap').hidden&&!document.querySelector('dialog[open]'))renderMain();},60000);
 window.addEventListener('resize',placeNow);
 let lastSync=Date.now();
 document.addEventListener('visibilitychange',async()=>{

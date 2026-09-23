@@ -191,12 +191,22 @@ var LHN = (function () {
           }).map(function (r) { return r.id; });
         }
       }
+      // Một người không thể dự hai cuộc họp cùng lúc. Cuộc họp người đó đã báo
+      // "Vắng" thì bỏ qua. Chủ trì hoặc thư ký bị trùng thì chặn lưu; thành viên
+      // bị trùng thì chỉ nhắc, để họ tự chọn buổi sẽ dự.
+      var declined = {};
+      (ctx.attendance || []).forEach(function (a) {
+        if (a && a.response === 'no') declined[a.meetingId + '|' + lc(a.email)] = true;
+      });
       var ppl = participants({ chair: chair, secretary: sec, members: members });
       var same = active.filter(function (m) { return dates.indexOf(m.date) >= 0 && overlap(s, e, toMin(m.start), toMin(m.end)); });
       ppl.forEach(function (p) {
         for (var k = 0; k < same.length; k++) {
-          if (participants(same[k]).indexOf(p) >= 0) {
-            warnings.push(nameOf(p) + ' đang có lịch "' + same[k].title + '" (' + fmtDM(same[k].date) + ', ' + same[k].start + '–' + same[k].end + ').');
+          if (participants(same[k]).indexOf(p) >= 0 && !declined[same[k].id + '|' + p]) {
+            var busy = nameOf(p) + ' đang có lịch "' + same[k].title + '" (' + fmtDM(same[k].date) + ', ' + same[k].start + '–' + same[k].end + ').';
+            if (p === chair) errors.push('Trùng lịch chủ trì: ' + busy);
+            else if (p === sec) errors.push('Trùng lịch thư ký: ' + busy);
+            else warnings.push(busy);
             break;
           }
         }
@@ -464,15 +474,24 @@ function getDatabase_(ss) {
     };
   }).filter(function (u) { return !!u.email; });
 
+  // Ô TRUE/FALSE có thể về dạng boolean hoặc chuỗi "TRUE"/"true" tùy định dạng ô.
+  // Đọc sai cờ online thì phòng Online bị coi là phòng thật (báo trùng oan),
+  // đọc sai cờ active thì phòng tạm ngưng vẫn nhận đặt.
+  var flag = function (v, dflt) {
+    var s = String(v == null ? '' : v).trim().toLowerCase();
+    if (s === 'true') return true;
+    if (s === 'false') return false;
+    return dflt;
+  };
   var rooms = roomsRaw.map(function (r) {
     return {
-      id: String(r.id || ''),
+      id: String(r.id || '').trim(),
       name: String(r.name || ''),
       capacity: Number(r.capacity || 0),
       building: String(r.building || ''),
       equipment: String(r.equipment || ''),
-      online: r.online === true || String(r.online) === 'true',
-      active: r.active !== false && String(r.active) !== 'false'
+      online: flag(r.online, false),
+      active: flag(r.active, true)
     };
   });
 
@@ -492,9 +511,9 @@ function getDatabase_(ss) {
       date: normalizeDateValue_(m.date, timeZone),
       start: normalizeTimeValue_(m.start, timeZone),
       end: normalizeTimeValue_(m.end, timeZone),
-      room: String(m.room || ''),
-      chair: String(m.chair || '').toLowerCase(),
-      secretary: String(m.secretary || '').toLowerCase(),
+      room: String(m.room || '').trim(),
+      chair: String(m.chair || '').trim().toLowerCase(),
+      secretary: String(m.secretary || '').trim().toLowerCase(),
       members: members,
       remind: Number(m.remind || 30),
       status: String(m.status || 'active'),
@@ -724,7 +743,7 @@ function appPayload_(db, user) {
     settings: db.settings,
     today: Utilities.formatDate(now, APP_TIME_ZONE, 'yyyy-MM-dd'),
     nowMin: nowTime[0] * 60 + nowTime[1],
-    version: '3.1-date-fix',
+    version: '3.2-clash',
     users: user.role === 'admin' ? db.users : db.users.filter(function (x) { return x.status === 'active'; }),
     rooms: db.rooms,
     meetings: db.meetings,
@@ -840,7 +859,7 @@ function api_saveMeeting(token, input) {
   db.users.forEach(function (u) { userBy[u.email] = u; });
 
   var res = LHN.validate(input, {
-    rooms: db.rooms, userBy: userBy, meetings: db.meetings,
+    rooms: db.rooms, userBy: userBy, meetings: db.meetings, attendance: db.attendance,
     dayStart: Number(db.settings.DAY_START), dayEnd: Number(db.settings.DAY_END),
     maxRepeat: Number(db.settings.MAX_REPEAT_WEEKS),
     today: todayStr, nowMin: nowMin,

@@ -18,6 +18,7 @@ index.html                  trang chủ hub
 toi-uu-hoa/doi-ngau/        sổ tay bài toán đối ngẫu
 _template/                  khung trang mới
 tools/                      script Python kiểm tra đáp án
+apps-script/lich-hop-nhom/  mã nguồn web app Lịch Họp Nhóm (Apps Script)
 AI-HANDOFF.md               quy ước cho mọi AI khi sửa repo
 CHANGELOG.md                nhật ký thay đổi
 ```
