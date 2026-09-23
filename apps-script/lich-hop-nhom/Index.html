@@ -609,6 +609,15 @@ kbd{font-family:inherit;font-size:12px;border:1px solid var(--line);border-botto
 .banner .btn.bad{background:var(--bad);border-color:var(--bad);color:var(--on-bad)}
 .banner .x{margin-left:auto;border:0;background:transparent;color:inherit;display:grid;place-items:center;width:28px;height:28px;border-radius:6px;flex:none}
 .banner .x:hover{background:var(--hover-tint)}
+/* Quản trị viên: link chính (/exec) còn chạy bản cũ — đăng nhập lại sẽ rơi về giao diện cũ */
+.deploybar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 20px;background:var(--warn-soft);color:var(--warn);border-bottom:1px solid color-mix(in srgb,var(--warn) 30%,var(--line));box-shadow:inset 4px 0 0 var(--brand-red);font-size:13.5px}
+.deploybar svg{flex:none}
+.deploybar .banner-msg{flex:1 1 320px;min-width:0}
+.deploybar .btn{height:30px;font-size:12.5px;background:var(--surface);border-color:var(--line);color:var(--ink)}
+.steps{display:grid;gap:10px}
+.steps p{margin:0}
+.steps ol{margin:0;padding-left:20px;display:grid;gap:6px}
+.steps code{background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:0 5px;font-size:12.5px;overflow-wrap:anywhere}
 .live-dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none;animation:livepulse 1.8s ease-out infinite}
 @keyframes livepulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,currentColor 50%,transparent)}100%{box-shadow:0 0 0 7px transparent}}
 /* Lịch của người khác mờ hơn lịch của mình */
@@ -711,7 +720,7 @@ kbd{font-family:inherit;font-size:12px;border:1px solid var(--line);border-botto
   .linkrow{grid-template-columns:1fr}
   .dual-list{max-height:132px;min-height:96px}
   .rs-item{grid-template-columns:100px 1fr auto;gap:8px}
-  .banner{padding:8px 12px;font-size:13px}
+  .banner,.deploybar{padding:8px 12px;font-size:13px}
   .bar{grid-template-columns:90px 1fr 70px}
   .logrow{grid-template-columns:1fr}
   .sheet{padding:14px}
@@ -730,6 +739,7 @@ kbd{font-family:inherit;font-size:12px;border:1px solid var(--line);border-botto
   .top #newBtn{flex:none}
   .toolbar{align-items:flex-start}
   .toolbar .seg{margin-left:0}
+  .colhead .cap,.colhead .chip{display:none}   /* cột hẹp: chỉ giữ tên phòng; phòng tạm ngưng vẫn có nền xám */
   .sheet{min-width:760px}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
@@ -801,12 +811,12 @@ kbd{font-family:inherit;font-size:12px;border:1px solid var(--line);border-botto
 
   <aside class="side">
     <nav class="nav" id="nav" aria-label="Điều hướng chính"></nav>
+    <div class="mini" id="mini"></div>
+    <div class="mini presence" id="presence" hidden></div>
     <div class="filters">
       <h3>Lọc theo khu</h3>
       <div id="bFilters"></div>
     </div>
-    <div class="mini" id="mini"></div>
-    <div class="mini presence" id="presence" hidden></div>
     <div class="side-foot" id="sideFoot"></div>
   </aside>
 
@@ -1186,6 +1196,7 @@ const ServerAPI={
   saveRoom:x=>gas('api_saveRoom',x),
   importRooms:(l,o)=>gas('api_importRooms',l,o),
   deleteRooms:ids=>gas('api_deleteRooms',ids),
+  checkDeploy:f=>gas('api_checkDeploy',f),
   saveUser:x=>gas('api_saveUser',x),
   saveSettings:x=>gas('api_saveSettings',x),
   getLogs:n=>gas('api_getLogs',n),
@@ -1259,7 +1270,7 @@ const MockAPI=(()=>{
   const canEdit=(u,m)=>u.role==='admin'||m.createdBy===u.email||m.chair===u.email;
   function payload(){
     const u=me();
-    return {state:'ok',mode:'demo',email:u.email,me:u,settings:db.settings,today:today(),nowMin:nowMin(),version:'2.0-demo',
+    return {state:'ok',mode:'demo',email:u.email,me:u,settings:db.settings,today:today(),nowMin:nowMin(),version:'3.7-demo',
       users:u.role==='admin'?db.users:db.users.filter(x=>x.status==='active'),rooms:db.rooms,meetings:db.meetings,docs:db.docs,attendance:db.attendance};
   }
   function guard(admin){load();const u=me();if(!u)throw new Error('Phiên đăng nhập đã hết. Hãy đăng nhập lại.');if(admin&&u.role!=='admin')throw new Error('Chỉ quản trị viên được thực hiện thao tác này.');return u;}
@@ -1273,7 +1284,7 @@ const MockAPI=(()=>{
     setPresence(){return ok({ok:true,visible:true});},
     saveAvatar(x){return run(()=>{const u=guard();u.avatar=x===null||x==='none'?'':'data:'+x.mimeType+';base64,'+x.data;log('avatar','',u.avatar?'ảnh tải lên':'chữ viết tắt');save();return {ok:true,url:u.avatar,data:payload()};});},
     reset(){const s=db&&db.session;db=seed();db.session=s;save();},
-    bootstrap(){load();if(!me())return ok({state:'login',mode:'demo',settings:db.settings});return ok(payload());},
+    bootstrap(){load();if(!me())return ok({state:'login',mode:'demo',settings:db.settings,version:'3.7-demo'});return ok(payload());},
     requestAccess(){return fail('Bản demo không hỗ trợ đăng ký.');},
     saveMeeting(input){return run(()=>{
       const u=guard();
@@ -1411,7 +1422,8 @@ try{bannerOffSig=localStorage.getItem(BANNER_KEY)||'';}catch(e){}
 try{const v=localStorage.getItem('lhn-view');if(['day','week','table'].includes(v))S.view=v;
   S.onlyMine=localStorage.getItem('lhn-scope')==='mine';
   const he=localStorage.getItem('lhn-hide-empty');S.hideEmpty=he==='1'?true:he==='0'?false:null;
-  const hk=JSON.parse(localStorage.getItem('lhn-hidden-khu')||'[]');if(Array.isArray(hk))S.hidden=new Set(hk);}catch(e){}
+  const hk=JSON.parse(localStorage.getItem('lhn-hidden-khu')||'[]');if(Array.isArray(hk))S.hidden=new Set(hk);
+  const fo=JSON.parse(localStorage.getItem('lhn-khu-open')||'{}');if(fo&&typeof fo==='object'&&!Array.isArray(fo))S.fOpen=fo;}catch(e){}
 const saveHidden=()=>{try{localStorage.setItem('lhn-hidden-khu',JSON.stringify([...S.hidden]));}catch(e){}};
 function ingest(d){
   if(!d)return;
@@ -1428,6 +1440,7 @@ function ingest(d){
   S.userBy=Object.fromEntries(S.users.map(u=>[u.email,u]));
   if(S.me&&!S.userBy[S.me.email])S.userBy[S.me.email]=S.me;
   S.roomBy=Object.fromEntries(S.rooms.map(r=>[r.id,r]));
+  if([...S.hidden].some(b=>!buildings().includes(b))){S.hidden=new Set([...S.hidden].filter(b=>buildings().includes(b)));saveHidden();}
   S.docsBy={};S.docs.forEach(x=>(S.docsBy[x.meetingId]=S.docsBy[x.meetingId]||[]).push(x));
   S.attBy={};S.attendance.forEach(a=>((S.attBy[a.meetingId]=S.attBy[a.meetingId]||{})[a.email]=a));
   computeClashes();
@@ -1465,8 +1478,9 @@ const roomNat=(a,b)=>String(a||'').localeCompare(String(b||''),'vi',{numeric:tru
 const khuOrder=b=>{const c=campusOf(b),i=HCMUTE.khu.findIndex(k=>khuName(k)===b);return (c?Number(c.slice(2))||98:99)*100+(i>=0?i:60);};
 const sortRooms=list=>list.slice().sort((a,b)=>(!!a.online-!!b.online)||khuOrder(a.building)-khuOrder(b.building)||roomNat(a.building,b.building)||roomNat(a.name,b.name));
 /* Chỉ xem một khu: ẩn mọi khu khác, kể cả khu chỉ còn phòng tạm ngưng (không có trong danh sách lọc) */
-const onlyKhu=b=>{S.hidden=new Set([...new Set(S.rooms.map(r=>r.building))].filter(x=>x!==b));saveHidden();};
-const buildings=()=>[...new Set(sortRooms(S.rooms.filter(r=>r.active)).map(r=>r.building))]; // khu chỉ còn phòng tạm ngưng thì không liệt kê
+const onlyKhu=b=>{S.hidden=new Set(buildings().filter(x=>x!==b));saveHidden();};
+let bKey=null,bList=[];
+const buildings=()=>{if(bKey!==S.rooms){bKey=S.rooms;bList=[...new Set(sortRooms(S.rooms.filter(r=>r.active)).map(r=>r.building))];}return bList;}; // khu chỉ còn phòng tạm ngưng thì không liệt kê
 const capTxt=r=>r.online?'Online':Number(r.capacity)>0?r.capacity+' chỗ':'';
 const roomSub=r=>r.online?'Online'+(r.building?' · '+r.building:''):[capTxt(r),r.building].filter(Boolean).join(' · ');
 const roomMatch=r=>!S.roomQ||norm([r.name,r.id,r.building,r.equipment].join(' ')).includes(norm(S.roomQ));
@@ -1474,8 +1488,11 @@ const usedOn=(r,d)=>active().some(m=>m.room===r.id&&m.date===d&&inFilter(m));
 /* "Ẩn phòng trống": chưa bấm lần nào thì tự bật khi đang xem cả trường (chưa lọc khu, chưa tìm) mà có hơn 40 phòng.
    Đã chọn một khu thì hiện đủ phòng của khu đó để đặt lịch. */
 const allKhuShown=()=>buildings().every(b=>!S.hidden.has(b));
+/* Khu chỉ còn phòng tạm ngưng (VD phòng mẫu cũ còn lịch họp) không có ô trong bộ lọc:
+   hiện khi đang xem tất cả khu, ẩn khi đã lọc — để "Đang xem 2/17 khu" đúng là chỉ 2 khu đó */
+const khuVisible=b=>buildings().includes(b)?!S.hidden.has(b):allKhuShown();
 const hideEmptyOn=()=>S.hideEmpty!==null?S.hideEmpty:allKhuShown()&&!S.roomQ&&S.rooms.filter(r=>r.active).length>40;
-const visibleRooms=()=>{const he=hideEmptyOn();return sortRooms(S.rooms.filter(r=>!S.hidden.has(r.building)&&(r.active||active().some(m=>m.room===r.id&&m.date===S.date))&&roomMatch(r)&&(!he||usedOn(r,S.date))));};
+const visibleRooms=()=>{const he=hideEmptyOn();return sortRooms(S.rooms.filter(r=>khuVisible(r.building)&&(r.active||active().some(m=>m.room===r.id&&m.date===S.date))&&roomMatch(r)&&(!he||usedOn(r,S.date))));};
 /* Chọn khu / tìm phòng / ẩn phòng trống: đặt trên thanh công cụ, chỉ hiện khi trường có nhiều phòng */
 function roomTools(withEmpty){
   const bs=buildings();if(S.rooms.length<=6&&bs.length<=3)return '';
@@ -1492,7 +1509,14 @@ function roomTools(withEmpty){
 function infoPop(hints,leg){
   return `<details class="infopop"><summary title="Chú thích và mẹo" aria-label="Chú thích và mẹo">${icon('i-info',17)}</summary><div class="infopop-body">${leg===undefined?legend():leg}${hints&&hints.length?`<ul>${hints.map(x=>`<li>${x}</li>`).join('')}</ul>`:''}</div></details>`;
 }
-const inFilter=m=>!S.hidden.has(room(m.room)?.building)&&(!S.onlyMine||isMine(m));
+const inKhu=m=>khuVisible(room(m.room)?.building);
+const inFilter=m=>inKhu(m)&&(!S.onlyMine||isMine(m));
+/* Đang lọc khu mà khu bị ẩn vẫn có cuộc họp: báo số lượng, bấm để xem tất cả khu */
+function otherKhuChip(list){
+  if(allKhuShown())return '';
+  const n=list.filter(m=>!inKhu(m)&&(!S.onlyMine||isMine(m))).length;
+  return n?`<button type="button" class="chip neutral chip-btn" data-khu-all title="Đang lọc theo khu. Bấm để xem tất cả khu">+${n} cuộc họp ở khu khác</button>`:'';
+}
 /* Ảnh đại diện: chỉ dùng ảnh người dùng tự tải lên (bỏ ảnh tài khoản Google từ bản 3.6).
    Chữ viết tắt luôn được vẽ bên dưới, nếu ảnh lỗi thì gỡ ảnh đi là hiện ra. */
 const photoOf=e=>{const a=String((user(e)||{}).avatar||'');return /^(https:\/\/|data:image\/)/.test(a)?a:'';};
@@ -1575,11 +1599,11 @@ async function call(promise,btn){
   finally{busy(false);if(btn&&document.contains(btn)){btn.classList.remove('loading');btn.disabled=false;}}
 }
 /* Hộp thoại xác nhận / nhập liệu (thay cho confirm/prompt) */
-function ask({title,body='',ok='Đồng ý',cancel='Không',danger=false,fields=[]}){
+function ask({title,body='',bodyHtml='',ok='Đồng ý',cancel='Không',danger=false,fields=[]}){
   return new Promise(resolve=>{
     const dlg=$('#askDialog');
     $('#askTitle').textContent=title;
-    let h=body?`<p style="margin:0">${body}</p>`:'';
+    let h=bodyHtml||(body?`<p style="margin:0">${body}</p>`:'');
     fields.forEach(f=>{
       if(f.type==='radio')h+=`<div class="radio-list" role="radiogroup">${f.options.map((o,i)=>`<label><input type="radio" name="${f.name}" value="${esc(o.value)}" ${i===0?'checked':''}><span><b>${esc(o.label)}</b>${o.hint?`<small class="sub">${esc(o.hint)}</small>`:''}</span></label>`).join('')}</div>`;
       else if(f.type==='textarea')h+=`<label class="field"><span>${esc(f.label)}</span><textarea name="${f.name}" rows="${f.rows||4}" maxlength="${f.max||2000}" placeholder="${esc(f.placeholder||'')}">${esc(f.value||'')}</textarea></label>`;
@@ -1616,7 +1640,7 @@ function gate(html){
   const app=S.settings.APP_NAME||'Lịch Họp Nhóm',org=S.settings.ORG_NAME||'';
   $('#gate').innerHTML=`<section class="gate"><header class="gate-head"><span class="gate-logo" role="img" aria-label="Logo HCM-UTE"></span><p class="gate-school">${esc(schoolName())}</p></header>
     <div class="gate-card">${html}</div>
-    <footer class="gate-foot">© ${today().slice(0,4)} · ${esc(app)}${org?' · '+esc(org):''}</footer></section>`;
+    <footer class="gate-foot">© ${today().slice(0,4)} · ${esc(app)}${org?' · '+esc(org):''}${S.version?' · Phiên bản '+esc(S.version):''}</footer></section>`;
 }
 /* Lỡ đăng nhập nhầm tài khoản Google thì không bị kẹt ở màn hình chờ duyệt */
 const switchBtn='<button type="button" class="linkbtn gate-switch" id="switchAcc">Đăng nhập bằng tài khoản khác</button>';
@@ -1712,7 +1736,7 @@ function renderFilters(){
   groups.forEach((list,c)=>{
     if(!c){h+=list.map(b=>row(b,'')).join('');return;}
     const on=list.filter(b=>!S.hidden.has(b)).length;
-    h+=`<details class="fgroup" data-g="${esc(c)}" ${S.fOpen[c]===false?'':'open'}><summary><input type="checkbox" data-campus="${esc(c)}" ${on===list.length?'checked':''} data-mixed="${on>0&&on<list.length}" aria-label="Chọn cả ${esc(CAMPUS[c]||c)}"><span>${esc(CAMPUS[c]||c)}</span></summary>${list.map(b=>row(b,c)).join('')}</details>`;
+    h+=`<details class="fgroup" data-g="${esc(c)}" ${(S.fOpen[c]??(bs.length<=10||(on>0&&on<list.length)))?'open':''}><summary><input type="checkbox" data-campus="${esc(c)}" ${on===list.length?'checked':''} data-mixed="${on>0&&on<list.length}" aria-label="Chọn cả ${esc(CAMPUS[c]||c)}"><span>${esc(CAMPUS[c]||c)}</span></summary>${list.map(b=>row(b,c)).join('')}</details>`;
   });
   if(S.hidden.size)h+=`<button type="button" class="linkbtn fall" data-fall>Hiện tất cả khu</button>`;
   $('#bFilters').innerHTML=h;
@@ -1788,7 +1812,42 @@ function refreshBanner(){
   const old=el.querySelector(':scope > .banner');
   const tmp=document.createElement('div');tmp.innerHTML=bannerHtml();const nb=tmp.firstElementChild;
   if(old&&nb&&old.isEqualNode(nb))return;
-  if(old&&nb)old.replaceWith(nb);else if(old)old.remove();else if(nb)el.prepend(nb);
+  const top=el.querySelector(':scope > .deploybar');
+  if(old&&nb)old.replaceWith(nb);else if(old)old.remove();else if(nb){if(top)top.after(nb);else el.prepend(nb);}
+}
+
+/* ---------- Link chính (/exec) đang chạy bản nào ----------
+   Đăng nhập Google luôn quay về link chính. Quên "Quản lý triển khai → Phiên bản mới" thì link thử (/dev)
+   hiện bản mới nhưng đăng nhập lại rơi về bản cũ. Máy chủ hỏi thẳng link chính, lệch thì báo quản trị viên. */
+async function checkDeploy(force){
+  if(!IS_GAS||!isAdmin())return;
+  try{S.deploy=await API.checkDeploy(!!force);}catch(e){S.deploy=null;}
+  refreshDeploy();
+  if(force&&S.deploy)toast(S.deploy.state==='ok'?`Link chính đã chạy bản ${S.deploy.version}.`:S.deploy.state==='old'?'Link chính vẫn đang chạy bản cũ.':'Chưa kiểm tra được link chính.',{type:S.deploy.state==='old'?'alert':undefined});
+}
+function deployHtml(){
+  const d=S.deploy;if(!d||d.state!=='old'||!isAdmin())return '';
+  return `<div class="deploybar" role="status">${icon('i-info',16)}<span class="banner-msg"><b>Link chính của app đang chạy ${d.version?'bản '+esc(d.version):'bản cũ'}</b>, còn trang này là bản ${esc(d.current)}. Ai mở link chính, kể cả bạn sau khi đăng nhập lại, sẽ thấy giao diện cũ.</span><button type="button" class="btn sm" data-deploy-help>Cách cập nhật</button><button type="button" class="btn sm" data-deploy-recheck>Kiểm tra lại</button></div>`;
+}
+function refreshDeploy(){
+  const el=$('#main');if(!el||$('#app').hidden)return;
+  const old=el.querySelector(':scope > .deploybar');if(old)old.remove();
+  const h=deployHtml();if(h)el.insertAdjacentHTML('afterbegin',h);
+}
+async function deployHelp(){
+  const d=S.deploy||{},id=d.deployId||'';
+  const again=await ask({title:'Cập nhật link chính lên bản '+(d.current||''),ok:'Kiểm tra lại',cancel:'Đóng',bodyHtml:`<div class="steps">
+    <p>Code trong Apps Script đã là bản mới, nhưng link chính (đuôi <code>/exec</code>) vẫn gắn với một phiên bản cũ. Đăng nhập Google luôn quay về link chính, nên sau khi đăng nhập bạn thấy giao diện cũ.</p>
+    <ol>
+      <li>Trong Apps Script: <b>Triển khai</b> (Deploy) → <b>Quản lý triển khai</b> (Manage deployments).</li>
+      <li>Chọn triển khai có <b>Mã triển khai</b> (Deployment ID) là <code>${esc(id||'…')}</code>.</li>
+      <li>Bấm <b>bút chì</b> (Edit) → mục <b>Phiên bản</b> (Version) chọn <b>Phiên bản mới</b> (New version) → <b>Triển khai</b> (Deploy).</li>
+      <li>Quay lại đây bấm <b>Kiểm tra lại</b>.</li>
+    </ol>
+    <p class="muted">Không bấm "Triển khai mới" (New deployment): sẽ tạo ra link khác. Link thử đuôi <code>/dev</code> chỉ để bạn xem trước, không dùng để chia sẻ. Không thấy mã triển khai trên trong danh sách thì link chính thuộc một dự án Apps Script khác.</p>
+    ${d.url?`<p><a href="${esc(d.url)}" target="_blank" rel="noopener">Mở link chính trong tab mới</a></p>`:''}
+  </div>`});
+  if(again)checkDeploy(true);
 }
 
 function renderMain(){
@@ -1797,7 +1856,7 @@ function renderMain(){
   const key=S.section+'|'+S.view+'|'+S.date+'|'+S.adminTab+'|'+S.mineTab;
   const body=S.section==='calendar'?(S.view==='day'?dayView():S.view==='week'?weekView():tableView())
     :S.section==='rooms'?roomsView():S.section==='mine'?mineView():S.section==='docs'?docsView():adminView();
-  el.innerHTML=bannerHtml()+body;
+  el.innerHTML=deployHtml()+bannerHtml()+body;
   el.dataset.key=key;
   const sc=el.querySelector('.scroll');
   if(sc&&prevKey===key&&prevTop!=null)sc.scrollTop=prevTop;
@@ -1824,7 +1883,7 @@ function dayView(){
   const ms=active().filter(m=>m.date===S.date&&inFilter(m));
   const H=hourPx(),ds=S.settings.DAY_START,de=S.settings.DAY_END;
   const mine=ms.filter(isMine).length;
-  let h=`<div class="toolbar"><h2>${ms.length?`${ms.length} cuộc họp · ${mine} liên quan đến bạn`:'Chưa có cuộc họp nào trong ngày'}</h2>${clashChip(ms)}<div class="spacer"></div><div class="tbar-ctrls">${roomTools(true)}${scopeSeg()}</div>${infoPop(['Bấm ô trống để đặt nhanh.','Kéo cuộc họp để dời giờ hoặc đổi phòng; kéo mép dưới để đổi giờ kết thúc.','Vùng sọc xám là giờ đã qua.','Rê chuột lên tên phòng để xem sức chứa, khu, thiết bị.'])}</div>`;
+  let h=`<div class="toolbar"><h2>${ms.length?`${ms.length} cuộc họp · ${mine} liên quan đến bạn`:allKhuShown()?'Chưa có cuộc họp nào trong ngày':'Chưa có cuộc họp nào ở khu đang xem'}</h2>${clashChip(ms)}${otherKhuChip(active().filter(m=>m.date===S.date))}<div class="spacer"></div><div class="tbar-ctrls">${roomTools(true)}${scopeSeg()}</div>${infoPop(['Bấm ô trống để đặt nhanh.','Kéo cuộc họp để dời giờ hoặc đổi phòng; kéo mép dưới để đổi giờ kết thúc.','Vùng sọc xám là giờ đã qua.','Rê chuột lên tên phòng để xem sức chứa, khu, thiết bị.'])}</div>`;
   if(!rooms.length)return h+`<div class="empty"><b>Không có phòng nào để hiển thị</b>${S.roomQ?`Không phòng nào khớp "${esc(S.roomQ)}".`:hideEmptyOn()?'Ngày này chưa phòng nào có lịch. Chọn một khu, hoặc tắt "Ẩn phòng trống" để thấy phòng trống và đặt lịch.<div class="row"><button type="button" class="btn" data-go-rooms>Xem sơ đồ khu</button><button type="button" class="btn primary" data-new>Đặt lịch họp</button></div>':'Hãy chọn ít nhất một khu.'}</div>`;
   h+=`<div class="scroll"><div class="daygrid" style="--cols:${rooms.length}"><div class="corner"></div>`;
   // Một dòng: tên phòng + sức chứa. Khu, thiết bị xem ở tooltip — dành chỗ cho lưới giờ.
@@ -1871,7 +1930,7 @@ function slotAt(col,e){
 function weekView(){
   const m0=L.monday(S.date);
   const weekMs=active().filter(m=>m.date>=m0&&m.date<=L.addDays(m0,6)&&inFilter(m)).sort(sortM);
-  let h=`<div class="toolbar"><h2>Tuần ${fmtShort(m0)} – ${fmtShort(L.addDays(m0,6))}</h2>${clashChip(weekMs)}<div class="spacer"></div><div class="tbar-ctrls">${scopeSeg()}</div>${infoPop(['Kéo thẻ sang ngày khác để dời lịch.','Bấm tên ngày để mở lịch ngày đó.'])}</div><div class="scroll"><div class="week">`;
+  let h=`<div class="toolbar"><h2>Tuần ${fmtShort(m0)} – ${fmtShort(L.addDays(m0,6))}</h2>${clashChip(weekMs)}${otherKhuChip(active().filter(m=>m.date>=m0&&m.date<=L.addDays(m0,6)))}<div class="spacer"></div><div class="tbar-ctrls">${scopeSeg()}</div>${infoPop(['Kéo thẻ sang ngày khác để dời lịch.','Bấm tên ngày để mở lịch ngày đó.'])}</div><div class="scroll"><div class="week">`;
   for(let i=0;i<7;i++){
     const d=L.addDays(m0,i);
     const ms=active().filter(m=>m.date===d&&inFilter(m)).sort(sortM);
@@ -1949,13 +2008,14 @@ function roomsView(){
   const shown=buildings().filter(b=>!S.hidden.has(b));
   const many=S.rooms.filter(r=>r.active).length>12;
   const dir=many&&!S.roomQ&&allKhuShown();   // chưa lọc khu, chưa tìm: hiện sơ đồ khu
-  let rooms=sortRooms(S.rooms.filter(r=>!S.hidden.has(r.building)&&roomMatch(r)));
+  let rooms=sortRooms(S.rooms.filter(r=>khuVisible(r.building)&&roomMatch(r)));
   const onlyBooked=dir&&rooms.length>40;                  // trường nhiều phòng: dưới sơ đồ chỉ liệt kê phòng có lịch trong ngày
   if(onlyBooked)rooms=rooms.filter(r=>active().some(m=>m.room===r.id&&m.date===S.date));
   const leg=`<div class="legend"><span><i style="background:var(--ok-soft)"></i>Trống</span><span><i style="background:var(--pri)"></i>Đã đặt</span><span><i style="background:var(--bad)"></i>Trùng phòng / bây giờ</span></div>`;
   let h=`<div class="toolbar"><h2>Phòng họp · ${esc(fmtLong(S.date))}</h2><div class="spacer"></div><div class="tbar-ctrls">${roomTools(false)}</div>${infoPop(dir?['Bấm một khu để xem các phòng và giờ còn trống.']:[],dir?khuLegend()+leg:leg)}</div><div class="scroll"><div class="page">`;
   if(dir)h+=khuDirectory();
-  else if(many&&shown.length===1){const c=campusOf(shown[0]);h+=`<div class="khu-back"><button type="button" class="btn sm" data-khu-all>${icon('i-left',14)}Tất cả khu</button><h3>${esc(khuLabel(shown[0]))}</h3>${c?`<small>${esc(CAMPUS[c]||c)}</small>`:''}</div>`;}
+  else if(many&&!allKhuShown()){const one=shown.length===1?shown[0]:'',c=campusOf(one);
+    h+=`<div class="khu-back"><button type="button" class="btn sm" data-khu-all>${icon('i-left',14)}Tất cả khu</button><h3>${one?esc(khuLabel(one)):`Đang xem ${shown.length}/${buildings().length} khu`}</h3>${c?`<small>${esc(CAMPUS[c]||c)}</small>`:''}</div>`;}
   if(onlyBooked)h+=`<h3 class="eyebrow">Phòng có lịch · ${esc(fmtLong(S.date))}<span>${rooms.length} phòng</span></h3>`;
   if(!rooms.length)return h+`<div class="panel empty">${onlyBooked?'<b>Chưa phòng nào có lịch trong ngày</b>Bấm một khu ở trên để xem phòng trống và đặt lịch.'
     :`<b>Không có phòng nào</b>${S.roomQ?`Không phòng nào khớp "${esc(S.roomQ)}".`:'Hãy chọn khu'+(isAdmin()?' hoặc thêm phòng trong Quản trị':'')+'.'}`}</div></div></div>`;
@@ -2119,7 +2179,7 @@ function usersView(){
   <div class="note info">Mẹo: thành viên tự gửi yêu cầu khi mở app lần đầu (nếu bật "Cho phép tự đăng ký"). Nếu web app chạy dưới quyền người dùng, hãy chia sẻ Google Sheet cho thành viên — xem hướng dẫn triển khai.</div>`;
 }
 function roomsAdminView(){
-  const list=sortRooms(S.rooms.filter(r=>!S.hidden.has(r.building)&&roomMatch(r)));
+  const list=sortRooms(S.rooms.filter(r=>khuVisible(r.building)&&roomMatch(r)));
   const used=new Set(S.meetings.map(m=>m.room));
   const samples=list.filter(r=>r.sample&&(r.active||!used.has(r.id)));
   const delBtn=r=>!used.has(r.id)?`<button class="btn sm ghost danger" data-room-del="${esc(r.id)}">Xoá</button>`
@@ -2815,7 +2875,9 @@ $('#bFilters').onclick=e=>{
   if(o){e.preventDefault();onlyKhu(o.dataset.only);khuChanged();return;}
   if(e.target.closest('[data-fall]')){S.hidden=new Set();khuChanged();}
 };
-$('#bFilters').addEventListener('toggle',e=>{const d=e.target;if(d.dataset&&d.dataset.g)S.fOpen[d.dataset.g]=d.open;},true);
+// Chỉ nhớ khi người dùng tự bấm mở/đóng nhóm (sự kiện "toggle" còn phát cả lúc vẽ lại nhóm đang mở)
+$('#bFilters').addEventListener('click',e=>{const sm=e.target.closest('.fgroup>summary');if(!sm||e.target.closest('input'))return;
+  const d=sm.parentElement;S.fOpen[d.dataset.g]=!d.open;try{localStorage.setItem('lhn-khu-open',JSON.stringify(S.fOpen));}catch(x){}},true);
 $('#mini').onclick=e=>{
   const mm=e.target.closest('[data-mm]');
   if(mm){const base=S.miniMonth||S.date.slice(0,7)+'-01';let [y,mo]=base.split('-').map(Number);mo+=+mm.dataset.mm;if(mo<1){mo=12;y--;}if(mo>12){mo=1;y++;}S.miniMonth=y+'-'+pad(mo)+'-01';renderMini();return;}
@@ -2831,6 +2893,8 @@ main.addEventListener('click',async e=>{
   const kh=t.closest('[data-khu]');if(kh){onlyKhu(kh.dataset.khu);render();const sc=$('#main .scroll');if(sc)sc.scrollTop=0;return;}
   if(t.closest('[data-khu-all]')){S.hidden=new Set();saveHidden();render();return;}
   if(t.closest('[data-go-rooms]')){go('rooms');return;}
+  if(t.closest('[data-deploy-help]')){deployHelp();return;}
+  const dr=t.closest('[data-deploy-recheck]');if(dr){dr.disabled=true;dr.textContent='Đang kiểm tra…';checkDeploy(true);return;}
   if(t.closest('[data-new]')){openForm();return;}
   const sc=t.closest('[data-scope]');if(sc){S.onlyMine=sc.dataset.scope==='mine';try{localStorage.setItem('lhn-scope',sc.dataset.scope);}catch(x){}renderMain();return;}
   if(t.closest('[data-hide-empty]')){S.hideEmpty=!hideEmptyOn();try{localStorage.setItem('lhn-hide-empty',S.hideEmpty?'1':'0');}catch(x){}renderMain();return;}
@@ -2849,7 +2913,7 @@ main.addEventListener('click',async e=>{
   const re=t.closest('[data-room-edit]');if(re){editRoom(room(re.dataset.roomEdit));return;}
   const rd=t.closest('[data-room-del]');if(rd){delRooms([rd.dataset.roomDel]);return;}
   if(t.closest('[data-room-del-sample]')){const used=new Set(S.meetings.map(m=>m.room));
-    delRooms(sortRooms(S.rooms.filter(r=>!S.hidden.has(r.building)&&roomMatch(r)&&r.sample&&(r.active||!used.has(r.id)))).map(r=>r.id),true);return;}
+    delRooms(sortRooms(S.rooms.filter(r=>khuVisible(r.building)&&roomMatch(r)&&r.sample&&(r.active||!used.has(r.id)))).map(r=>r.id),true);return;}
   if(t.closest('[data-logs-reload]')){S.logs=null;renderMain();return;}
   const col=t.closest('.roomcol');
   if(col){
@@ -2888,11 +2952,11 @@ main.addEventListener('mousemove',e=>{
   let s=slotAt(col,e);const H=hourPx(),ds=S.settings.DAY_START;
   const past=S.date<today()||(S.date===today()&&s+30<=nowMin());
   if(!past&&S.date===today()&&s<nowMin())s=Math.ceil((nowMin()+1)/15)*15; // nửa ô đã qua: bắt đầu từ sau giờ hiện tại
-  col.style.cursor=past?'not-allowed':'';
+  col.style.cursor=past?'not-allowed':'';col.title=past?'Khung giờ đã qua':'';
+  if(past){gh.hidden=true;return;}
   const busyMeet=!r.online&&active().some(m=>m.date===S.date&&m.room===r.id&&L.overlap(s,s+60,L.toMin(m.start),L.toMin(m.end)));
-  gh.classList.toggle('busy',past);
   gh.style.top=((s-ds*60)/60*H+2)+'px';gh.style.height=((busyMeet?30:60)/60*H-4)+'px';
-  gh.textContent=past?'Đã qua':`+ Đặt ${L.fromMin(s)}`;gh.hidden=false;
+  gh.textContent=`+ Đặt ${L.fromMin(s)}`;gh.hidden=false;
 });
 main.addEventListener('mouseleave',()=>$$('.roomcol>.ghost').forEach(g=>g.hidden=true));
 
@@ -3234,6 +3298,7 @@ async function boot(fresh){
   }finally{clearTimeout(slowTimer);}
   if(!d)return;
   if(d.settings)S.settings=Object.assign({},S.settings,d.settings);
+  if(d.version)S.version=d.version;
   if(d.state==='login'){saveToken('');return showLogin(d);}
   if(d.state==='unregistered')return showRequestAccess(d);
   if(d.state==='pending')return showPending(d);
@@ -3247,6 +3312,7 @@ async function boot(fresh){
   greet(fresh);
   if(d.seeded&&d.seeded.added)toast(`Đã nạp ${d.seeded.added} phòng theo sơ đồ HCMUTE${(d.seeded.paused||[]).length?`, tạm ngưng ${d.seeded.paused.length} phòng mẫu cũ`:''}. Phòng học là phòng mẫu (chưa đúng số phòng thật): thay trong Quản trị › Phòng họp.`,{ms:12000,action:{label:'Xem sơ đồ',fn:()=>go('rooms')}});
   beat();
+  checkDeploy();
 }
 boot();
 })();

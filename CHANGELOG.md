@@ -12,6 +12,12 @@ Nhật ký thay đổi của repo. Mục mới nhất nằm trên cùng.
 
 ## 2026-09-23
 
+- [Claude] lỗi: `apps-script/lich-hop-nhom/`: bản 3.7, đăng nhập lại bị về giao diện cũ
+  - Nguyên nhân: link chính `/exec` (nơi Google trả về sau đăng nhập) vẫn gắn phiên bản cũ, chỉ link thử `/dev` chạy code mới
+  - Máy chủ tự hỏi link chính đang chạy bản nào (`?lhn_probe=1`, `api_checkDeploy`); quản trị viên thấy thanh cảnh báo kèm cách cập nhật và nút kiểm tra lại
+  - `kiemTraCauHinh()` in "Link chính đang chạy" và mã triển khai; chân trang đăng nhập ghi số phiên bản
+  - Lịch nhỏ lên trên bộ lọc khu; nhóm cơ sở thu gọn khi nhiều khu và được nhớ
+  - Lọc khu không còn lẫn phòng tạm ngưng khu khác; báo "+N cuộc họp ở khu khác"; bỏ khung đỏ "Đã qua"; đầu cột gọn trên điện thoại
 - [Claude] thêm: `apps-script/lich-hop-nhom/`: bản 3.6, nhận diện HCM-UTE và phòng theo sơ đồ trường
   - Trang đăng nhập theo bố cục cổng trường (logo, tên trường, thẻ "ĐĂNG NHẬP"), chỉ một nút "Đăng nhập với Google Giảng viên"; khung chung cho màn hình đăng ký, chờ duyệt, báo lỗi; nút đổi tài khoản
   - Trang chưa đăng nhập không còn trả lịch họp trong ngày, chỉ tên app, trường, tổ chức

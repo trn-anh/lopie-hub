@@ -1,6 +1,7 @@
 /**
  * LỊCH HỌP NHÓM — BACKEND GOOGLE APPS SCRIPT (Code.gs)
- * Phiên bản 3.6 — Đăng nhập bằng Google OAuth 2.0 thật, phòng HCMUTE nạp sẵn
+ * Phiên bản 3.7 — Đăng nhập bằng Google OAuth 2.0 thật, phòng HCMUTE nạp sẵn,
+ * tự kiểm tra link chính (/exec) có đang chạy đúng phiên bản không
  *
  * KIẾN TRÚC XÁC THỰC
  * ------------------
@@ -26,7 +27,7 @@
 var SESSION_HOURS = 12;              // Session token sống bao lâu
 var SCRIPT_PROPS = PropertiesService.getScriptProperties();
 var APP_TIME_ZONE = 'Asia/Ho_Chi_Minh';
-var APP_VERSION = '3.6';
+var APP_VERSION = '3.7';
 var DEFAULT_SCHOOL = 'Trường Đại học Công nghệ Kỹ thuật TP.HCM';
 var TEXT_SETTINGS = ['APP_NAME', 'ORG_NAME', 'SCHOOL_NAME'];   // luôn là chữ, kể cả khi gõ toàn số
 
@@ -602,6 +603,11 @@ function addLog_(email, action, mid, detail) {
 function doGet(e) {
   var p = (e && e.parameter) || {};
 
+  // Máy chủ tự hỏi link chính đang chạy phiên bản nào (xem probeExec_). Chỉ trả số phiên bản.
+  if (p.lhn_probe) {
+    return ContentService.createTextOutput('LHN-VERSION:' + APP_VERSION).setMimeType(ContentService.MimeType.TEXT);
+  }
+
   // Người dùng bấm "Huỷ" ở màn hình Google
   if (p.error) {
     return errorPage_('Đăng nhập chưa hoàn tất',
@@ -781,15 +787,15 @@ function api_bootstrap(token) {
 
     var s = AUTH.readToken(token);
     if (!s) {
-      return { state: 'login', mode: 'gas', authUrl: AUTH.loginUrl(), settings: brand };
+      return { state: 'login', mode: 'gas', authUrl: AUTH.loginUrl(), settings: brand, version: APP_VERSION };
     }
 
     var user = null;
     db.users.forEach(function (u) { if (u.email === s.email) user = u; });
     if (!user) user = syncUser_({ email: s.email, name: s.name });
-    if (!user) return { state: 'unregistered', email: s.email, settings: brand };
-    if (user.status === 'pending') return { state: 'pending', email: user.email, settings: brand };
-    if (user.status === 'disabled') return { state: 'disabled', email: user.email, settings: brand };
+    if (!user) return { state: 'unregistered', email: s.email, settings: brand, version: APP_VERSION };
+    if (user.status === 'pending') return { state: 'pending', email: user.email, settings: brand, version: APP_VERSION };
+    if (user.status === 'disabled') return { state: 'disabled', email: user.email, settings: brand, version: APP_VERSION };
 
     var seeded = seedHcmute_();
     if (seeded) db = getDatabase_();
@@ -1202,6 +1208,53 @@ function api_deleteRooms(token, ids) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/* =====================================================================
+   6. (tiếp) LINK CHÍNH ĐANG CHẠY BẢN NÀO
+   ---------------------------------------------------------------------
+   Đăng nhập Google xong luôn quay về link chính (WEBAPP_URL, đuôi /exec).
+   Link này chỉ chạy phiên bản đã gắn trong "Quản lý triển khai", còn link thử
+   (đuôi /dev) luôn chạy code mới nhất. Nếu quên cập nhật triển khai thì mở /dev
+   thấy bản mới, đăng nhập lại lại rơi về bản cũ.
+   Máy chủ hỏi thẳng link chính (?lhn_probe=1): từ bản 3.7 trở đi link trả về
+   "LHN-VERSION:x.y"; bản cũ hơn trả về trang HTML bình thường.
+   ===================================================================== */
+function deployIdOf_(url) {
+  var m = /\/s\/([\w-]+)\/exec/.exec(String(url || ''));
+  return m ? m[1] : '';
+}
+
+/** Trả về { state: 'ok' | 'old' | 'unknown', version, current, url, deployId }. Đệm 10 phút. */
+function probeExec_(force) {
+  var url = AUTH.webAppUrl();
+  var out = { state: 'unknown', version: '', current: APP_VERSION, url: url, deployId: deployIdOf_(url) };
+  if (!url) return out;
+  var cache = CacheService.getScriptCache();
+  if (!force) {
+    var hit = cache.get('lhn_exec_probe');
+    if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  }
+  try {
+    var res = UrlFetchApp.fetch(url + '?lhn_probe=1', { muteHttpExceptions: true, followRedirects: true });
+    var code = res.getResponseCode(), text = String(res.getContentText() || '');
+    var m = /LHN-VERSION:([\w.\-]+)/.exec(text);
+    if (m) {
+      out.version = m[1];
+      out.state = m[1] === APP_VERSION ? 'ok' : 'old';
+    } else if (code === 200 && !/ServiceLogin|accounts\.google\.com\/(v3\/)?signin|signin\/identifier/i.test(text)) {
+      out.state = 'old';   // link vẫn chạy nhưng không biết câu hỏi này: bản trước 3.7
+    }
+  } catch (err) {}
+  try { cache.put('lhn_exec_probe', JSON.stringify(out), 600); } catch (e) {}
+  return out;
+}
+
+/** Quản trị viên: link chính có đang chạy đúng phiên bản của code hiện tại không. */
+function api_checkDeploy(token, force) {
+  var c = ctx_(token);
+  requireAdmin_(c);
+  return probeExec_(!!force);
 }
 
 /* =====================================================================
@@ -1635,6 +1688,7 @@ function setOAuthCredentials(clientId, clientSecret, webAppUrl) {
 /** Kiểm tra nhanh cấu hình hiện tại. Chạy khi nghi ngờ có gì đó sai. */
 function kiemTraCauHinh() {
   var cid = prop_('OAUTH_CLIENT_ID');
+  var pr = probeExec_(true);
   var out = [
     'SPREADSHEET_ID     : ' + (prop_('SPREADSHEET_ID') || '(chưa có — chạy setup())'),
     'OAUTH_CLIENT_ID    : ' + (cid || '(CHƯA CÓ)'),
@@ -1644,16 +1698,25 @@ function kiemTraCauHinh() {
     'SESSION_SECRET     : ' + (prop_('SESSION_SECRET') ? '(đã có)' : '(sẽ tự tạo khi đăng nhập lần đầu)'),
     'Phòng HCMUTE       : ' + ({ '1': 'đã nạp', off: 'đã tắt tự nạp' }[prop_('HCMUTE_SEED')] || 'chưa nạp (tự nạp khi mở app lần tới)'),
     '',
+    'Code trong trình soạn thảo: bản ' + APP_VERSION,
+    'Link chính đang chạy      : ' + (pr.state === 'ok' ? 'bản ' + pr.version + '  ✓ khớp, không cần làm gì'
+      : pr.state === 'old' ? (pr.version ? 'bản ' + pr.version : 'BẢN CŨ (trước 3.7)') + '  ✗ CẦN CẬP NHẬT TRIỂN KHAI (xem 4 bước bên dưới)'
+      : 'không kiểm tra được (kiểm tra WEBAPP_URL và quyền truy cập "Anyone")'),
+    'Mã triển khai link chính  : ' + (pr.deployId || '(chưa có)'),
+    '',
     'Sẵn sàng đăng nhập: ' + (AUTH.isConfigured() ? 'CÓ' : 'CHƯA'),
     'URL đăng nhập thử : ' + (AUTH.loginUrl() || '(chưa cấu hình)'),
     '',
-    'LƯU Ý VỀ PHIÊN BẢN:',
-    '- Đăng nhập Google xong luôn quay về WEBAPP_URL ở trên, nên mọi người chỉ thấy phiên bản',
-    '  đang gắn với URL đó.',
-    '- Cập nhật code: Triển khai > Quản lý triển khai > chọn triển khai có URL trùng WEBAPP_URL',
-    '  > Sửa > Phiên bản: Phiên bản mới > Triển khai.',
-    '- Không bấm "Triển khai mới" (sẽ ra URL khác). Không dùng link /dev để dùng thật: link /dev',
-    '  chạy code mới nhất, nhưng đăng nhập lại sẽ đưa về bản /exec cũ.',
+    'CẬP NHẬT LINK CHÍNH (làm mỗi lần dán code mới):',
+    '1. Triển khai (Deploy) > Quản lý triển khai (Manage deployments).',
+    '2. Bên trái chọn triển khai có Mã triển khai (Deployment ID) = ' + (pr.deployId || '...') + '.',
+    '3. Bấm biểu tượng bút chì (Edit) > Phiên bản (Version): Phiên bản mới (New version) > Triển khai (Deploy).',
+    '4. Chạy lại hàm này: dòng "Link chính đang chạy" phải có dấu ✓.',
+    '- Không bấm "Triển khai mới" (New deployment): sẽ ra link khác, đăng nhập vẫn về link cũ.',
+    '- Link thử (Test deployments, đuôi /dev) luôn chạy code mới nhất nhưng chỉ bạn mở được;',
+    '  đăng nhập xong Google đưa về link chính, nên nếu link chính chưa cập nhật bạn sẽ thấy bản cũ.',
+    '- Không thấy mã triển khai trên trong danh sách: link chính thuộc dự án Apps Script khác.',
+    '  Dán code vào đúng dự án đó, hoặc chạy lại setOAuthCredentials với link /exec của dự án này.',
     '- Kiểm tra: mở app, bấm ảnh đại diện góc phải, dòng "Phiên bản" phải là ' + APP_VERSION + '.'
   ].join('\n');
   Logger.log(out);

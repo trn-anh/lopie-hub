@@ -10,16 +10,37 @@ Thư mục này **không phải** một trang của hub, chỉ để lưu mã v�
 
 ## Cập nhật bản đang chạy
 
-1. Mở dự án Apps Script, dán đè toàn bộ nội dung `Code.gs` và `Index.html`.
-2. Chọn **Triển khai → Quản lý triển khai**. Chọn **đúng triển khai có URL trùng `WEBAPP_URL`**, là URL đã khai trong `setOAuthCredentials`. Chạy `kiemTraCauHinh()` nếu không nhớ.
-3. Bấm **✏️ Sửa → Phiên bản: Phiên bản mới → Triển khai**. URL `/exec` giữ nguyên, không cần cấu hình lại OAuth.
-4. Kiểm tra: mở app, bấm ảnh đại diện góc phải. Dòng cuối menu phải ghi **Phiên bản 3.6**.
+Làm đủ 4 bước mỗi lần dán code mới. Chỉ dán code mà bỏ bước 2–3 thì **link chính vẫn chạy bản cũ**.
 
-> **Vì sao phải đúng triển khai:** đăng nhập Google xong luôn quay về `WEBAPP_URL`.
-> Nếu cập nhật nhầm triển khai khác, hoặc chỉ thử bằng link `/dev`, thì lúc đăng nhập lại sẽ rơi về giao diện cũ.
+1. Mở dự án Apps Script, dán đè toàn bộ nội dung `Code.gs` và `Index.html`, bấm Lưu.
+2. Chọn **Triển khai (Deploy) → Quản lý triển khai (Manage deployments)**. Chọn triển khai có **Mã triển khai (Deployment ID) trùng mã in ở dòng "Mã triển khai link chính"** của `kiemTraCauHinh()`.
+3. Bấm **bút chì (Edit) → Phiên bản (Version): Phiên bản mới (New version) → Triển khai (Deploy)**. Link `/exec` giữ nguyên, không cần cấu hình lại OAuth.
+4. Chạy `kiemTraCauHinh()`: dòng **Link chính đang chạy** phải có dấu ✓. Hoặc mở app: chân trang đăng nhập và dòng cuối menu tài khoản ghi **Phiên bản 3.7**.
+
+> **Vì sao đăng xuất rồi đăng nhập lại thì thấy giao diện cũ:**
+> - Link thử (Test deployments, đuôi `/dev`) luôn chạy code mới nhất, nhưng chỉ chủ dự án mở được.
+> - Link chính (đuôi `/exec`) chỉ chạy phiên bản đã chọn trong "Quản lý triển khai".
+> - Đăng nhập Google xong luôn quay về link chính. Nếu link chính chưa được cập nhật, sau khi đăng nhập bạn và mọi người đều thấy bản cũ.
+>
+> Không bấm "Triển khai mới" (New deployment): nó tạo ra link khác, còn đăng nhập vẫn quay về link cũ.
+>
+> Từ bản 3.7:
+> - Nếu link chính còn chạy bản cũ, quản trị viên thấy **thanh cảnh báo màu cam** ngay trong app, kèm nút **Cách cập nhật** và **Kiểm tra lại**.
+> - Máy chủ tự hỏi link chính đang chạy bản nào, bằng cách gọi link đó với `?lhn_probe=1`.
 
 > **Bảo mật:** hàm `napCauHinh()` trong repo để trống, vì client secret thật đã nằm trong Script Properties.
 > Không commit client secret lên GitHub.
+
+## Bản 3.7: link chính và giao diện gọn hơn
+
+- **Tự kiểm tra link chính.** Quản trị viên được báo khi link `/exec` còn chạy bản cũ. `kiemTraCauHinh()` in "Link chính đang chạy" và "Mã triển khai link chính".
+- Chân trang đăng nhập ghi số phiên bản, để biết ngay đang mở bản nào.
+- **Cột trái:** lịch nhỏ nằm ngay dưới menu. Bộ lọc khu xuống dưới cùng; khi trường có hơn 10 khu, các nhóm cơ sở thu gọn, bấm để mở. App nhớ nhóm nào đang mở.
+- **Lọc khu nhất quán:**
+  - Đang lọc thì phòng tạm ngưng thuộc khu không có ô lọc (VD Phòng họp 1, 2 cũ) không còn lẫn vào lịch.
+  - Có cuộc họp ở khu bị ẩn thì thanh công cụ báo **"+N cuộc họp ở khu khác"**, bấm để xem tất cả khu.
+- Rê chuột lên giờ đã qua không còn khung đỏ "Đã qua", chỉ đổi con trỏ.
+- Trên điện thoại, đầu cột lịch ngày chỉ giữ tên phòng.
 
 ## Bản 3.6: nhận diện HCM-UTE
 
