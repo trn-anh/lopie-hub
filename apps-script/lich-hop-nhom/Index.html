@@ -90,6 +90,7 @@ h1,h2{letter-spacing:-.01em}
 .presence-item .nm{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .presence-item small{display:block;color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .linkbtn{border:0;background:transparent;padding:0;color:var(--pri);font:inherit;font-weight:600;text-decoration:underline;cursor:pointer}
+.wmore{display:block;margin:6px 4px 0;font-size:12.5px;text-align:left}
 .presence-item .linkbtn{font-size:11.5px}
 .av-opts{display:grid;gap:8px}
 .av-opt{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer;transition:border-color .15s ease,background-color .15s ease}
@@ -738,6 +739,7 @@ kbd{font-family:inherit;font-size:12px;border:1px solid var(--line);border-botto
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 @media print{
+  [data-khu-all]{display:none!important}
   @page{size:A4 landscape;margin:12mm}
   body{background:var(--white);color:var(--black)}
   .top,.side,.tabbar,.toolbar,.toasts,.progress,#drawerWrap,.no-print{display:none!important}
@@ -1193,7 +1195,7 @@ const ServerAPI={
   saveUser:x=>gas('api_saveUser',x),
   saveSettings:x=>gas('api_saveSettings',x),
   getLogs:n=>gas('api_getLogs',n),
-  heartbeat:()=>gas('api_heartbeat'),
+  heartbeat:rev=>gas('api_heartbeat',rev),
   setPresence:on=>gas('api_setPresence',on),
   saveAvatar:x=>gas('api_saveAvatar',x)
 };
@@ -1402,6 +1404,7 @@ const API=IS_GAS?ServerAPI:MockAPI;
 /* =====================================================================
    TRẠNG THÁI
    ===================================================================== */
+const SYNC={seq:0,at:0,flying:false,timer:0,down:0};   // xem mục ĐỒNG BỘ DỮ LIỆU
 const S={
   me:null,settings:{DAY_START:7,DAY_END:18,MAX_REPEAT_WEEKS:12},users:[],rooms:[],meetings:[],docs:[],attendance:[],
   userBy:{},roomBy:{},docsBy:{},attBy:{},clash:{},
@@ -1428,12 +1431,12 @@ function ingest(d){
     date:normalizeDate(m.date),start:normalizeTime(m.start),end:normalizeTime(m.end),
     members:Array.isArray(m.members)?m.members:(()=>{try{return JSON.parse(m.members||'[]');}catch(e){return String(m.members||'').split(',').map(L.lc).filter(Boolean);}})()
   }));
-  S.docs=d.docs||[];S.attendance=d.attendance||[];S.version=d.version||'';
+  S.docs=d.docs||[];S.attendance=d.attendance||[];S.version=d.version||'';S.rev=d.rev||'';SYNC.seq++;
   if(!L.isDate(S.date))S.date=L.isDate(d.today)?d.today:today();
   S.userBy=Object.fromEntries(S.users.map(u=>[u.email,u]));
   if(S.me&&!S.userBy[S.me.email])S.userBy[S.me.email]=S.me;
   S.roomBy=Object.fromEntries(S.rooms.map(r=>[r.id,r]));
-  if([...S.hidden].some(b=>!buildings().includes(b))){S.hidden=new Set([...S.hidden].filter(b=>buildings().includes(b)));saveHidden();}
+  if([...S.hidden].some(b=>!filterKhu().includes(b))){S.hidden=new Set([...S.hidden].filter(b=>filterKhu().includes(b)));saveHidden();}
   S.docsBy={};S.docs.forEach(x=>(S.docsBy[x.meetingId]=S.docsBy[x.meetingId]||[]).push(x));
   S.attBy={};S.attendance.forEach(a=>((S.attBy[a.meetingId]=S.attBy[a.meetingId]||{})[a.email]=a));
   computeClashes();
@@ -1471,24 +1474,28 @@ const roomNat=(a,b)=>String(a||'').localeCompare(String(b||''),'vi',{numeric:tru
 const khuOrder=b=>{const c=campusOf(b),i=HCMUTE.khu.findIndex(k=>khuName(k)===b);return (c?Number(c.slice(2))||98:99)*100+(i>=0?i:60);};
 const sortRooms=list=>list.slice().sort((a,b)=>(!!a.online-!!b.online)||khuOrder(a.building)-khuOrder(b.building)||roomNat(a.building,b.building)||roomNat(a.name,b.name));
 /* Chỉ xem một khu: ẩn mọi khu khác, kể cả khu chỉ còn phòng tạm ngưng (không có trong danh sách lọc) */
-const onlyKhu=b=>{S.hidden=new Set(buildings().filter(x=>x!==b));saveHidden();};
+const onlyKhu=b=>{S.hidden=new Set(filterKhu().filter(x=>x!==b));saveHidden();};
 let bKey=null,bList=[];
 const buildings=()=>{if(bKey!==S.rooms){bKey=S.rooms;bList=[...new Set(sortRooms(S.rooms.filter(r=>r.active)).map(r=>r.building))];}return bList;}; // khu chỉ còn phòng tạm ngưng thì không liệt kê
+/* Phòng Online không thuộc khu nào: lịch Online luôn hiện dù đang lọc khu, nên khu chỉ có phòng Online không có ô trong bộ lọc */
+const onlineKhu=b=>{const rs=S.rooms.filter(r=>r.building===b&&r.active);return rs.length>0&&rs.every(r=>r.online);};
+let fKey=null,fList=[];
+const filterKhu=()=>{if(fKey!==S.rooms){fKey=S.rooms;fList=buildings().filter(b=>!onlineKhu(b));}return fList;};
 const capTxt=r=>r.online?'Online':Number(r.capacity)>0?r.capacity+' chỗ':'';
 const roomSub=r=>r.online?'Online'+(r.building?' · '+r.building:''):[capTxt(r),r.building].filter(Boolean).join(' · ');
 const roomMatch=r=>!S.roomQ||norm([r.name,r.id,r.building,r.equipment].join(' ')).includes(norm(S.roomQ));
 const usedOn=(r,d)=>active().some(m=>m.room===r.id&&m.date===d&&inFilter(m));
 /* "Ẩn phòng trống": chưa bấm lần nào thì tự bật khi đang xem cả trường (chưa lọc khu, chưa tìm) mà có hơn 40 phòng.
    Đã chọn một khu thì hiện đủ phòng của khu đó để đặt lịch. */
-const allKhuShown=()=>buildings().every(b=>!S.hidden.has(b));
+const allKhuShown=()=>filterKhu().every(b=>!S.hidden.has(b));
 /* Khu chỉ còn phòng tạm ngưng (VD phòng mẫu cũ còn lịch họp) không có ô trong bộ lọc:
    hiện khi đang xem tất cả khu, ẩn khi đã lọc — để "Đang xem 2/17 khu" đúng là chỉ 2 khu đó */
-const khuVisible=b=>buildings().includes(b)?!S.hidden.has(b):allKhuShown();
+const khuVisible=b=>filterKhu().includes(b)?!S.hidden.has(b):onlineKhu(b)||allKhuShown();
 const hideEmptyOn=()=>S.hideEmpty!==null?S.hideEmpty:allKhuShown()&&!S.roomQ&&S.rooms.filter(r=>r.active).length>40;
-const visibleRooms=()=>{const he=hideEmptyOn();return sortRooms(S.rooms.filter(r=>khuVisible(r.building)&&(r.active||active().some(m=>m.room===r.id&&m.date===S.date))&&roomMatch(r)&&(!he||usedOn(r,S.date))));};
+const visibleRooms=()=>{const he=hideEmptyOn();return sortRooms(S.rooms.filter(r=>(r.online||khuVisible(r.building))&&(r.active||active().some(m=>m.room===r.id&&m.date===S.date))&&roomMatch(r)&&(!he||usedOn(r,S.date))));};
 /* Chọn khu / tìm phòng / ẩn phòng trống: đặt trên thanh công cụ, chỉ hiện khi trường có nhiều phòng */
 function roomTools(withEmpty){
-  const bs=buildings();if(S.rooms.length<=6&&bs.length<=3)return '';
+  const bs=filterKhu();if(S.rooms.length<=6&&bs.length<=3)return '';
   const shown=bs.filter(b=>!S.hidden.has(b)),cur=shown.length===bs.length?'':shown.length===1?shown[0]:'__many';
   const cnt=b=>S.rooms.filter(r=>r.building===b&&r.active).length;
   const opt=b=>`<option value="${esc(b)}"${cur===b?' selected':''}>${esc(khuLabel(b))} (${cnt(b)})</option>`;
@@ -1502,8 +1509,10 @@ function roomTools(withEmpty){
 function infoPop(hints,leg){
   return `<details class="infopop"><summary title="Chú thích và mẹo" aria-label="Chú thích và mẹo">${icon('i-info',17)}</summary><div class="infopop-body">${leg===undefined?legend():leg}${hints&&hints.length?`<ul>${hints.map(x=>`<li>${x}</li>`).join('')}</ul>`:''}</div></details>`;
 }
-const inKhu=m=>khuVisible(room(m.room)?.building);
+const inKhu=m=>{const r=room(m.room);return !!(r&&r.online)||khuVisible(r?.building);};
 const inFilter=m=>inKhu(m)&&(!S.onlyMine||isMine(m));
+/* Số cuộc họp trong ngày d đang bị bộ lọc khu ẩn đi */
+const hiddenOn=d=>allKhuShown()?0:active().filter(m=>m.date===d&&!inKhu(m)&&(!S.onlyMine||isMine(m))).length;
 /* Đang lọc khu mà khu bị ẩn vẫn có cuộc họp: báo số lượng, bấm để xem tất cả khu */
 function otherKhuChip(list){
   if(allKhuShown())return '';
@@ -1721,7 +1730,7 @@ function renderNav(){
   $('#tabbar').innerHTML=items.map(n=>`<button data-sec="${n.id}" ${S.section===n.id?'aria-current="page"':''}>${icon(n.icon,20)}<span>${n.short||n.label}</span>${(n.id==='mine'&&pending)||(n.id==='admin'&&waiting)?'<i class="dot"></i>':''}</button>`).join('');
 }
 function renderFilters(){
-  const bs=buildings(),groups=new Map();
+  const bs=filterKhu(),groups=new Map();
   bs.forEach(b=>{const c=campusOf(b);if(!groups.has(c))groups.set(c,[]);groups.get(c).push(b);});
   const cnt=b=>S.rooms.filter(r=>r.building===b&&r.active).length;
   const row=(b,c)=>`<label class="frow"><input type="checkbox" value="${esc(b)}" ${S.hidden.has(b)?'':'checked'}><span class="fn">${esc(c?khuLabel(b):b)}</span><small>${cnt(b)}</small>${bs.length>2?`<button type="button" class="only" data-only="${esc(b)}" title="Chỉ xem khu này">chỉ</button>`:''}</label>`;
@@ -1810,14 +1819,14 @@ function refreshBanner(){
 
 function renderMain(){
   const el=$('#main');
-  const keep=el.querySelector('.scroll');const prevTop=keep?keep.scrollTop:null;const prevKey=el.dataset.key;
+  const keep=el.querySelector('.scroll');const prevTop=keep?keep.scrollTop:null,prevLeft=keep?keep.scrollLeft:0;const prevKey=el.dataset.key;
   const key=S.section+'|'+S.view+'|'+S.date+'|'+S.adminTab+'|'+S.mineTab;
   const body=S.section==='calendar'?(S.view==='day'?dayView():S.view==='week'?weekView():tableView())
     :S.section==='rooms'?roomsView():S.section==='mine'?mineView():S.section==='docs'?docsView():adminView();
   el.innerHTML=bannerHtml()+body;
   el.dataset.key=key;
   const sc=el.querySelector('.scroll');
-  if(sc&&prevKey===key&&prevTop!=null)sc.scrollTop=prevTop;
+  if(sc&&prevKey===key&&prevTop!=null){sc.scrollTop=prevTop;sc.scrollLeft=prevLeft;}
   else if(sc&&S.section==='calendar'&&S.view==='day'){
     const H=hourPx();const ds=S.settings.DAY_START;
     const first=active().filter(m=>m.date===S.date&&inFilter(m)).sort(sortM)[0];
@@ -1892,9 +1901,10 @@ function weekView(){
   for(let i=0;i<7;i++){
     const d=L.addDays(m0,i);
     const ms=active().filter(m=>m.date===d&&inFilter(m)).sort(sortM);
-    const cN=ms.filter(m=>clashOf(m)).length;
-    h+=`<div class="wcol" data-date="${d}"><button class="whead${d===today()?' is-today':''}" data-goto="${d}" aria-label="Xem ${fmtLong(d)}"><small>${DOW[L.dow(d)]}</small><div class="dnum">${L.fmtDM(d)}</div><small>${ms.length?ms.length+' cuộc họp':'Trống'}${cN?` · <span class="clash-txt">⚠ ${cN} bị trùng</span>`:''}</small></button><div class="wlist">`;
+    const cN=ms.filter(m=>clashOf(m)).length,hid=hiddenOn(d);
+    h+=`<div class="wcol" data-date="${d}"><button class="whead${d===today()?' is-today':''}" data-goto="${d}" aria-label="Xem ${fmtLong(d)}"><small>${DOW[L.dow(d)]}</small><div class="dnum">${L.fmtDM(d)}</div><small>${ms.length?ms.length+' cuộc họp':hid?hid+' ở khu khác':'Trống'}${cN?` · <span class="clash-txt">⚠ ${cN} bị trùng</span>`:''}</small></button><div class="wlist">`;
     h+=ms.length?ms.map(m=>{const c=clashOf(m);const dec=hasDeclined(m);return `<button class="${['wcard',isMine(m)&&!dec?'mine':(room(m.room)?.online?'online':''),dec?'declined':'',isPast(m)?'past':'',c?'clash':'',needsReply(m)?'flagged':'',canDrag(m)?'can-drag':''].filter(Boolean).join(' ')}" data-id="${esc(m.id)}" ${c?`title="${esc(clashTitle(m))}"`:canDrag(m)?'title="Kéo sang ngày khác để dời lịch"':''}>${needsReply(m)?'<i class="flag" title="Bạn chưa phản hồi"></i>':''}${c?`<em class="clash-tag">⚠ ${clashLabel(m)}</em>`:''}<span>${m.start}–${m.end} · ${esc(room(m.room)?.name||m.room)}</span><b>${esc(m.title)}</b><span>Chủ trì: ${esc(nameOf(m.chair))}${dec?' · Bạn đã báo vắng':''}</span></button>`;}).join(''):'';
+    if(hid)h+=`<button type="button" class="linkbtn wmore" data-khu-all title="Đang lọc theo khu. Bấm để xem tất cả khu">${ms.length?'+':''}${hid} cuộc họp ở khu khác</button>`;
     h+=`</div></div>`;
   }
   return h+`</div></div>`;
@@ -1908,14 +1918,14 @@ function tableView(){
     const d=L.addDays(m0,i);
     const ms=active().filter(m=>m.date===d&&inFilter(m)).sort(sortM);
     const dayCell=`<td class="day${d===today()?' is-today':''}" rowspan="${Math.max(1,ms.length)}">${DOW[L.dow(d)]}<br><span class="muted" style="font-weight:500">${L.fmtDM(d)}</span></td>`;
-    if(!ms.length){rows+=`<tr>${dayCell}<td colspan="6" class="none">Không có lịch họp</td></tr>`;continue;}
+    if(!ms.length){const hid=hiddenOn(d);rows+=`<tr>${dayCell}<td colspan="6" class="none">${hid?`Không có lịch họp ở khu đang xem · <button type="button" class="linkbtn" data-khu-all>${hid} cuộc họp ở khu khác</button>`:'Không có lịch họp'}</td></tr>`;continue;}
     ms.forEach((m,k)=>{
       const members=[m.secretary?nameOf(m.secretary)+' (thư ký)':'',...(m.members||[]).map(nameOf)].filter(Boolean).join(', ');
       const c=clashOf(m);
       rows+=`<tr class="clickable${isMine(m)?'':' other'}${c?' clash':''}" data-id="${esc(m.id)}" tabindex="0" ${c?`title="${esc(clashTitle(m))}"`:''}>${k===0?dayCell:''}<td>${L.toMin(m.start)<720?'Sáng':'Chiều'}</td><td class="time">${m.start}–${m.end}</td><td>${c?`<em class="clash-tag">⚠ ${clashLabel(m)}</em><br>`:''}<b>${esc(m.title)}</b>${m.desc?`<div class="muted" style="font-size:12.5px;white-space:pre-line">${esc(m.desc)}</div>`:''}</td><td>${esc(nameOf(m.chair))}</td><td>${esc(members)||'—'}</td><td>${esc(room(m.room)?.name||m.room)}</td></tr>`;
     });
   }
-  return `<div class="toolbar"><h2>Bảng lịch họp tuần</h2><span class="muted" style="font-size:12.5px">Theo mẫu lịch công tác tuần, in được khổ A4 ngang</span><div class="spacer"></div>${scopeSeg()}<button class="btn" id="printBtn">${icon('i-print')}In lịch tuần</button></div>
+  return `<div class="toolbar"><h2>Bảng lịch họp tuần</h2>${otherKhuChip(active().filter(m=>m.date>=m0&&m.date<=m6))}<span class="muted" style="font-size:12.5px">Theo mẫu lịch công tác tuần, in được khổ A4 ngang</span><div class="spacer"></div>${scopeSeg()}<button class="btn" id="printBtn">${icon('i-print')}In lịch tuần</button></div>
   <div class="scroll"><div class="page"><div class="sheet">
     <div class="sheet-head"><div class="school">${esc(schoolName())}</div><div class="org">${esc(S.settings.ORG_NAME||'')}</div><h2>LỊCH HỌP TUẦN</h2><div class="muted">Từ ${L.fmtDM(m0)}/${m0.slice(0,4)} đến ${L.fmtDM(m6)}/${m6.slice(0,4)}</div></div>
     <div class="table-wrap" style="overflow-x:auto"><table class="tbl"><thead><tr><th style="width:92px">Thứ</th><th style="width:60px">Buổi</th><th style="width:96px">Thời gian</th><th>Nội dung</th><th style="width:150px">Chủ trì</th><th style="width:230px">Thành phần</th><th style="width:100px">Địa điểm</th></tr></thead><tbody>${rows}</tbody></table></div>
@@ -1963,7 +1973,7 @@ function khuDirectory(){
 }
 function roomsView(){
   const isToday=S.date===today(),n=nowMin(),ds=S.settings.DAY_START,de=S.settings.DAY_END,span=(de-ds)*60;
-  const shown=buildings().filter(b=>!S.hidden.has(b));
+  const shown=filterKhu().filter(b=>!S.hidden.has(b));
   const many=S.rooms.filter(r=>r.active).length>12;
   const dir=many&&!S.roomQ&&allKhuShown();   // chưa lọc khu, chưa tìm: hiện sơ đồ khu
   let rooms=sortRooms(S.rooms.filter(r=>khuVisible(r.building)&&roomMatch(r)));
@@ -1973,7 +1983,7 @@ function roomsView(){
   let h=`<div class="toolbar"><h2>Phòng họp · ${esc(fmtLong(S.date))}</h2><div class="spacer"></div><div class="tbar-ctrls">${roomTools(false)}</div>${infoPop(dir?['Bấm một khu để xem các phòng và giờ còn trống.']:[],dir?khuLegend()+leg:leg)}</div><div class="scroll"><div class="page">`;
   if(dir)h+=khuDirectory();
   else if(many&&!allKhuShown()){const one=shown.length===1?shown[0]:'',c=campusOf(one);
-    h+=`<div class="khu-back"><button type="button" class="btn sm" data-khu-all>${icon('i-left',14)}Tất cả khu</button><h3>${one?esc(khuLabel(one)):`Đang xem ${shown.length}/${buildings().length} khu`}</h3>${c?`<small>${esc(CAMPUS[c]||c)}</small>`:''}</div>`;}
+    h+=`<div class="khu-back"><button type="button" class="btn sm" data-khu-all>${icon('i-left',14)}Tất cả khu</button><h3>${one?esc(khuLabel(one)):`Đang xem ${shown.length}/${filterKhu().length} khu`}</h3>${c?`<small>${esc(CAMPUS[c]||c)}</small>`:''}</div>`;}
   if(onlyBooked)h+=`<h3 class="eyebrow">Phòng có lịch · ${esc(fmtLong(S.date))}<span>${rooms.length} phòng</span></h3>`;
   if(!rooms.length)return h+`<div class="panel empty">${onlyBooked?'<b>Chưa phòng nào có lịch trong ngày</b>Bấm một khu ở trên để xem phòng trống và đặt lịch.'
     :`<b>Không có phòng nào</b>${S.roomQ?`Không phòng nào khớp "${esc(S.roomQ)}".`:'Hãy chọn khu'+(isAdmin()?' hoặc thêm phòng trong Quản trị':'')+'.'}`}</div></div></div>`;
@@ -2159,7 +2169,7 @@ async function delRooms(ids,isSample){
   if(!ok)return;
   try{
     const r=await call(API.deleteRooms(ids));
-    if(r&&r.data){ingest(r.data);if(buildings().every(b=>S.hidden.has(b))){S.hidden=new Set();saveHidden();}S.logs=null;render();}
+    if(r&&r.data){ingest(r.data);if(filterKhu().every(b=>S.hidden.has(b))){S.hidden=new Set();saveHidden();}S.logs=null;render();}
     const p=(r.paused||[]).length;
     toast(r.deleted&&p?`Đã xoá ${r.deleted} phòng, tạm ngưng ${p} phòng đã có lịch.`:r.deleted?`Đã xoá ${r.deleted} phòng.`:p?`Đã tạm ngưng ${p} phòng (đã có lịch họp).`:'Không có thay đổi.');
   }catch(e){/* call() đã báo lỗi */}
@@ -3103,11 +3113,13 @@ $('#drawer').addEventListener('keydown',e=>{
 });
 
 /* =====================================================================
-   TRẠNG THÁI ONLINE
-   Apps Script không có WebSocket nên dùng heartbeat: cứ 45 giây báo server
-   một lần "tôi còn mở trang". Server coi ai quá 90 giây không báo là đã
-   offline, nên danh sách trễ tối đa khoảng một phút — chấp nhận được.
-   Khi tab bị ẩn thì ngừng báo để đỡ tốn hạn mức Apps Script.
+   TRẠNG THÁI ONLINE & ĐỒNG BỘ DỮ LIỆU
+   Apps Script không có WebSocket nên dùng "nhịp": cứ 15 giây (khi tab đang mở)
+   trình duyệt gửi mã dữ liệu đang có (S.rev). Server trả danh sách online, và
+   nếu dữ liệu đã đổi (người khác đặt lịch, phản hồi, hay sửa tay Google Sheet)
+   thì trả kèm dữ liệu mới. Server coi ai quá 90 giây không báo là đã offline.
+   Dữ liệu mới được áp êm: không đóng hộp thoại, không mất chữ đang gõ, không
+   cắt ngang kéo thả; đang bận thì chờ rảnh mới áp. Tab ẩn thì ngừng hỏi.
    ===================================================================== */
 let PRESENCE={online:[],visible:true,ready:false};
 
@@ -3124,14 +3136,34 @@ function renderPresence(){
     +(PRESENCE.visible?'':`<div class="presence-note">Bạn đang ẩn trạng thái nên không xuất hiện trong danh sách này.</div>`);
 }
 
-async function beat(){
-  if(!IS_GAS||$('#app').hidden||document.hidden)return;
-  try{
-    const r=await API.heartbeat();
-    if(r&&r.ok){PRESENCE={online:r.online||[],visible:r.visible!==false,ready:true};renderPresence();}
-  }catch(e){/* heartbeat hỏng thì bỏ qua, không làm phiền người dùng */}
+document.addEventListener('pointerdown',()=>{SYNC.down=Date.now();},true);
+['pointerup','pointercancel'].forEach(t=>document.addEventListener(t,()=>{SYNC.down=0;},true));
+/* Đang thao tác dở thì chưa vẽ lại: đang nhấn chuột, hộp thoại mở, đang kéo thả, đang gõ, đang chờ lưu, đang xem chú thích */
+function syncIdle(){
+  if(SYNC.down&&Date.now()-SYNC.down<10000)return false;   // đang nhấn chuột: vẽ lại lúc này sẽ nuốt mất cú bấm
+  if(S.busy>0||drag||document.querySelector('dialog[open]')||document.querySelector('#main details.infopop[open]'))return false;
+  const a=document.activeElement;
+  return !(a&&a.matches&&a.matches('input:not([type=checkbox]):not([type=radio]),textarea,select,[contenteditable="true"]'));
 }
-setInterval(beat,45000);
+function applyRemote(d,seq){
+  clearTimeout(SYNC.timer);
+  if(seq!==SYNC.seq)return;                                   // vừa nhận dữ liệu mới hơn từ thao tác của chính mình
+  if(!syncIdle()){SYNC.timer=setTimeout(()=>applyRemote(d,seq),2000);return;}
+  const open=S.openId&&!$('#drawerWrap').hidden?S.openId:null;
+  ingest(d);render();if(open)openDrawer(open);
+}
+async function beat(){
+  if(!IS_GAS||$('#app').hidden||document.hidden||SYNC.flying)return;
+  const seq=SYNC.seq;SYNC.flying=true;
+  try{
+    const r=await API.heartbeat(S.rev||'');
+    SYNC.at=Date.now();
+    if(r&&r.ok){PRESENCE={online:r.online||[],visible:r.visible!==false,ready:true};renderPresence();}
+    if(r&&r.data&&r.data.state==='ok'&&r.rev&&r.rev!==S.rev&&S.busy<=0)applyRemote(r.data,seq);
+  }catch(e){/* nhịp hỏng thì bỏ qua, không làm phiền người dùng */}
+  finally{SYNC.flying=false;}
+}
+setInterval(beat,15000);
 
 /* =====================================================================
    ĐỔI ẢNH ĐẠI DIỆN
@@ -3232,12 +3264,7 @@ function greet(fresh){
 setInterval(placeNow,30000);
 setInterval(()=>{refreshBanner();if(S.section==='rooms'&&$('#drawerWrap').hidden&&!document.querySelector('dialog[open]'))renderMain();},60000);
 window.addEventListener('resize',placeNow);
-let lastSync=Date.now();
-document.addEventListener('visibilitychange',async()=>{
-  if(document.hidden||!IS_GAS||$('#app').hidden||Date.now()-lastSync<120000||document.querySelector('dialog[open]'))return;
-  try{const d=await API.bootstrap();lastSync=Date.now();if(d.state==='ok'){ingest(d);render();if(S.openId)openDrawer(S.openId);}}catch(e){}
-  beat();
-});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-SYNC.at>5000)beat();});
 
 /* =====================================================================
    KHỞI ĐỘNG
@@ -3250,7 +3277,6 @@ async function boot(fresh){
   const slowTimer=setTimeout(()=>{const p=$('#gate .splash p');if(p)p.textContent='Đang kết nối Google Sheet…';},6000);
   try{
     d=await API.bootstrap();
-    lastSync=Date.now();
   }catch(e){
     console.error('API.bootstrap failed:',e);
     const detail=esc((e&&e.message)||String(e)||'Lỗi không xác định.');

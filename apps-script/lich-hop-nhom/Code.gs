@@ -1,6 +1,8 @@
 /**
  * LỊCH HỌP NHÓM — BACKEND GOOGLE APPS SCRIPT (Code.gs)
- * Phiên bản 3.11 — Đăng nhập bằng Google OAuth 2.0 thật, phòng HCMUTE nạp sẵn.
+ * Phiên bản 3.12 — Đăng nhập bằng Google OAuth 2.0 thật, phòng HCMUTE nạp sẵn.
+ * Dữ liệu được đệm và đồng bộ gần thời gian thực (xem mục 3B): mở app nhanh, người khác
+ * đặt lịch hay sửa tay trong Google Sheet thì trang đang mở tự cập nhật sau vài giây.
  * Làm lại dữ liệu từ đầu: chạy taoSheetMoi() (không xoá tay file Google Sheet).
  * kiemTraCauHinh() cho biết link chính (/exec) có đang chạy đúng phiên bản không.
  *
@@ -28,7 +30,7 @@
 var SESSION_HOURS = 12;              // Session token sống bao lâu
 var SCRIPT_PROPS = PropertiesService.getScriptProperties();
 var APP_TIME_ZONE = 'Asia/Ho_Chi_Minh';
-var APP_VERSION = '3.11';
+var APP_VERSION = '3.12';
 var DEFAULT_SCHOOL = 'Trường Đại học Công nghệ Kỹ thuật TP.HCM';
 var TEXT_SETTINGS = ['APP_NAME', 'ORG_NAME', 'SCHOOL_NAME'];   // luôn là chữ, kể cả khi gõ toàn số
 
@@ -239,12 +241,22 @@ var AUTH = (function () {
   function encodeStr(s) { return b64u(Utilities.newBlob(s).getBytes()); }
   function decodeStr(s) { return Utilities.newBlob(Utilities.base64DecodeWebSafe(pad4(String(s)))).getDataAsString(); }
 
+  /*
+   * Khoá ký phiên. Mỗi nhịp 15 giây đều phải kiểm chữ ký, nên khoá được giữ thêm trong
+   * CacheService (chỉ code của dự án này đọc được) để đỡ tốn hạn mức đọc Script Properties
+   * (tài khoản thường: 50.000 lượt/ngày). dangXuatTatCa() xoá cả hai nơi.
+   */
+  var SECRET_CACHE = 'lhn_session_secret';
   function sessionSecret() {
-    var s = prop_('SESSION_SECRET');
+    var cache = null, s = '';
+    try { cache = CacheService.getScriptCache(); s = cache.get(SECRET_CACHE) || ''; } catch (e) {}
+    if (s) return s;
+    s = prop_('SESSION_SECRET');
     if (!s) {
       s = Utilities.getUuid() + '-' + Utilities.getUuid();
       SCRIPT_PROPS.setProperty('SESSION_SECRET', s);
     }
+    try { if (cache) cache.put(SECRET_CACHE, s, 21600); } catch (e) {}
     return s;
   }
   function sign(payload) {
@@ -374,11 +386,16 @@ var AUTH = (function () {
 /* =====================================================================
    3. GOOGLE SHEETS DATABASE LAYER
    ===================================================================== */
+var SS_OPEN_ = { id: '', ss: null };   // Sheet đã mở trong lượt chạy này (mỗi lần openById mất vài trăm ms)
+
 function getSpreadsheet_() {
   var sheetId = prop_('SPREADSHEET_ID');
   if (sheetId) {
+    if (SS_OPEN_.id === sheetId) return SS_OPEN_.ss;
     try {
-      return SpreadsheetApp.openById(sheetId);
+      var opened = SpreadsheetApp.openById(sheetId);
+      SS_OPEN_ = { id: sheetId, ss: opened };
+      return opened;
     } catch (e) {
       throw new Error('Không mở được Google Sheet (ID: ' + sheetId + '). File có thể đã bị xoá. Quản trị viên mở Apps Script, chạy hàm taoSheetMoi() để tạo sheet mới.');
     }
@@ -390,13 +407,14 @@ function getSpreadsheet_() {
   return ss;
 }
 
-function getSheetData_(sheetName, ss) {
+/** Đọc một trang tính: { rows, headers }, hoặc null nếu chưa có trang đó. */
+function readSheet_(sheetName, ss) {
   ss = ss || getSpreadsheet_();
   var sheet = ss.getSheetByName(sheetName);
-  if (!sheet) return [];
+  if (!sheet) return null;
   var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
-  if (lastRow < 2 || lastCol < 1) return [];
+  if (lastRow < 1 || lastCol < 1) return { rows: [], headers: [] };
   var vals = sheet.getRange(1, 1, lastRow, lastCol).getValues();
   var headers = vals[0].map(function (h) { return String(h).trim(); });
   var rows = [];
@@ -407,46 +425,87 @@ function getSheetData_(sheetName, ss) {
     }
     rows.push(row);
   }
-  return rows;
+  return { rows: rows, headers: headers };
 }
 
-function saveSheetData_(sheetName, rows, headers, ss) {
-  ss = ss || getSpreadsheet_();
-  var sheet = ss.getSheetByName(sheetName);
-  if (!sheet) sheet = ss.insertSheet(sheetName);
-  sheet.clearContents();
+function getSheetData_(sheetName, ss) {
+  var t = readSheet_(sheetName, ss);
+  return t ? t.rows : [];
+}
 
-  var matrix = [headers];
-  if (rows && rows.length > 0) {
-    for (var i = 0; i < rows.length; i++) {
-      var line = [];
-      for (var j = 0; j < headers.length; j++) {
-        var val = rows[i][headers[j]];
-        if (val === undefined || val === null) val = '';
-        // Nội dung bắt đầu bằng "=" phải được lưu như văn bản, không phải công thức Sheet.
-        if (typeof val === 'string' && val.charAt(0) === '=') val = "'" + val;
-        line.push(val);
-      }
-      matrix.push(line);
-    }
+/**
+ * Các bảng dữ liệu và cột được ghi. saveDatabase_ chỉ ghi lại bảng nào thực sự thay đổi
+ * (so với lúc đọc), nên VD bấm "Tham dự" chỉ ghi bảng Attendance thay vì cả 6 bảng.
+ */
+var TABLES = [
+  { key: 'users', sheet: 'Users', headers: ['email', 'name', 'unit', 'role', 'status', 'createdAt', 'photo', 'avatar', 'showPresence'] },
+  { key: 'rooms', sheet: 'Rooms', headers: ['id', 'name', 'capacity', 'building', 'equipment', 'online', 'active', 'sample'] },
+  { key: 'meetings', sheet: 'Meetings', headers: ['id', 'seriesId', 'requestId', 'title', 'desc', 'date', 'start', 'end', 'room', 'chair', 'secretary', 'members', 'remind', 'status', 'createdBy', 'createdAt', 'updatedAt', 'minutes', 'minutesBy', 'minutesAt', 'cancelReason'] },
+  { key: 'docs', sheet: 'Docs', headers: ['id', 'meetingId', 'name', 'url'] },
+  { key: 'attendance', sheet: 'Attendance', headers: ['meetingId', 'email', 'response', 'note', 'updatedAt'] },
+  { key: 'settings', sheet: 'Settings', headers: ['key', 'value'] }
+];
+
+/** Nội dung sẽ ghi xuống một bảng, dạng ma trận theo đúng thứ tự cột (chưa kèm dòng tiêu đề). */
+function tableMatrix_(t, db) {
+  var rows = db[t.key] || [];
+  if (t.key === 'settings') {
+    rows = Object.keys(rows).map(function (k) { return { key: k, value: String(rows[k]) }; });
+  } else if (t.key === 'meetings') {
+    rows = rows.map(function (m) { var copy = Object.assign({}, m); copy.members = JSON.stringify(copy.members || []); return copy; });
   }
-  var target = sheet.getRange(1, 1, matrix.length, headers.length);
+  return rows.map(function (r) {
+    return t.headers.map(function (h) {
+      var v = r[h];
+      return v === undefined || v === null ? '' : v;
+    });
+  });
+}
+
+function writeTable_(t, matrix, ss) {
+  var sheet = ss.getSheetByName(t.sheet);
+  if (!sheet) sheet = ss.insertSheet(t.sheet);
+  sheet.clearContents();
+  var out = [t.headers].concat(matrix.map(function (line) {
+    // Nội dung bắt đầu bằng "=" phải được lưu như văn bản, không phải công thức Sheet.
+    return line.map(function (v) { return typeof v === 'string' && v.charAt(0) === '=' ? "'" + v : v; });
+  }));
+  var target = sheet.getRange(1, 1, out.length, t.headers.length);
   // Giữ chuỗi ngày/giờ và nội dung người dùng ở dạng văn bản; không để Sheets
   // tự đổi 07:00 thành ngày 30/12/1899 hoặc diễn giải tiêu đề như công thức.
   target.setNumberFormat('@');
-  target.setValues(matrix);
+  target.setValues(out);
 }
 
+/**
+ * Đọc thẳng từ Google Sheet (chậm, 1–3 giây). Thao tác ghi luôn dùng hàm này, trong khoá.
+ * Chỉ để hiển thị thì dùng cachedDb_() (mục 3B). Nhật ký (Logs) không đọc ở đây: xem api_getLogs.
+ */
 function getDatabase_(ss) {
   ss = ss || getSpreadsheet_();
   var timeZone = sheetTimeZone_(ss);
-  var usersRaw = getSheetData_('Users', ss);
-  var roomsRaw = getSheetData_('Rooms', ss);
-  var meetingsRaw = getSheetData_('Meetings', ss);
-  var docsRaw = getSheetData_('Docs', ss);
-  var attendanceRaw = getSheetData_('Attendance', ss);
-  var settingsRaw = getSheetData_('Settings', ss);
-  var logsRaw = getSheetData_('Logs', ss);
+  var raw = {};
+  TABLES.forEach(function (t) { raw[t.sheet] = readSheet_(t.sheet, ss); });
+  var db = parseDb_(function (name) { return raw[name] ? raw[name].rows : []; }, timeZone);
+  // Dấu vết từng bảng lúc đọc: lúc lưu, bảng nào không đổi thì khỏi ghi.
+  // Trang tính chưa có hoặc sai cột thì không có dấu vết, nên luôn được ghi lại đủ cột.
+  var sig = {};
+  TABLES.forEach(function (t) {
+    var r = raw[t.sheet];
+    if (r && r.headers.join('\u0001') === t.headers.join('\u0001')) sig[t.key] = JSON.stringify(tableMatrix_(t, db));
+  });
+  setHidden_(db, '_sig', sig);
+  return db;
+}
+
+/** Chuẩn hoá các dòng đọc từ trang tính thành dữ liệu app. rowsOf(tênTrang) -> mảng dòng. */
+function parseDb_(rowsOf, timeZone) {
+  var usersRaw = rowsOf('Users');
+  var roomsRaw = rowsOf('Rooms');
+  var meetingsRaw = rowsOf('Meetings');
+  var docsRaw = rowsOf('Docs');
+  var attendanceRaw = rowsOf('Attendance');
+  var settingsRaw = rowsOf('Settings');
 
   var settings = {
     APP_NAME: 'Lịch Họp Nhóm',
@@ -557,32 +616,200 @@ function getDatabase_(ss) {
 
   return {
     users: users, rooms: rooms, meetings: meetings,
-    docs: docs, attendance: attendance, settings: settings, logs: logsRaw
+    docs: docs, attendance: attendance, settings: settings
   };
 }
 
+/**
+ * Lưu dữ liệu. Luôn gọi trong khoá ghi (locked_), với db vừa đọc bằng getDatabase_ trong khoá đó.
+ * Chỉ ghi các bảng đã thay đổi; ghi xong cập nhật luôn bản đệm để mọi người thấy ngay.
+ */
 function saveDatabase_(db, ss) {
   ss = ss || getSpreadsheet_();
   dirInvalidate_();
-  saveSheetData_('Users', db.users, ['email', 'name', 'unit', 'role', 'status', 'createdAt', 'photo', 'avatar', 'showPresence'], ss);
-  saveSheetData_('Rooms', db.rooms, ['id', 'name', 'capacity', 'building', 'equipment', 'online', 'active', 'sample'], ss);
-
-  var meetHeaders = ['id', 'seriesId', 'requestId', 'title', 'desc', 'date', 'start', 'end', 'room', 'chair', 'secretary', 'members', 'remind', 'status', 'createdBy', 'createdAt', 'updatedAt', 'minutes', 'minutesBy', 'minutesAt', 'cancelReason'];
-  var meetRows = db.meetings.map(function (m) {
-    var copy = Object.assign({}, m);
-    copy.members = JSON.stringify(copy.members || []);
-    return copy;
+  var sig = db._sig || {}, next = {}, lines = {}, wrote = 0;
+  TABLES.forEach(function (t) {
+    var matrix = tableMatrix_(t, db), s = JSON.stringify(matrix);
+    next[t.key] = s;
+    lines[t.sheet] = matrix.map(function (line) {
+      var row = {};
+      t.headers.forEach(function (h, j) { row[h] = line[j]; });
+      return row;
+    });
+    if (sig[t.key] === s) return;
+    writeTable_(t, matrix, ss);
+    wrote++;
   });
-  saveSheetData_('Meetings', meetRows, meetHeaders, ss);
-
-  saveSheetData_('Docs', db.docs, ['id', 'meetingId', 'name', 'url'], ss);
-  saveSheetData_('Attendance', db.attendance, ['meetingId', 'email', 'response', 'note', 'updatedAt'], ss);
-
-  var settingRows = Object.keys(db.settings).map(function (k) {
-    return { key: k, value: String(db.settings[k]) };
-  });
-  saveSheetData_('Settings', settingRows, ['key', 'value'], ss);
+  setHidden_(db, '_sig', next);
+  if (wrote) SpreadsheetApp.flush();   // ghi xong hẳn rồi mới đánh dấu giờ cho bản đệm (xem sheetEditCheck_)
+  var sid = ss.getId();
+  if (sid === prop_('SPREADSHEET_ID')) {
+    // Đệm đúng như sẽ đọc lại từ Sheet (đủ cột, đúng kiểu), để mã rev không lệch giữa hai cách
+    var clean = parseDb_(function (name) { return lines[name] || []; }, APP_TIME_ZONE);
+    setHidden_(db, '_rev', dbCacheWrite_(clean, sid));
+  }
   dirInvalidate_();   // xoá lần nữa: nhịp "đang online" chạy song song có thể vừa đệm lại danh bạ cũ
+}
+
+/* =====================================================================
+   3B. BẢN ĐỆM DỮ LIỆU & ĐỒNG BỘ GẦN THỜI GIAN THỰC
+   ---------------------------------------------------------------------
+   Đọc 6 bảng Google Sheet mất 1–3 giây. Bản đã đọc được nén, chia khúc và
+   giữ trong CacheService, nên mở app và các nhịp làm mới chỉ đọc bản đệm.
+   - Ghi qua app (saveDatabase_): bản đệm được thay ngay, không phải đọc lại.
+   - Sửa tay trong Google Sheet: phát hiện qua giờ sửa file trên Drive (tối đa
+     mỗi 15 giây kiểm tra một lần), hoặc tức thì qua onEdit nếu script nằm
+     trong file sheet. Có thay đổi thì bỏ bản đệm, lần đọc sau lấy từ Sheet.
+   - Mỗi bản dữ liệu có một mã (rev, băm từ nội dung). Trình duyệt gửi mã
+     đang có mỗi ~15 giây (api_heartbeat); khác mã thì nhận dữ liệu mới.
+   - Thao tác ghi KHÔNG dùng bản đệm: luôn đọc thẳng từ Sheet trong khoá.
+   ===================================================================== */
+var DB_CACHE = 'lhn_db1';            // khoá mô tả bản đệm; các khúc: lhn_db1_<rev>_<i>
+var DB_CACHE_TTL = 21600;            // 6 giờ, tối đa của CacheService
+var DB_CHUNK = 90000;                // ký tự mỗi khúc (giới hạn 100 KB/khoá)
+var SHEET_CHECK_SEC = 15;            // bao lâu hỏi Drive một lần xem Sheet có bị sửa tay
+
+/** Gắn thuộc tính ẩn (không đi vào JSON gửi xuống trình duyệt hay bản đệm). */
+function setHidden_(obj, key, value) {
+  Object.defineProperty(obj, key, { value: value, writable: true, configurable: true, enumerable: false });
+}
+
+/** Nội dung dữ liệu dạng JSON: dùng cho bản đệm và để băm ra mã rev. */
+function dbJson_(db) {
+  return JSON.stringify({
+    users: db.users, rooms: db.rooms, meetings: db.meetings,
+    docs: db.docs, attendance: db.attendance, settings: db.settings
+  });
+}
+
+function dbRev_(json) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, json, Utilities.Charset.UTF_8);
+  return Utilities.base64EncodeWebSafe(bytes).slice(0, 12);
+}
+
+function dbMeta_() {
+  try { return JSON.parse(CacheService.getScriptCache().get(DB_CACHE) || 'null'); } catch (e) { return null; }
+}
+
+function dbChunkKeys_(meta) {
+  var keys = [];
+  for (var i = 0; i < meta.n; i++) keys.push(DB_CACHE + '_' + meta.rev + '_' + i);
+  return keys;
+}
+
+/** Ghi bản đệm. Chỉ gọi khi đang giữ khoá ghi, để không đè bản mới hơn bằng bản cũ. */
+function dbCacheWrite_(db, sid) {
+  var json = dbJson_(db);
+  var rev = dbRev_(json);
+  setHidden_(db, '_rev', rev);
+  var cache = CacheService.getScriptCache();
+  try {
+    var old = dbMeta_();
+    var b64 = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(json, 'application/json')).getBytes());
+    var meta = { rev: rev, n: 0, at: Date.now(), sid: sid };
+    var put = {};
+    for (var i = 0; i < b64.length; i += DB_CHUNK) put[DB_CACHE + '_' + rev + '_' + (meta.n++)] = b64.slice(i, i + DB_CHUNK);
+    put[DB_CACHE] = JSON.stringify(meta);
+    cache.putAll(put, DB_CACHE_TTL);
+    if (old && old.rev !== rev && old.n) cache.removeAll(dbChunkKeys_(old));
+  } catch (e) {
+    try { cache.remove(DB_CACHE); } catch (x) {}
+  }
+  return rev;
+}
+
+function dbCacheRead_() {
+  try {
+    var meta = dbMeta_();
+    if (!meta || !meta.n) return null;
+    var keys = dbChunkKeys_(meta), got = CacheService.getScriptCache().getAll(keys), b64 = '';
+    for (var i = 0; i < keys.length; i++) {
+      if (!got[keys[i]]) return null;
+      b64 += got[keys[i]];
+    }
+    var json = Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(b64), 'application/x-gzip')).getDataAsString();
+    var db = JSON.parse(json);
+    setHidden_(db, '_rev', meta.rev);
+    return db;
+  } catch (e) {
+    return null;
+  }
+}
+
+function dbCacheClear_() {
+  try { CacheService.getScriptCache().removeAll([DB_CACHE, DB_CACHE + '_chk']); } catch (e) {}
+  dirInvalidate_();
+}
+
+/**
+ * Sheet bị sửa tay (hoặc bị xoá, hoặc Script Property SPREADSHEET_ID bị đổi) sau lần lưu bản đệm
+ * thì bỏ bản đệm. Hỏi Drive tối đa mỗi SHEET_CHECK_SEC giây một lần cho cả app.
+ */
+function sheetEditCheck_() {
+  var cache = CacheService.getScriptCache();
+  try {
+    if (cache.get(DB_CACHE + '_chk')) return;
+    cache.put(DB_CACHE + '_chk', '1', SHEET_CHECK_SEC);
+  } catch (e) { return; }
+  var meta = dbMeta_();
+  if (!meta) return;
+  var stale = meta.sid !== prop_('SPREADSHEET_ID');
+  if (!stale) {
+    try {
+      var f = DriveApp.getFileById(meta.sid);
+      stale = f.isTrashed() || f.getLastUpdated().getTime() > meta.at;
+    } catch (e) {
+      stale = true;   // không mở được file: để lần đọc sau báo lỗi rõ ràng
+    }
+  }
+  if (stale) { try { cache.remove(DB_CACHE); } catch (e) {} }
+}
+
+/**
+ * Dữ liệu để hiển thị: lấy từ bản đệm, hết đệm thì đọc Sheet rồi đệm lại.
+ * Đọc lại trong khoá, để bản đệm không bị một lượt đọc chậm đè lên bản vừa lưu.
+ */
+function cachedDb_() {
+  sheetEditCheck_();
+  var db = dbCacheRead_();
+  if (db) return db;
+  var lock = LockService.getScriptLock();
+  var locked = false;
+  try { locked = lock.tryLock(8000); } catch (e) {}
+  try {
+    if (locked) {
+      db = dbCacheRead_();   // có thể người khác vừa nạp xong trong lúc chờ khoá
+      if (db) return db;
+    }
+    var ss = getSpreadsheet_();
+    db = getDatabase_(ss);
+    if (locked) dbCacheWrite_(db, ss.getId());
+    else setHidden_(db, '_rev', dbRev_(dbJson_(db)));   // đang bận: dùng tạm, không đệm
+    return db;
+  } finally {
+    if (locked) lock.releaseLock();
+  }
+}
+
+/**
+ * Trigger đơn giản: chỉ chạy khi script nằm trong file Google Sheet (Tiện ích mở rộng > Apps Script).
+ * Sửa tay một ô thì bỏ bản đệm, trang đang mở sẽ nhận dữ liệu mới ở nhịp làm mới kế tiếp.
+ */
+function onEdit(e) {
+  try { CacheService.getScriptCache().remove(DB_CACHE); } catch (err) {}
+}
+
+/**
+ * Chạy trong trình soạn thảo nếu vừa sửa Google Sheet mà app chưa thấy thay đổi
+ * (bình thường app tự nhận sau khoảng 15–30 giây, không cần chạy hàm này).
+ */
+function lamMoiDuLieu() {
+  dbCacheClear_();
+  var db = cachedDb_();
+  var msg = 'Đã đọc lại Google Sheet: ' + db.users.length + ' thành viên, ' + db.rooms.length + ' phòng, ' +
+    db.meetings.length + ' cuộc họp. Trang app đang mở sẽ tự cập nhật trong khoảng 15 giây.';
+  Logger.log(msg);
+  return msg;
 }
 
 function addLog_(email, action, mid, detail) {
@@ -759,11 +986,14 @@ function syncUser_(profile, db) {
   }
 }
 
-/** Đọc token -> trả về { db, user, email }. Ném lỗi nếu chưa đăng nhập. */
-function ctx_(token, needActive) {
+/**
+ * Đọc token -> trả về { db, user, email }. Ném lỗi nếu chưa đăng nhập.
+ * readOnly = true: chỉ kiểm tra quyền, không sửa dữ liệu, nên đọc bản đệm cho nhanh.
+ */
+function ctx_(token, needActive, readOnly) {
   var s = AUTH.readToken(token);
   if (!s) throw new Error('Phiên đăng nhập đã hết hạn. Hãy tải lại trang và đăng nhập lại.');
-  var db = getDatabase_();
+  var db = readOnly ? cachedDb_() : getDatabase_();
   var user = null;
   db.users.forEach(function (u) { if (u.email === s.email) user = u; });
   if (needActive !== false) {
@@ -798,6 +1028,7 @@ function appPayload_(db, user) {
     today: Utilities.formatDate(now, APP_TIME_ZONE, 'yyyy-MM-dd'),
     nowMin: nowTime[0] * 60 + nowTime[1],
     version: APP_VERSION,
+    rev: db._rev || '',
     users: user.role === 'admin' ? db.users : db.users.filter(function (x) { return x.status === 'active'; }),
     rooms: db.rooms,
     meetings: db.meetings,
@@ -818,7 +1049,7 @@ function api_bootstrap(token) {
       };
     }
 
-    var db = getDatabase_();
+    var db = cachedDb_();
     // Màn hình chưa đăng nhập chỉ cần tên app/trường, không lộ lịch họp hay cài đặt khác
     var brand = publicSettings_(db.settings);
 
@@ -1141,7 +1372,7 @@ function docsFolder_() {
 }
 
 function api_uploadDoc(token, fileData) {
-  var c = ctx_(token);
+  var c = ctx_(token, true, true);
   var bytes = Utilities.base64Decode(String((fileData && fileData.data) || ''));
   if (!bytes || !bytes.length) throw new Error('Không đọc được nội dung tệp.');
   if (bytes.length > 10 * 1024 * 1024) throw new Error('Tệp tối đa 10 MB. Hãy tải lên Drive rồi dán link.');
@@ -1497,10 +1728,22 @@ function api_saveSettings(token, x) {
   return { ok: true, data: api_bootstrap(token) };
 }
 
+/** Nhật ký mới nhất. Chỉ đọc n dòng cuối, vì bảng Logs dài ra mỗi ngày. */
 function api_getLogs(token, n) {
-  var c = ctx_(token);
+  var c = ctx_(token, true, true);
   requireAdmin_(c);
-  return getSheetData_('Logs').reverse().slice(0, n || 100);
+  n = Math.min(Math.max(Number(n) || 100, 1), 500);
+  var sheet = getSpreadsheet_().getSheetByName('Logs');
+  if (!sheet) return [];
+  var last = sheet.getLastRow(), cols = Math.max(sheet.getLastColumn(), 1);
+  if (last < 2) return [];
+  var headers = sheet.getRange(1, 1, 1, cols).getValues()[0].map(function (h) { return String(h).trim(); });
+  var from = Math.max(2, last - n + 1);
+  return sheet.getRange(from, 1, last - from + 1, cols).getValues().map(function (line) {
+    var row = {};
+    headers.forEach(function (h, j) { row[h] = line[j]; });
+    return row;
+  }).reverse();
 }
 
 /* =====================================================================
@@ -1523,7 +1766,7 @@ function directory_() {
   if (raw) {
     try { return JSON.parse(raw); } catch (e) {}
   }
-  var db = getDatabase_();
+  var db = cachedDb_();
   var dir = {};
   db.users.forEach(function (u) {
     dir[u.email] = {
@@ -1568,11 +1811,12 @@ function presenceTouch_(email, on) {
 }
 
 /**
- * Gọi định kỳ từ trình duyệt. Trả về danh sách người đang mở trang.
- * Cố tình không ném lỗi: heartbeat hỏng thì chỉ mất danh sách online,
+ * Gọi định kỳ (~15 giây) từ trình duyệt. Trả về danh sách người đang mở trang.
+ * rev: mã dữ liệu trình duyệt đang có. Khác mã hiện tại thì trả kèm dữ liệu mới (data).
+ * Cố tình không ném lỗi: heartbeat hỏng thì chỉ mất danh sách online / một nhịp làm mới,
  * không được phép làm hỏng trải nghiệm chính.
  */
-function api_heartbeat(token) {
+function api_heartbeat(token, rev) {
   try {
     var s = AUTH.readToken(token);
     if (!s) return { ok: false, online: [] };
@@ -1581,7 +1825,9 @@ function api_heartbeat(token) {
     var me = dir[s.email];
     if (!me || me.status !== 'active') return { ok: false, online: [] };
 
-    var map = presenceTouch_(s.email, me.showPresence !== false);
+    // Chỉ ghi "còn đây" khi mốc cũ đã quá 30 giây (hoặc vừa bật/tắt hiển thị), đỡ tranh khoá với thao tác lưu
+    var on = me.showPresence !== false, map = presenceRead_(), stamp = map[s.email];
+    if (on !== !!stamp || (on && Date.now() - Number(stamp) > 30000)) map = presenceTouch_(s.email, on);
 
     var out = [];
     Object.keys(map).forEach(function (email) {
@@ -1597,7 +1843,19 @@ function api_heartbeat(token) {
     });
     out.sort(function (a, b) { return String(a.name).localeCompare(String(b.name), 'vi'); });
 
-    return { ok: true, online: out, visible: me.showPresence !== false };
+    var res = { ok: true, online: out, visible: me.showPresence !== false };
+    if (rev !== undefined && rev !== null) {
+      try {
+        var db = cachedDb_();
+        res.rev = db._rev || '';
+        if (String(rev) !== res.rev) {
+          var u = null;
+          db.users.forEach(function (x) { if (x.email === s.email) u = x; });
+          if (u && u.status === 'active') res.data = appPayload_(db, u);
+        }
+      } catch (e) {}
+    }
+    return res;
   } catch (err) {
     return { ok: false, online: [], error: (err && err.message) ? err.message : String(err) };
   }
@@ -1788,6 +2046,7 @@ function taoSheetMoi() {
     ss = SpreadsheetApp.create('CSDL Lịch Họp Nhóm (' + Utilities.formatDate(new Date(), APP_TIME_ZONE, 'dd/MM/yyyy') + ')');
     SCRIPT_PROPS.setProperty('SPREADSHEET_ID', ss.getId());
     SCRIPT_PROPS.deleteProperty('HCMUTE_SEED');
+    dbCacheClear_();
     myEmail = initData_(ss);
     // Bỏ trang tính trống mặc định của file mới
     var ours = ['Users', 'Rooms', 'Meetings', 'Docs', 'Attendance', 'Settings', 'Logs'];
@@ -1866,6 +2125,11 @@ function kiemTraCauHinh() {
     'ADMIN_EMAIL        : ' + (prop_('ADMIN_EMAIL') || '(chưa có)'),
     'SESSION_SECRET     : ' + (prop_('SESSION_SECRET') ? '(đã có)' : '(sẽ tự tạo khi đăng nhập lần đầu)'),
     'Phòng HCMUTE       : ' + ({ '1': 'đã nạp', off: 'đã tắt tự nạp' }[prop_('HCMUTE_SEED')] || 'chưa nạp (tự nạp khi mở app lần tới)'),
+    'Bản đệm dữ liệu    : ' + (function () {
+      var m = dbMeta_();
+      return m ? 'có (mã ' + m.rev + ', lưu lúc ' + Utilities.formatDate(new Date(m.at), APP_TIME_ZONE, 'HH:mm:ss dd/MM') + ')'
+        : 'chưa có (tự tạo khi mở app)';
+    })() + '. Sửa tay Google Sheet: app tự nhận sau ~15–30 giây; cần ngay thì chạy lamMoiDuLieu().',
     '',
     'Code trong trình soạn thảo: bản ' + APP_VERSION,
     'Link chính đang chạy      : ' + (pr.via === 'login'
@@ -1898,6 +2162,7 @@ function kiemTraCauHinh() {
 /** Xoá toàn bộ phiên đăng nhập của mọi người (dùng khi nghi ngờ lộ token). */
 function dangXuatTatCa() {
   SCRIPT_PROPS.deleteProperty('SESSION_SECRET');
+  try { CacheService.getScriptCache().remove('lhn_session_secret'); } catch (e) {}
   Logger.log('Đã huỷ mọi phiên đăng nhập. Mọi người cần đăng nhập lại.');
   return 'OK';
 }

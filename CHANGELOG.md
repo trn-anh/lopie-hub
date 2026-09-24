@@ -10,6 +10,17 @@ Nhật ký thay đổi của repo. Mục mới nhất nằm trên cùng.
 
 **Loại:** `thêm` · `sửa` · `lỗi` · `nội dung` · `giao diện` · `dọn`
 
+## 2026-09-24
+
+- [Claude] sửa: `apps-script/lich-hop-nhom/`: bản 3.12, nhanh hơn và tự đồng bộ với Google Sheet
+  - Bản đệm dữ liệu trong CacheService (nén, chia khúc, mã `rev` băm từ nội dung); mở app và nhịp làm mới không đọc Sheet; thao tác ghi vẫn đọc thẳng Sheet trong khoá
+  - `saveDatabase_` chỉ ghi bảng đã thay đổi (hoặc thiếu cột), rồi đệm lại bản đã chuẩn hoá; `getDatabase_` không đọc bảng Logs; `api_getLogs` chỉ đọc n dòng cuối; mở Google Sheet một lần mỗi lượt chạy
+  - Đồng bộ: `api_heartbeat(token, rev)` mỗi 15 giây khi tab mở, trả dữ liệu mới khi khác mã; trình duyệt áp êm (chờ đóng hộp thoại, gõ xong, thả chuột), giữ vị trí cuộn và khung chi tiết đang mở
+  - Sửa tay trong Sheet: phát hiện qua giờ sửa file Drive (tối đa mỗi 15 giây) hoặc `onEdit` khi script nằm trong file sheet; thêm `lamMoiDuLieu()`; khoá ký phiên đệm trong CacheService để nhịp không tốn hạn mức Script Properties
+- [Claude] lỗi: `apps-script/lich-hop-nhom/`: bản 3.12, lịch trông "trống" khi đang lọc khu
+  - Cuộc họp Online luôn hiện dù lọc khu; bỏ ô "Google Meet" khỏi bộ lọc (kể cả bộ lọc đã lưu từ bản cũ)
+  - Lịch tuần / bảng tuần: ngày có họp ở khu đang ẩn ghi "N cuộc họp ở khu khác", bấm để xem tất cả khu
+
 ## 2026-09-23
 
 - [Claude] lỗi: `apps-script/lich-hop-nhom/`: bản 3.11, hai người lưu cùng lúc không còn đè mất dữ liệu của nhau

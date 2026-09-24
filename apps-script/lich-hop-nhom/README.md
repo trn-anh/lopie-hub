@@ -15,7 +15,7 @@ Làm đủ 4 bước mỗi lần dán code mới. Chỉ dán code mà bỏ bư�
 1. Mở dự án Apps Script, dán đè toàn bộ nội dung `Code.gs` và `Index.html`, bấm Lưu.
 2. Chọn **Triển khai (Deploy) → Quản lý triển khai (Manage deployments)**. Chọn triển khai có **Mã triển khai (Deployment ID) trùng mã in ở dòng "Mã triển khai link chính"** của `kiemTraCauHinh()`.
 3. Bấm **bút chì (Edit) → Phiên bản (Version): Phiên bản mới (New version) → Triển khai (Deploy)**. Link `/exec` giữ nguyên, không cần cấu hình lại OAuth.
-4. Chạy `kiemTraCauHinh()`: dòng **Link chính đang chạy** phải có dấu ✓. Hoặc mở **link chính**: chân trang đăng nhập phải ghi **Phiên bản 3.11**.
+4. Chạy `kiemTraCauHinh()`: dòng **Link chính đang chạy** phải có dấu ✓. Hoặc mở **link chính**: chân trang đăng nhập phải ghi **Phiên bản 3.12**.
 
 > **Vì sao đăng xuất rồi đăng nhập lại thì thấy giao diện cũ:**
 > - Link thử (Test deployments, đuôi `/dev`) luôn chạy code mới nhất, nhưng chỉ chủ dự án mở được.
@@ -53,6 +53,29 @@ Thay vào đó, trong Apps Script chọn hàm **`taoSheetMoi`** rồi bấm **Ch
 3. Thêm link đó vào Google Cloud Console → Credentials → OAuth client → **Authorized redirect URIs**.
 
 Không cần nhập lại client secret.
+
+## Bản 3.12: nhanh hơn, tự đồng bộ với Google Sheet
+
+**Vì sao lịch từng trông như "mất kết nối":** dữ liệu vẫn còn nguyên. Bộ lọc khu (được nhớ từ lần trước) đang ẩn gần hết các khu, ẩn luôn cả phòng Online, nên lịch trống trơn trong khi thanh nhắc vẫn báo có cuộc họp. Từ bản này:
+- Cuộc họp **Online luôn hiện**, dù đang lọc khu. Bộ lọc không còn ô "Google Meet".
+- Ngày có cuộc họp ở khu đang ẩn thì ghi rõ **"N cuộc họp ở khu khác"** (lịch tuần, bảng tuần), không ghi "Trống". Bấm vào là xem tất cả khu.
+
+**Nhanh hơn** (giao diện giữ nguyên):
+- Dữ liệu đã đọc được giữ trong bộ nhớ đệm của Apps Script, nên mở app không phải đọc lại 6 bảng Google Sheet.
+- Lưu chỉ ghi bảng thực sự thay đổi. VD bấm "Tham dự" chỉ ghi bảng Attendance thay vì cả 6 bảng.
+- Nhật ký (Logs) không còn bị đọc mỗi lần mở app; mục Nhật ký chỉ đọc các dòng mới nhất.
+
+**Tự đồng bộ gần thời gian thực:**
+- Khi tab đang mở, cứ khoảng 15 giây trang hỏi máy chủ có dữ liệu mới không. Người khác đặt lịch, phản hồi, huỷ… thì trang tự cập nhật, không cần tải lại, không hiện thông báo.
+- Đang điền form, đang mở hộp thoại hay đang kéo thả thì trang chờ bạn xong mới cập nhật. Khung chi tiết cuộc họp đang mở cũng tự cập nhật số người tham dự / vắng.
+- **Sửa tay trong Google Sheet:** app tự nhận sau khoảng 15–30 giây. Cần ngay thì chạy hàm `lamMoiDuLieu()`. `kiemTraCauHinh()` có dòng "Bản đệm dữ liệu".
+- Tab bị ẩn thì ngừng hỏi, đỡ tốn hạn mức Apps Script. Bản này không cần cấp thêm quyền mới.
+
+**Khi sửa tay Google Sheet, giữ đúng khuôn để app đọc được:**
+- Không đổi tên trang tính (Users, Rooms, Meetings, Docs, Attendance, Settings, Logs) và dòng tiêu đề (dòng 1).
+- Ngày ghi dạng `2026-09-24`, giờ dạng `09:00`. Mã phòng ở cột `room` của Meetings phải có trong cột `id` của Rooms.
+- Cột `members` của Meetings là danh sách email dạng `["a@gmail.com","b@gmail.com"]`.
+- Huỷ cuộc họp thì đổi `status` thành `cancelled` thay vì xoá dòng, để còn lịch sử.
 
 ## Bản 3.11: an toàn khi nhiều người cùng lưu, gọn hơn khi sheet còn trống
 
