@@ -9,6 +9,7 @@ Mỗi trang là một file HTML tự chạy, xuất bản miễn phí bằng Git
 
 | Trang | Nhóm | Làm bởi | Cập nhật |
 |---|---|---|---|
+| [ScholarLink · Hồ sơ khoa học](https://trn-anh.github.io/lopie-hub/qtda/scholarlink/Index.html) (demo) | Quản trị dự án · Apps Script | Claude | 11/10/2026 |
 | [Sổ tay Bài toán đối ngẫu](https://trn-anh.github.io/lopie-hub/toi-uu-hoa/doi-ngau/) | Tối ưu hóa · Chương 2 | Claude | 11/09/2026 |
 
 ## Cấu trúc
@@ -16,6 +17,7 @@ Mỗi trang là một file HTML tự chạy, xuất bản miễn phí bằng Git
 ```
 index.html                  trang chủ hub
 toi-uu-hoa/doi-ngau/        sổ tay bài toán đối ngẫu
+qtda/scholarlink/           web app Apps Script ScholarLink (xem README riêng)
 _template/                  khung trang mới
 tools/                      script Python kiểm tra đáp án
 AI-HANDOFF.md               quy ước cho mọi AI khi sửa repo
