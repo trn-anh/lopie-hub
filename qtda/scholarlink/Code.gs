@@ -1839,19 +1839,27 @@ function defaultCatalog_() {
   SL.PROJECT_LEVELS.forEach((l, i) => rows.push({ type: 'projectLevel', code: 'L' + (i + 1), label: l, rank: String(i), active: 'true' }));
   return rows;
 }
-/** BƯỚC 2 — điền 3 giá trị thật rồi chạy MỘT lần; chạy xong xóa lại về rỗng. KHÔNG commit secret lên GitHub. */
+/**
+ * BƯỚC 2 — CẤU HÌNH ĐĂNG NHẬP GOOGLE
+ * 1. Dán Client ID và Client secret (lấy ở Google Cloud → Google Auth Platform → Clients) vào giữa hai dấu nháy.
+ * 2. Link web app: để trống thì tự lấy link /exec của bản triển khai hiện tại.
+ * 3. Chọn hàm napCauHinh → Chạy. Nhật ký phải hiện "Đã lưu cấu hình OAuth".
+ * 4. Chạy xong xoá Client secret về '' rồi Lưu. KHÔNG đưa secret lên GitHub.
+ */
 function napCauHinh() {
   return setOAuthCredentials(
     '',   // CLIENT_ID      (…apps.googleusercontent.com)
     '',   // CLIENT_SECRET  (GOCSPX-…)
-    ''    // URL web app    (https://script.google.com/macros/s/…/exec)
+    ''    // Link web app (để trống = tự lấy link /exec)
   );
 }
 function setOAuthCredentials(clientId, clientSecret, webAppUrl) {
   clientId = String(clientId || '').trim(); clientSecret = String(clientSecret || '').trim(); webAppUrl = String(webAppUrl || '').trim();
+  if (!webAppUrl) { try { webAppUrl = String(ScriptApp.getService().getUrl() || '').trim(); } catch (e) {} }
+  if (!webAppUrl) throw new Error('Chưa có link web app: Triển khai > Tùy chọn triển khai mới > Ứng dụng web trước, rồi chạy lại.');
   if (!/\.apps\.googleusercontent\.com$/.test(clientId)) throw new Error('CLIENT_ID phải kết thúc bằng .apps.googleusercontent.com');
   if (!clientSecret) throw new Error('Thiếu CLIENT_SECRET.');
-  if (!/^https:\/\/script\.google\.com\/(a\/macros\/[^\/]+|macros)\/s\/[\w-]+\/exec$/.test(webAppUrl)) throw new Error('URL web app phải có dạng https://script.google.com/macros/s/.../exec (không phải /dev).');
+  if (!/^https:\/\/script\.google\.com\/(a\/macros\/[^\/]+|macros)\/s\/[\w-]+\/exec$/.test(webAppUrl)) throw new Error('Link web app phải có dạng https://script.google.com/macros/s/.../exec (không phải /dev). Đang nhận: ' + webAppUrl);
   PROPS.setProperties({ OAUTH_CLIENT_ID: clientId, OAUTH_CLIENT_SECRET: clientSecret, WEBAPP_URL: webAppUrl }, false);
   const out = 'Đã lưu cấu hình OAuth.\nRedirect URI phải khớp tuyệt đối: ' + webAppUrl + '\nMở URL đó (kể cả cửa sổ ẩn danh) để thử đăng nhập.';
   Logger.log(out);
