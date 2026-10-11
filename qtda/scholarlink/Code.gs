@@ -1857,6 +1857,7 @@ function setOAuthCredentials(clientId, clientSecret, webAppUrl) {
   clientId = String(clientId || '').trim(); clientSecret = String(clientSecret || '').trim(); webAppUrl = String(webAppUrl || '').trim();
   if (!webAppUrl) { try { webAppUrl = String(ScriptApp.getService().getUrl() || '').trim(); } catch (e) {} }
   if (!webAppUrl) throw new Error('Chưa có link web app: Triển khai > Tùy chọn triển khai mới > Ứng dụng web trước, rồi chạy lại.');
+  if (/\/dev$/.test(webAppUrl)) throw new Error('Không tự lấy được link /exec (trình soạn thảo chỉ trả link /dev). Vào Triển khai > Quản lý triển khai, sao chép "URL ứng dụng web" kết thúc bằng /exec và dán vào dòng thứ 3 của napCauHinh().');
   if (!/\.apps\.googleusercontent\.com$/.test(clientId)) throw new Error('CLIENT_ID phải kết thúc bằng .apps.googleusercontent.com');
   if (!clientSecret) throw new Error('Thiếu CLIENT_SECRET.');
   if (!/^https:\/\/script\.google\.com\/(a\/macros\/[^\/]+|macros)\/s\/[\w-]+\/exec$/.test(webAppUrl)) throw new Error('Link web app phải có dạng https://script.google.com/macros/s/.../exec (không phải /dev). Đang nhận: ' + webAppUrl);
