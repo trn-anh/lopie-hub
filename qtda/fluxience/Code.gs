@@ -27,7 +27,7 @@
 /* =====================================================================
    0. CẤU HÌNH
    ===================================================================== */
-const APP_VERSION = '1.10';
+const APP_VERSION = '1.11';
 const TZ = 'Asia/Ho_Chi_Minh';
 const SESSION_HOURS = 12;
 const MAX_UPLOAD_MB = 20;
@@ -921,6 +921,8 @@ function doGet(e) {
     try {
       if (!AUTH.checkState(p.state)) return errorPage_('Phiên đăng nhập đã hết hạn', 'Liên kết đăng nhập chỉ dùng được trong 60 phút. Mở lại ứng dụng và bấm "Đăng nhập với Google".');
       const profile = AUTH.exchangeCode(p.code);
+      // Bản triển khai nhận callback OAuth = link chính thức (WEBAPP_URL). Ghi lại phiên bản đang chạy ở đó.
+      try { PROPS.setProperty('CANONICAL_VERSION', APP_VERSION); } catch (e) {}
       log_(profile.email, 'login', '', '');
       const handoff = AUTH.putHandoff(AUTH.makeToken(profile));
       return redirectPage_(AUTH.webAppUrl() + '?t=' + handoff, profile.email);
@@ -1102,7 +1104,8 @@ function adminPayload_() {
   return {
     users: users, profiles: T_('Profiles'), derivedAll: derived, credentials: T_('Credentials'), pubs: T_('Publications'),
     needsAll: T_('Needs'), work: T_('Work'), projects: T_('Projects'), awards: T_('Awards'),
-    rounds: T_('Rounds'), matchesAll: T_('Matches'), files: T_('Files'), supportAll: T_('Support')
+    rounds: T_('Rounds'), matchesAll: T_('Matches'), files: T_('Files'), supportAll: T_('Support'),
+    system: { canonicalVersion: prop_('CANONICAL_VERSION'), webAppUrl: AUTH.webAppUrl(), ai: !!prop_('GEMINI_API_KEY') }
   };
 }
 
@@ -1468,9 +1471,91 @@ function api_parseCV(token, f) {
   const prof = T_('Profiles').find(r => r.email === c.email) || {};
   const draft = SL.parseLLKH(doc, { ownerName: prof.fullName || c.user.name, existingPubs: T_('Publications').filter(r => r.email === c.email) });
   const source = (doc.paras || []).join('\n') + '\n' + (doc.tables || []).map(t => t.map(r => r.join(' | ')).join('\n')).join('\n\n');
+  const ai = aiExtractCV_(source);
+  if (ai) mergeAI_(draft, ai, T_('Publications').filter(r => r.email === c.email));
   log_(c.email, 'cv_parse', up.id, up.name + ' · ' + draft.summary.total + ' mục, ' + draft.summary.flagged + ' cần kiểm tra');
   return { draft: draft, source: source.slice(0, 30000), file: up };
 }
+/* ---------- AI trích xuất CV (tùy chọn) ----------
+   Bật bằng cách thêm GEMINI_API_KEY vào Script Properties (khóa miễn phí tại aistudio.google.com).
+   Bộ tách theo mẫu chạy trước; AI chỉ BỔ SUNG mục còn trống, mọi mục từ AI đều gắn cờ để người dùng kiểm tra. */
+const AI_FIELDS = ['fullName', 'gender', 'dob', 'birthPlace', 'hometown', 'ethnicity', 'position', 'unit', 'address', 'mobile', 'phoneOffice', 'contactEmail',
+  'ugSystem', 'ugPlace', 'ugMajor', 'ugCountry', 'ugYear', 'msMajor', 'msYear', 'msPlace', 'phdMajor', 'phdYear', 'phdPlace', 'thesis', 'field', 'keywords'];
+function aiExtractCV_(source) {
+  const key = prop_('GEMINI_API_KEY');
+  if (!key || !SL.trim(source)) return null;
+  const model = prop_('GEMINI_MODEL') || 'gemini-2.5-flash';
+  const prompt = [
+    'Bạn là trợ lý trích xuất lý lịch khoa học (CV) tiếng Việt. Đọc văn bản CV bên dưới và trả về DUY NHẤT một đối tượng JSON.',
+    'Quy tắc: chỉ lấy thông tin CÓ trong văn bản; không có thì để chuỗi rỗng "" hoặc mảng rỗng []; tuyệt đối không suy đoán, không bịa.',
+    'Ngày viết dd/mm/yyyy; năm viết 4 chữ số; "đến nay" ghi "nay".',
+    'Cấu trúc: {"fields":{' + AI_FIELDS.map(k => '"' + k + '":""').join(',') + '},',
+    '"degree":{"value":"Cử nhân|Kỹ sư|Thạc sĩ|Tiến sĩ|Tiến sĩ khoa học hoặc rỗng","year":"","country":""},',
+    '"title":{"value":"Phó Giáo sư|Giáo sư hoặc rỗng","year":""},',
+    '"languages":[{"name":"","level":""}],"work":[{"from":"","to":"","place":"","role":""}],',
+    '"projects":[{"name":"","from":"","to":"","level":"","role":""}],',
+    '"pubs":[{"title":"","authors":"","year":"","venue":"","doi":"","type":"journal|conference|book|textbook|chapter"}],',
+    '"awards":[{"name":"","year":"","org":""}]}',
+    'Ghi chú: field = lĩnh vực chuyên môn; keywords = từ khóa nghiên cứu, ngăn cách bằng dấu chấm phẩy; ugSystem = hệ đào tạo (chính quy, tại chức…).',
+    '--- VĂN BẢN CV ---'
+  ].join('\n');
+  try {
+    const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': key },
+      payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt + '\n' + source.slice(0, 60000) }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } })
+    });
+    if (res.getResponseCode() !== 200) { log_('system', 'ai_error', '', 'Gemini ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 300)); return null; }
+    const body = JSON.parse(res.getContentText());
+    const txt = (((body.candidates || [])[0] || {}).content || {}).parts || [];
+    const json = txt.map(x => x.text || '').join('').replace(/^```(?:json)?\s*|```\s*$/g, '');
+    return JSON.parse(json);
+  } catch (e) { log_('system', 'ai_error', '', String(e && e.message || e)); return null; }
+}
+function mergeAI_(draft, ai, existingPubs) {
+  const FLAG = 'AI trích xuất · kiểm tra lại', s = v => SL.trim(v == null ? '' : String(v));
+  let added = 0;
+  const f = ai.fields || {};
+  if (s(f.dob)) { const d = SL.parseDate(f.dob); if (d.ok) f.dob = d.iso; }
+  AI_FIELDS.forEach(k => { if (s(f[k]) && !(draft.fields[k] && s(draft.fields[k].value))) { draft.fields[k] = { value: s(f[k]), flag: FLAG }; added++; } });
+  const pick = (list, label) => { const v = SL.fold(s(label)); let hit = ''; (list || []).forEach(x => { if (SL.fold(x.label) === v) hit = x.label; }); return hit; };
+  [['degree', SL.DEGREES], ['title', SL.TITLES]].forEach(([kind, list]) => {
+    const x = ai[kind] || {}, val = pick(list, x.value);
+    if (val && !draft.credentials.some(c => c.kind === kind)) {
+      const y = SL.yearOf(x.year);
+      draft.credentials.push({ kind: kind, value: val, date: y ? y + '-01-01' : '', country: s(x.country), flag: FLAG + (y ? '' : ' · thiếu năm') });
+      added++;
+    }
+  });
+  const take = (key, rows, map) => {
+    if ((draft[key] || []).length || !Array.isArray(rows)) return;
+    rows.map(map).filter(Boolean).forEach(r => { r.flag = FLAG; draft[key].push(r); added++; });
+  };
+  if (!draft.languages.length && Array.isArray(ai.languages)) ai.languages.forEach(l => { if (s(l.name)) { draft.languages.push({ name: s(l.name), level: s(l.level) }); added++; } });
+  take('work', ai.work, r => s(r.place) ? { from: s(r.from), to: s(r.to), place: s(r.place), role: s(r.role) } : null);
+  take('projects', ai.projects, r => s(r.name) ? { name: s(r.name), from: s(r.from), to: s(r.to), level: s(r.level), role: s(r.role) } : null);
+  take('awards', ai.awards, r => s(r.name) ? { name: s(r.name), year: SL.yearOf(r.year), org: s(r.org) } : null);
+  if (!draft.pubs.length && !draft.books.length && Array.isArray(ai.pubs)) {
+    ai.pubs.forEach(r => {
+      if (!s(r.title)) return;
+      const type = SL.PUB_TYPES.some(t => t.code === r.type) ? r.type : 'journal';
+      const pb = { title: s(r.title), authors: s(r.authors), year: SL.yearOf(r.year), venue: s(r.venue), doi: SL.normDoi(r.doi), type: type, flag: FLAG };
+      const dup = SL.findDup(pb, existingPubs || []);
+      if (dup) pb.dup = { id: dup.id, title: dup.title, status: dup.status };
+      (type === 'journal' || type === 'conference' ? draft.pubs : draft.books).push(pb);
+      added++;
+    });
+  }
+  if (added) {
+    draft.notes.push('AI (Gemini) đã bổ sung ' + added + ' mục mà bộ tách theo mẫu chưa đọc được. Các mục này được gắn cờ "AI trích xuất" để bạn kiểm tra.');
+    let total = draft.languages.length, flagged = 0;
+    Object.keys(draft.fields).forEach(k => { total++; if (draft.fields[k].flag) flagged++; });
+    ['work', 'projects', 'pubs', 'books', 'awards', 'credentials'].forEach(k => draft[k].forEach(x => { total++; if (x.flag) flagged++; }));
+    draft.summary = { total: total, flagged: flagged, dups: draft.pubs.concat(draft.books).filter(x => x.dup).length };
+  }
+  draft.ai = true;
+  return draft;
+}
+
 /**
  * Bước 3: ghi những mục người dùng đã chọn.
  * plan = { fields:{k:v}, languages:[], work:{mode,rows}, projects:{mode,rows}, awards:{mode,rows},
