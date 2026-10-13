@@ -27,7 +27,7 @@
 /* =====================================================================
    0. CẤU HÌNH
    ===================================================================== */
-const APP_VERSION = '1.15';
+const APP_VERSION = '1.16';
 const TZ = 'Asia/Ho_Chi_Minh';
 const SESSION_HOURS = 12;
 const MAX_UPLOAD_MB = 20;
@@ -1481,10 +1481,31 @@ function api_parseCV(token, f) {
    Bộ tách theo mẫu chạy trước; AI chỉ BỔ SUNG mục còn trống, mọi mục từ AI đều gắn cờ để người dùng kiểm tra. */
 const AI_FIELDS = ['fullName', 'gender', 'dob', 'birthPlace', 'hometown', 'ethnicity', 'position', 'unit', 'address', 'mobile', 'phoneOffice', 'contactEmail',
   'ugSystem', 'ugPlace', 'ugMajor', 'ugCountry', 'ugYear', 'msMajor', 'msYear', 'msPlace', 'phdMajor', 'phdYear', 'phdPlace', 'thesis', 'field', 'keywords'];
+/** Gọi Gemini; tự thử model kế tiếp khi model bị ngừng (404). Model chạy được được nhớ lại. */
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-2.5-flash'];
+function geminiCall_(text, json) {
+  const key = prop_('GEMINI_API_KEY');
+  if (!key) return { code: 0, body: 'Chưa có GEMINI_API_KEY' };
+  const list = [prop_('GEMINI_MODEL'), prop_('GEMINI_MODEL_OK')].concat(GEMINI_MODELS).filter((m, i, a) => m && a.indexOf(m) === i);
+  let last = { code: 0, body: '' };
+  for (const model of list) {
+    const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': key },
+      payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: text }] }], generationConfig: json ? { temperature: 0, responseMimeType: 'application/json' } : { temperature: 0 } })
+    });
+    last = { code: res.getResponseCode(), body: res.getContentText(), model: model };
+    if (last.code === 200) { if (prop_('GEMINI_MODEL_OK') !== model) PROPS.setProperty('GEMINI_MODEL_OK', model); return last; }
+    if (last.code !== 404) return last;
+  }
+  return last;
+}
+function geminiText_(r) {
+  const body = JSON.parse(r.body), parts = (((body.candidates || [])[0] || {}).content || {}).parts || [];
+  return parts.map(x => x.text || '').join('');
+}
 function aiExtractCV_(source) {
   const key = prop_('GEMINI_API_KEY');
   if (!key || !SL.trim(source)) return null;
-  const model = prop_('GEMINI_MODEL') || 'gemini-2.5-flash';
   const prompt = [
     'Bạn là trợ lý trích xuất lý lịch khoa học (CV) tiếng Việt. Đọc văn bản CV bên dưới và trả về DUY NHẤT một đối tượng JSON.',
     'Quy tắc: chỉ lấy thông tin CÓ trong văn bản; không có thì để chuỗi rỗng "" hoặc mảng rỗng []; tuyệt đối không suy đoán, không bịa.',
@@ -1500,15 +1521,9 @@ function aiExtractCV_(source) {
     '--- VĂN BẢN CV ---'
   ].join('\n');
   try {
-    const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
-      method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': key },
-      payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt + '\n' + source.slice(0, 60000) }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } })
-    });
-    if (res.getResponseCode() !== 200) { log_('system', 'ai_error', '', 'Gemini ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 300)); return null; }
-    const body = JSON.parse(res.getContentText());
-    const txt = (((body.candidates || [])[0] || {}).content || {}).parts || [];
-    const json = txt.map(x => x.text || '').join('').replace(/^```(?:json)?\s*|```\s*$/g, '');
-    return JSON.parse(json);
+    const r = geminiCall_(prompt + '\n' + source.slice(0, 60000), true);
+    if (r.code !== 200) { log_('system', 'ai_error', r.model || '', 'Gemini ' + r.code + ': ' + String(r.body).slice(0, 300)); return null; }
+    return JSON.parse(geminiText_(r).replace(/^```(?:json)?\s*|```\s*$/g, ''));
   } catch (e) { log_('system', 'ai_error', '', String(e && e.message || e)); return null; }
 }
 function mergeAI_(draft, ai, existingPubs) {
@@ -1951,16 +1966,11 @@ function napDuLieuMau() { ownerOnly_(); return napDuLieuMau_(); }
 /** Kiểm tra khóa Gemini: gửi một câu hỏi ngắn, in kết quả trong Nhật ký thực thi. */
 function kiemTraGemini() {
   ownerOnly_();
-  const key = prop_('GEMINI_API_KEY');
-  if (!key) { Logger.log('Chưa có GEMINI_API_KEY trong Thuộc tính tập lệnh.'); return 'Chưa có khóa'; }
-  const model = prop_('GEMINI_MODEL') || 'gemini-2.5-flash';
-  const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
-    method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': key },
-    payload: JSON.stringify({ contents: [{ parts: [{ text: 'Trả về JSON {"ok":true,"chao":"Xin chào Fluxience"}' }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } })
-  });
-  const code = res.getResponseCode();
-  const out = code === 200 ? 'Gemini hoạt động (' + model + '): ' + res.getContentText().match(/"text":\s*"([^"]*)/)[1].slice(0, 200)
-    : 'Gemini lỗi HTTP ' + code + ': ' + res.getContentText().slice(0, 300) + (code === 400 || code === 403 ? '\n→ Kiểm tra lại khóa (copy đủ, không dấu cách) hoặc tạo khóa mới.' : code === 404 ? '\n→ Tên model sai: xóa GEMINI_MODEL để dùng mặc định.' : code === 429 ? '\n→ Hết hạn mức miễn phí tạm thời, thử lại sau ít phút.' : '');
+  if (!prop_('GEMINI_API_KEY')) { Logger.log('Chưa có GEMINI_API_KEY trong Thuộc tính tập lệnh.'); return 'Chưa có khóa'; }
+  const r = geminiCall_('Trả về JSON {"ok":true,"chao":"Xin chào Fluxience"}', true);
+  const out = r.code === 200 ? 'Gemini hoạt động · model ' + r.model + ' · ' + geminiText_(r).slice(0, 200)
+    : 'Gemini lỗi HTTP ' + r.code + (r.model ? ' (model ' + r.model + ')' : '') + ': ' + String(r.body).slice(0, 300) +
+      (r.code === 400 || r.code === 403 ? '\n→ Kiểm tra lại khóa (copy đủ, không dấu cách) hoặc tạo khóa mới.' : r.code === 404 ? '\n→ Không model nào khả dụng: điền GEMINI_MODEL theo tên Google gợi ý trong thông báo.' : r.code === 429 ? '\n→ Hết hạn mức miễn phí tạm thời, thử lại sau ít phút.' : '');
   Logger.log(out);
   return out;
 }
