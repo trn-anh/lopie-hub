@@ -712,7 +712,7 @@ const ServerAPI = {
    Quy tắc nghiệp vụ dùng chung khối SL nên kết quả giống bản chạy thật.
    ===================================================================== */
 const MockAPI = (function () {
-  const KEY = 'fx-demo-db-v1_7', WHO = 'fx-demo-who-v1_7';
+  const KEY = 'fx-demo-db-v1_8', WHO = 'fx-demo-who-v1_8';
   const ME = 'anh.tran@demo.fluxience.vn', ADMIN = 'qlkh@demo.fluxience.vn';
   const EX = ['hoang.nguyen@demo.fluxience.vn', 'ha.le@demo.fluxience.vn', 'huy.pham@demo.fluxience.vn', 'linh.vo@demo.fluxience.vn'];
   let db = null;
@@ -728,7 +728,7 @@ const MockAPI = (function () {
     return {
       Users: [
         { email: ME, name: 'TS. Trần Minh Anh', roles: 'expert', unit: 'Quản lý công nghiệp', status: 'active', createdAt: T, createdBy: ADMIN, lastLogin: T },
-        { email: ADMIN, name: 'Ban quản trị', roles: 'admin', unit: 'Quản lý khoa học', status: 'active', createdAt: T, createdBy: 'setup', lastLogin: T },
+        { email: ADMIN, name: 'Ban quản trị', roles: 'admin,expert', unit: 'Quản lý khoa học', status: 'active', createdAt: T, createdBy: 'setup', lastLogin: T },
         { email: EX[0], name: 'Nguyễn Hoàng', roles: 'expert', unit: 'Kỹ thuật hệ thống', status: 'active', createdAt: T, createdBy: ADMIN, lastLogin: '' },
         { email: EX[1], name: 'Lê Thanh Hà', roles: 'expert', unit: 'Quản trị vận hành', status: 'active', createdAt: T, createdBy: ADMIN, lastLogin: '' },
         { email: EX[2], name: 'Phạm Gia Huy', roles: 'expert', unit: 'Sản xuất bền vững', status: 'active', createdAt: T, createdBy: ADMIN, lastLogin: '' },
@@ -822,7 +822,7 @@ const MockAPI = (function () {
     const brand = { APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME, CITY: st.CITY, FORM_CODE: st.FORM_CODE, PUB_CRITERIA: st.PUB_CRITERIA };
     const e = who();
     const accounts = db.Users.map(u => ({ email: u.email, name: u.name, unit: u.unit, roles: u.roles, status: u.status }));
-    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.7-demo' });
+    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.8-demo' });
     const u = db.Users.find(x => x.email === e);
     if (!u) {
       const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: ws === 'admin' ? 'admin' : 'expert' };
@@ -833,7 +833,7 @@ const MockAPI = (function () {
     if (u.status === 'rejected') return wait({ state: 'denied', rejected: true, note: u.reviewNote, email: e, settings: brand, accounts, contact: ADMIN });
     if (u.status !== 'active') return wait({ state: 'disabled', email: e, settings: brand, accounts, contact: ADMIN });
     const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs[0];
-    const base = { state: 'ok', demo: true, version: '1.7-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
+    const base = { state: 'ok', demo: true, version: '1.8-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
     if (w === 'admin') {
       const der = {}; db.Users.forEach(x => { der[x.email] = derived(x.email); });
       return wait(Object.assign(base, { users: db.Users, profiles: db.Profiles, derivedAll: der, credentials: db.Credentials, pubs: db.Publications, needsAll: db.Needs, work: db.Work, projects: db.Projects, awards: db.Awards, rounds: db.Rounds, matchesAll: db.Matches, files: db.Files, supportAll: db.Support }));
@@ -1123,16 +1123,17 @@ const API = IS_GAS ? ServerAPI : MockAPI;
 /* =====================================================================
    TRẠNG THÁI & ĐIỀU HƯỚNG
    ===================================================================== */
-const UI_VERSION = '1.7';
+const UI_VERSION = '1.8';
 const S = { data: null, ws: '', route: { page: '', q: {} }, busy: 0, ui: {}, drafts: {}, formDrafts: {}, structuredDirty: {} };
 let sessionRevision = 0, refreshRevision = 0;
 const WS_KEY = 'sl-ws';
 /* Inserted into Index.html. Drafts stay in memory for the current signed-in session. */
 const DRAFT_FORMS = 'form[data-form="profile"],form[data-form="cred"],#pubForm,#needsForm,form[data-form="support"],form[data-form="user"],form[data-form="users-bulk"],form[data-form="cat-lines"],form[data-form="settings"],#roundForm';
 function draftKey(form) {
-  const q = Object.assign({}, S.route.q);
-  if (S.route.page === 'profile') delete q.tab; // Stable draft identity across scroll positions.
-  return JSON.stringify([S.data.me.email, S.ws, S.route.page, Object.keys(q).sort().map(k => [k, q[k]]), form.id || form.dataset.form, form.dataset.type || '']);
+  const box = form.closest && form.closest('[data-ws-root]'), c = box && WS.cur[box.dataset.wsRoot] || S.route;
+  const q = Object.assign({}, c.q);
+  if (c.page === 'profile') delete q.tab; // Stable draft identity across scroll positions.
+  return JSON.stringify([S.data.me.email, S.ws, c.page, Object.keys(q).sort().map(k => [k, q[k]]), form.id || form.dataset.form, form.dataset.type || '']);
 }
 function draftControls(form) {
   return Array.from(form.elements || []).filter(el => el.name && !['lang-name','lang-level'].includes(el.name) && !el.disabled && !el.readOnly && !['file', 'password', 'submit', 'button'].includes(el.type));
@@ -1153,8 +1154,8 @@ function captureFormDraft(form) {
 function captureRouteDrafts() {
   $$(DRAFT_FORMS, $('#main')).forEach(captureFormDraft);
 }
-function restoreFormDrafts() {
-  $$(DRAFT_FORMS, $('#main')).forEach(form => {
+function restoreFormDrafts(root) {
+  $$(DRAFT_FORMS, root || $('#main')).forEach(form => {
     const key = draftKey(form);
     form.dataset.draftKey = key;
     form._draftBaseline = JSON.stringify(formSnapshot(form));
@@ -1232,8 +1233,8 @@ const NAV = {
 };
 const SUBPAGES = { import: 'profile', pub: 'pubs', expert: 'experts' };
 
-function parseHash() {
-  const h = location.hash.replace(/^#\/?/, '');
+function parseHash(hash) {
+  const h = (typeof hash === 'string' ? hash : location.hash).replace(/^#\/?/, '');
   const split = h.indexOf('?');
   const path = split < 0 ? h : h.slice(0, split);
   const qs = split < 0 ? '' : h.slice(split + 1);
@@ -1243,7 +1244,7 @@ function parseHash() {
 function go(page, q) {
   const qs = q ? Object.keys(q).filter(k => q[k] != null && q[k] !== '').map(k => encodeURIComponent(k) + '=' + encodeURIComponent(q[k])).join('&') : '';
   const h = '#/' + page + (qs ? '?' + qs : '');
-  if (location.hash === h) route(); else location.hash = h;
+  if (location.hash === h) { WS.lastHash = ''; route(); } else location.hash = h;
 }
 window.addEventListener('hashchange', () => route());
 
@@ -1269,13 +1270,11 @@ async function call(promise, btn) {
 /** Tải lại dữ liệu từ máy chủ rồi vẽ lại trang hiện tại. */
 async function refresh() {
   const request = ++refreshRevision, session = sessionRevision, ws = S.ws;
-  const routeAtStart = location.hash;
   const d = await call(API.bootstrap(ws));
   if (request !== refreshRevision || session !== sessionRevision || ws !== S.ws) return;
   if (d.state !== 'ok') return boot();
   S.data = d;
-  if (location.hash === routeAtStart) { if(S.route.page==='profile')S.ui.keepScroll=true; route(); }
-  else renderShell();
+  if (wsSection(WS.active)) wsRebuildInPlace(); else route();
 }
 
 /* =====================================================================
@@ -1509,16 +1508,19 @@ function renderShell() {
   $('#appName').textContent = (st.APP_NAME && st.APP_NAME !== 'ScholarLink' ? st.APP_NAME : 'Fluxience');
   $('#wsName').textContent = S.ws === 'admin' ? 'Không gian quản trị' : 'Hồ sơ & kết nối chuyên gia';
   const c = counts();
-  const cur = SUBPAGES[S.route.page] || S.route.page;
+  const cur = WS.active || wsRoot(S.route.page);
   const navHTML = NAV[S.ws].map(([id, ic, label]) => `<a href="#/${id}" ${cur === id ? 'aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${c[id] ? `<span class="count">${c[id]}</span>` : ''}</a>`).join('');
   if (S.navHTML !== navHTML) { $('#nav').innerHTML = navHTML; S.navHTML = navHTML; }
   $('#meName').textContent = S.ws === 'admin' ? (d.me.unit || 'Ban quản trị') : (d.profile && d.profile.fullName ? [d.derived.degree === 'Tiến sĩ' ? 'TS.' : d.derived.degree === 'Thạc sĩ' ? 'ThS.' : '', d.profile.fullName].filter(Boolean).join(' ') : d.me.name);
   $('#meUnit').textContent = S.ws === 'admin' ? (d.me.name + ' · ' + d.me.email) : (d.profile && d.profile.field) || d.me.unit || d.me.email;
-  const wb = $('#wsBadge');
-  wb.textContent = S.ws === 'admin' ? 'Quản trị viên' : 'Chuyên gia';
-  const multi = (d.roles || []).length > 1;
-  wb.classList.toggle('switch', multi);
-  wb.title = multi ? 'Chuyển sang không gian ' + (S.ws === 'admin' ? 'chuyên gia' : 'quản trị') : '';
+  const wb = $('#wsBadge'), label = S.ws === 'admin' ? 'Quản trị viên' : 'Chuyên gia', other = S.ws === 'admin' ? 'chuyên gia' : 'quản trị';
+  const multi = (d.roles || []).filter(r => r === 'admin' || r === 'expert').length > 1;
+  // Chỉ là nút bấm khi tài khoản có cả hai vai trò; nếu không, hiển thị như nhãn vai trò.
+  wb.innerHTML = (multi ? '' : icon(S.ws === 'admin' ? 'key' : 'user', 'sm')) + '<span>' + esc(label) + '</span>' + (multi ? icon('swap', 'sm') : '');
+  wb.disabled = !multi;
+  wb.classList.remove('switch'); wb.classList.toggle('ws-switch', multi);
+  wb.title = multi ? 'Chuyển sang không gian ' + other : 'Vai trò của tài khoản này';
+  wb.setAttribute('aria-label', multi ? label + ' · bấm để chuyển sang không gian ' + other : 'Vai trò hiện tại: ' + label);
   wb.dataset.act = multi ? 'switch-ws' : '';
   const n = notifications();
   $('#bellBtn').innerHTML = icon('bell') + (n.filter(x => x.fresh).length ? `<span class="dot">${n.filter(x => x.fresh).length}</span>` : '');
@@ -1557,29 +1559,154 @@ function nameOf(email) {
 const VIEWS = { expert: {}, admin: {} };
 let routeRevision = 0;
 let disposeProfileScroll=null;
+/* =====================================================================
+   KHÔNG GIAN LIỀN MẠCH (v1.8)
+   Mọi mục trên sidebar nằm trong MỘT trang cuộn. Menu trái chỉ cuộn tới mục;
+   khi cuộn, menu + breadcrumb + địa chỉ (#/trang) tự cập nhật theo mục đang xem.
+   Mỗi mục là một <section> riêng; thao tác trong mục nào thì chỉ vẽ lại mục đó.
+   ===================================================================== */
+const WS = { key: '', cur: {}, active: '', lastHash: '', spy: null, lock: 0 };
+/** Mục gốc trên sidebar chứa trang con (VD: pub → pubs, export của quản trị → experts). */
+function wsRoot(page) {
+  const nav = NAV[S.ws] || [];
+  if (nav.some(n => n[0] === page)) return page;
+  if (SUBPAGES[page]) return SUBPAGES[page];
+  if (S.ws === 'admin' && page === 'export') return 'experts';
+  return nav.length ? nav[0][0] : 'overview';
+}
+function wsHash(page, q) {
+  const qs = Object.keys(q || {}).filter(k => q[k] != null && q[k] !== '').map(k => encodeURIComponent(k) + '=' + encodeURIComponent(q[k])).join('&');
+  return '#/' + page + (qs ? '?' + qs : '');
+}
+function wsSetContext(root) { const c = WS.cur[root]; if (c) S.route = { page: c.page, q: Object.assign({}, c.q) }; }
+/* Mọi thao tác (bấm, gõ, gửi form) trong một mục → S.route trỏ về mục đó trước khi xử lý. */
+['click', 'input', 'change', 'submit', 'focusin', 'drop', 'dragenter'].forEach(type => document.addEventListener(type, e => {
+  const box = e.target && e.target.closest && e.target.closest('[data-ws-root]');
+  if (box) wsSetContext(box.dataset.wsRoot);
+}, true));
+function wsSection(root) { return document.getElementById('ws-' + root); }
+function wsRenderSection(root, page, q) {
+  const box = wsSection(root); if (!box) return;
+  const v = VIEWS[S.ws][page] || VIEWS[S.ws][root];
+  if (!VIEWS[S.ws][page]) page = root;
+  WS.cur[root] = { page, q: Object.assign({}, q || {}) };
+  S.route = { page, q: Object.assign({}, q || {}) };
+  if (root === 'profile' && disposeProfileScroll) { disposeProfileScroll(); disposeProfileScroll = null; }
+  const body = box.querySelector('.ws-body');
+  try {
+    let html = v.render(S.route.q);
+    if (!html || !html.trim()) throw new Error('Mục chưa có nội dung.');
+    if (root !== WS.first) html = html.replace('<h1 class="h1">', '<h2 class="h1">').replace('</h1>', '</h2>');
+    body.innerHTML = html;
+    restoreFormDrafts(box);
+    const rev = routeRevision;
+    if (v.mount) Promise.resolve(v.mount(S.route.q)).catch(e => { if (rev === routeRevision) wsError(body, root, e); });
+  } catch (e) { wsError(body, root, e); }
+}
+function wsError(body, root, e) {
+  console.error(e);
+  body.innerHTML = `<div class="card" role="alert"><h2 class="h2">Chưa mở được mục này</h2><p class="muted">${esc(e.message || 'Đã xảy ra lỗi khi tải nội dung.')}</p><button type="button" class="btn primary" data-act="ws-retry" data-root="${esc(root)}">${icon('refresh', 'sm')}Thử lại</button></div>`;
+}
+function wsBuild(target) {
+  if (WS.spy) WS.spy();
+  if (disposeProfileScroll) { disposeProfileScroll(); disposeProfileScroll = null; }
+  const nav = NAV[S.ws];
+  WS.key = S.data.me.email + '|' + S.ws + '|' + sessionRevision; WS.cur = {}; WS.first = nav[0][0]; WS.active = '';
+  $('#main').innerHTML = nav.map(([id, , label]) => `<section class="ws-section" id="ws-${id}" data-ws-root="${id}" aria-label="${esc(label)}" tabindex="-1"><div class="ws-body"></div></section>`).join('');
+  const tRoot = wsRoot(target.page);
+  nav.forEach(([id]) => wsRenderSection(id, id === tRoot ? target.page : id, id === tRoot ? target.q : {}));
+  wsMountSpy();
+  return tRoot;
+}
+/** Vẽ lại toàn bộ (sau khi tải lại dữ liệu) mà giữ nguyên vị trí đang đọc. */
+function wsRebuildInPlace() {
+  captureRouteDrafts();
+  const anchor = wsSection(WS.active), off = anchor ? anchor.getBoundingClientRect().top : 0;
+  const keep = Object.assign({}, WS.cur), active = WS.active;
+  (NAV[S.ws] || []).forEach(([id]) => { const c = keep[id] || { page: id, q: {} }; wsRenderSection(id, c.page, c.q); });
+  const a = wsSection(active);
+  if (a) window.scrollTo(0, window.scrollY + a.getBoundingClientRect().top - off);
+  wsSetContext(active); renderShell(); wsActivate(active, true);
+}
+function wsJump(root, q, behavior) {
+  const box = wsSection(root); if (!box) return;
+  WS.lock = Date.now() + 900;
+  wsActivate(root, true);
+  const smooth = behavior || (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
+  if (root === 'profile' && q && q.tab && q.tab !== 'basic' && $('#profile-' + q.tab)) setTimeout(() => scrollProfileSection(q.tab, smooth), 0);
+  else box.scrollIntoView({ block: 'start', behavior: smooth });
+  box.focus({ preventScroll: true });
+}
+/** Đánh dấu mục đang xem: sidebar, breadcrumb, địa chỉ trang. */
+function wsActivate(root, force) {
+  if (!root || (!force && WS.active === root)) return;
+  WS.active = root;
+  $$('#nav a').forEach(a => { if (a.getAttribute('href') === '#/' + root) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+  const c = WS.cur[root] || { page: root, q: {} }, v = VIEWS[S.ws][c.page] || VIEWS[S.ws][root];
+  const base = S.ws === 'admin' ? 'Quản trị' : 'Chuyên gia', label = (NAV[S.ws].find(n => n[0] === root) || [])[2] || '';
+  $('#crumb').textContent = c.page !== root && v && v.crumb ? v.crumb(c.q) : base + ' / ' + label;
+  if (!$('.drawer')) {
+    wsSetContext(root);
+    const h = wsHash(c.page, c.q);
+    if (location.hash !== h) { try { history.replaceState(null, '', h); } catch (e) {} }
+    WS.lastHash = location.hash;
+  }
+}
+function wsMountSpy() {
+  let pending = false, stopped = false;
+  const update = () => {
+    pending = false;
+    if (stopped || $('.drawer') || Date.now() < WS.lock) return;
+    const secs = $$('#main > .ws-section'); if (!secs.length) return;
+    const line = $('.top').getBoundingClientRect().bottom + Math.min(160, innerHeight * .25);
+    let cur = secs[0];
+    for (const s of secs) { if (s.getBoundingClientRect().top <= line) cur = s; else break; }
+    if (scrollY + innerHeight >= document.documentElement.scrollHeight - 4) cur = secs[secs.length - 1];
+    wsActivate(cur.dataset.wsRoot);
+  };
+  const onScroll = () => { if (!pending) { pending = true; requestAnimationFrame(update); } };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll, { passive: true });
+  WS.spy = () => { stopped = true; window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); };
+}
 function route() {
   if (!S.data || S.data.state !== 'ok') return;
-  const main = $('#main');
   const revision = ++routeRevision;
   try {
-    captureRouteDrafts();
-    if(disposeProfileScroll){disposeProfileScroll();disposeProfileScroll=null;}
-    S.route = parseHash();
-    const views = VIEWS[S.ws];
-    if (!views) throw new Error('Không tìm thấy không gian làm việc.');
-    const v = views[S.route.page] || views.overview;
-    if (!v) throw new Error('Không tìm thấy trang.');
     document.body.classList.remove('nav-open');
-    closeDrawer();
     $('#bellPop').hidden = true;
-    renderShell();
-    const content = v.render(S.route.q);
-    if (!content || !content.trim()) throw new Error('Trang chưa có nội dung.');
-    main.innerHTML = content;
-    restoreFormDrafts();
-    $('#crumb').textContent = v.crumb ? v.crumb(S.route.q) : (S.ws === 'admin' ? 'Quản trị / Kết nối chuyên gia' : 'Không gian chuyên gia');
-    if (v.mount) Promise.resolve(v.mount(S.route.q)).catch(e => { if (revision === routeRevision) reportRouteError(e); });
-    if (!S.ui.keepScroll) window.scrollTo(0, 0);
+    const target = parseHash();
+    if (!VIEWS[S.ws][target.page]) { target.page = NAV[S.ws][0][0]; target.q = {}; }
+    const key = S.data.me.email + '|' + S.ws + '|' + sessionRevision;
+    if (WS.key !== key || !wsSection(NAV[S.ws][0][0])) {
+      closeDrawer();
+      const root = wsBuild(target);
+      renderShell();
+      WS.lastHash = location.hash;
+      wsActivate(root, true);
+      if (root !== WS.first || (target.q && target.q.tab)) wsJump(root, target.q, 'auto'); else window.scrollTo(0, 0);
+      return;
+    }
+    captureRouteDrafts();
+    if (location.hash !== WS.lastHash) {
+      // Điều hướng: vẽ lại đúng mục chứa trang đích rồi cuộn tới đó.
+      closeDrawer();
+      const root = wsRoot(target.page), prev = WS.cur[root], box = wsSection(root), off = box ? box.getBoundingClientRect().top : 0;
+      const stay = S.ui.keepScroll || (prev && prev.page === target.page && root === WS.active && !(root === 'profile' && target.q.tab));
+      wsRenderSection(root, target.page, target.q);
+      WS.lastHash = location.hash;
+      renderShell();
+      if (stay) { if (box) window.scrollTo(0, window.scrollY + box.getBoundingClientRect().top - off); wsActivate(root, true); }
+      else wsJump(root, target.q);
+    } else {
+      // Vẽ lại mục đang thao tác (S.route) tại chỗ, giữ vị trí cuộn.
+      const root = wsRoot(S.route.page), box = wsSection(root), off = box ? box.getBoundingClientRect().top : 0;
+      closeDrawer();
+      wsRenderSection(root, S.route.page, S.route.q);
+      if (box) window.scrollTo(0, window.scrollY + box.getBoundingClientRect().top - off);
+      renderShell();
+    }
+    if (revision !== routeRevision) return;
   } catch (e) { reportRouteError(e); }
   finally { S.ui.keepScroll = false; }
 }
@@ -1636,16 +1763,21 @@ const ACT = {
   'dlg-ok-input': el => { const v = $('#dlgInput').value.trim(); if (el.dataset.required && !v) { $('#dlgInput').focus(); toast('Nhập nội dung trước khi gửi.', 'error'); return; } closeDialog(v || ''); },
   'drawer-close': () => rvClose(),
   'go': el => go(el.dataset.page, el.dataset.q ? JSON.parse(el.dataset.q) : null),
-  'open-file': el => openFile(el.dataset.id, el)
+  'open-file': el => openFile(el.dataset.id, el),
+  'ws-retry': el => { const c = WS.cur[el.dataset.root] || { page: el.dataset.root, q: {} }; wsRenderSection(el.dataset.root, c.page, c.q); }
 };
 document.addEventListener('click', e => {
   const auth=e.target.closest('a[data-auth-role]');if(auth)rememberLoginRole(auth.dataset.authRole);
   const link = e.target.closest('a[href^="#/"]');
   if (link && !e.defaultPrevented && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
     e.preventDefault();
-    if(link.dataset&&link.dataset.profileJump&&S.route.page==='profile'){scrollProfileSection(link.dataset.profileJump);return;}
+    if(link.dataset&&link.dataset.profileJump){wsActivate('profile',true);scrollProfileSection(link.dataset.profileJump);return;}
     const hash = link.getAttribute('href');
-    if (location.hash === hash) route(); else location.hash = hash;
+    const t = parseHash(hash), root = wsRoot(t.page), c = WS.cur[root];
+    // Liên kết tới mục đang hiển thị đúng nội dung (hoặc bấm menu trái) → chỉ cuộn tới, không vẽ lại.
+    const sameQ = c && JSON.stringify(c.q) === JSON.stringify(t.q), fromNav = !!link.closest('#nav') && !Object.keys(t.q).length;
+    if (wsSection(root) && c && c.page === t.page && (sameQ || fromNav)) { document.body.classList.remove('nav-open'); wsJump(root, sameQ ? t.q : {}); return; }
+    if (location.hash === hash) { WS.lastHash = ''; route(); } else location.hash = hash;
     return;
   }
   const el = e.target.closest('[data-act]');
@@ -1969,8 +2101,9 @@ function activateProfileSection(key) {
   S.ui.profileActive=key;
   $$('.profile-tabs [data-profile-jump]').forEach(a=>{if(a.dataset.profileJump===navKey)a.setAttribute('aria-current','location');else a.removeAttribute('aria-current');});
   const save=$('[data-act="profile-save"]');if(save)save.textContent=key==='cred'?'Gửi xác minh':'Lưu mục đang xem';
-  S.route.q.tab=key;
-  if(window.history&&location.hash.startsWith('#/profile'))window.history.replaceState(null,'','#/profile?tab='+encodeURIComponent(key));
+  if(WS.cur.profile){WS.cur.profile.q=Object.assign({},WS.cur.profile.q,{tab:key});}
+  if(S.route.page==='profile')S.route.q.tab=key;
+  if(WS.active==='profile'&&!$('.drawer')){const h=wsHash('profile',WS.cur.profile?WS.cur.profile.q:{tab:key});try{window.history.replaceState(null,'',h);}catch(e){}WS.lastHash=location.hash;}
 }
 function scrollProfileSection(key,behavior) {
   const section=$('#profile-'+key);if(!section)return;
@@ -1982,17 +2115,17 @@ function mountProfileScroll(q) {
   const sections=$$('[data-profile-section],[data-profile-anchor]');if(!sections.length)return;
   let pending=false,disposed=false;
   const update=()=>{
-    pending=false;if(disposed||!sections[0].isConnected)return;
+    pending=false;if(disposed||!sections[0].isConnected||WS.active!=='profile')return;
     const nav=$('.profile-tabs');const line=nav?nav.getBoundingClientRect().bottom+32:160;
     let current=sections[0];for(const section of sections){if(section.getBoundingClientRect().top<=line)current=section;else break;}
-    if(window.scrollY+window.innerHeight>=document.documentElement.scrollHeight-4)current=sections[sections.length-1];
+    const pb=wsSection('profile');if(pb&&pb.getBoundingClientRect().bottom<=line+80)current=sections[sections.length-1];
     activateProfileSection(current.dataset.profileSection||current.dataset.profileAnchor);
   };
   const onScroll=()=>{if(pending)return;pending=true;(window.requestAnimationFrame||((fn)=>setTimeout(fn,16)))(update);};
   window.addEventListener('scroll',onScroll,{passive:true});
   disposeProfileScroll=()=>{disposed=true;window.removeEventListener('scroll',onScroll);};
   const preserve=S.ui.keepScroll;
-  setTimeout(()=>{if(disposed||!sections[0].isConnected)return;if(!preserve&&q.tab&&q.tab!=='basic')scrollProfileSection(q.tab,'auto');else update();},0);
+  setTimeout(()=>{if(disposed||!sections[0].isConnected)return;update();},0);
 }
 
 /* ---------- Hồ sơ của tôi ---------- */
@@ -3239,15 +3372,14 @@ ACT['sup-close'] = async el => { const s = S.data.supportAll.find(x => x.id === 
 /* Explicit loading plus FontFace status prevents mistaking a fallback for QDP. */
 async function inspectQdpFonts(fonts, timeoutMs = 5000) {
   const specs = [
-    ['Fluxience QDP Sans', '400'], ['Fluxience QDP Sans', '500'],
-    ['Fluxience QDP Display', '400'], ['Fluxience QDP Display', '500']
+    ['Fluxience Inter', '400'], ['Fluxience Inter', '500'], ['Fluxience Inter', '600'], ['Fluxience Inter', '700']
   ];
   if (!fonts || typeof fonts.load !== 'function') return specs.map(([family, weight]) => ({ family, weight, loaded: false, reason: 'unsupported' }));
   let timer;
   const requests = Promise.all(specs.map(async ([family, weight]) => {
     try {
       const faces = await fonts.load(weight + ' 16px "' + family + '"', 'Hồ sơ khoa học Đặng Nguyễn');
-      const loaded = Array.from(faces).some(face => String(face.family).replace(/["']/g, '') === family && String(face.weight) === weight && face.status === 'loaded');
+      const loaded = Array.from(faces).some(face => String(face.family).replace(/["']/g, '') === family && (String(face.weight) === weight || /^\d+ \d+$/.test(String(face.weight))) && face.status === 'loaded');
       return { family, weight, loaded, reason: loaded ? '' : 'missing' };
     } catch (e) { return { family, weight, loaded: false, reason: 'error' }; }
   }));
@@ -3265,9 +3397,9 @@ ACT['build-info'] = async () => {
   const server = installedServerVersion(S.data && S.data.version);
   const fonts = await inspectQdpFonts(document.fonts);
   if (!$('#dlg').open || $('#dlgTitle').textContent !== 'Về Fluxience') return;
-  $('#dlgBody').innerHTML = `<dl class="kv"><dt>Giao diện</dt><dd>${esc(UI_VERSION)}</dd><dt>Máy chủ</dt><dd>${esc(server || 'Chưa xác định')}</dd><dt>Bộ chữ QDP</dt><dd>${fonts.every(f => f.loaded) ? 'Đã tải đủ 4 kiểu chữ' : 'Chưa tải đủ; đang có thể dùng chữ dự phòng'}</dd></dl>
+  $('#dlgBody').innerHTML = `<dl class="kv"><dt>Giao diện</dt><dd>${esc(UI_VERSION)}</dd><dt>Máy chủ</dt><dd>${esc(server || 'Chưa xác định')}</dd><dt>Bộ chữ Inter</dt><dd>${fonts.every(f => f.loaded) ? 'Đã tải đủ 4 kiểu chữ' : 'Chưa tải đủ; đang có thể dùng chữ dự phòng'}</dd></dl>
     ${server && server !== UI_VERSION ? '<div class="callout warn" style="margin-top:16px">Giao diện và máy chủ khác phiên bản. Kiểm tra các file và deployment đang mở.</div>' : ''}
-    <div class="tbl-wrap" style="margin-top:16px"><table class="tbl"><thead><tr><th>Kiểu chữ</th><th>Trạng thái</th></tr></thead><tbody>${fonts.map(f => `<tr><td>${esc(f.family.replace('Fluxience ', ''))} ${f.weight === '500' ? 'Medium' : 'Regular'}</td><td>${f.loaded ? 'Đã tải' : f.reason === 'timeout' ? 'Quá thời gian chờ' : f.reason === 'unsupported' ? 'Trình duyệt chưa hỗ trợ kiểm tra' : 'Chưa tải'}</td></tr>`).join('')}</tbody></table></div>
+    <div class="tbl-wrap" style="margin-top:16px"><table class="tbl"><thead><tr><th>Kiểu chữ</th><th>Trạng thái</th></tr></thead><tbody>${fonts.map(f => `<tr><td>${esc(f.family.replace('Fluxience ', ''))} ${({ 400: 'Regular', 500: 'Medium', 600: 'SemiBold', 700: 'Bold' })[f.weight]}</td><td>${f.loaded ? 'Đã tải' : f.reason === 'timeout' ? 'Quá thời gian chờ' : f.reason === 'unsupported' ? 'Trình duyệt chưa hỗ trợ kiểm tra' : 'Chưa tải'}</td></tr>`).join('')}</tbody></table></div>
     <p class="caption" style="margin-top:16px">Nếu font chưa tải, kiểm tra Styles.html có đủ font nhúng và mở lại đúng link triển khai sau khi cập nhật.</p>`;
 };
 
