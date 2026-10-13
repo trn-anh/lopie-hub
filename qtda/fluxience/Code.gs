@@ -27,7 +27,7 @@
 /* =====================================================================
    0. CẤU HÌNH
    ===================================================================== */
-const APP_VERSION = '1.9';
+const APP_VERSION = '1.10';
 const TZ = 'Asia/Ho_Chi_Minh';
 const SESSION_HOURS = 12;
 const MAX_UPLOAD_MB = 20;
@@ -934,6 +934,7 @@ function doGet(e) {
   try { html = HtmlService.createTemplateFromFile('Index').evaluate().getContent(); }
   catch (err) { return errorPage_('Thiếu tệp giao diện', 'Tạo đúng các tệp HTML Index, Styles, Scripts, rồi lưu và cập nhật phiên bản triển khai.'); }
   html = html.replace('__SL_BOOT_TOKEN__', boot.replace(/[^A-Za-z0-9._\-]/g, ''));
+  html = html.replace('__SL_PORTAL__', p.portal === 'admin' ? 'admin' : '');
   let name = DEFAULT_SETTINGS.APP_NAME;
   try { name = settings_().APP_NAME || name; } catch (err) {}
   if (name === 'ScholarLink') name = 'Fluxience';
