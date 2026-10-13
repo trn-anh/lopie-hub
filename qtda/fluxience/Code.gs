@@ -27,7 +27,7 @@
 /* =====================================================================
    0. CẤU HÌNH
    ===================================================================== */
-const APP_VERSION = '1.16';
+const APP_VERSION = '1.17';
 const TZ = 'Asia/Ho_Chi_Minh';
 const SESSION_HOURS = 12;
 const MAX_UPLOAD_MB = 20;
@@ -1489,13 +1489,19 @@ function geminiCall_(text, json) {
   const list = [prop_('GEMINI_MODEL'), prop_('GEMINI_MODEL_OK')].concat(GEMINI_MODELS).filter((m, i, a) => m && a.indexOf(m) === i);
   let last = { code: 0, body: '' };
   for (const model of list) {
-    const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
+    let res;
+    for (let attempt = 0; attempt < 3; attempt++) {   // quá tải tạm thời: chờ 2s, 4s rồi thử lại cùng model
+      res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
       method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': key },
-      payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: text }] }], generationConfig: json ? { temperature: 0, responseMimeType: 'application/json' } : { temperature: 0 } })
-    });
+        payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: text }] }], generationConfig: json ? { temperature: 0, responseMimeType: 'application/json' } : { temperature: 0 } })
+      });
+      if ([429, 500, 503].indexOf(res.getResponseCode()) < 0) break;
+      Utilities.sleep(2000 * (attempt + 1));
+    }
     last = { code: res.getResponseCode(), body: res.getContentText(), model: model };
     if (last.code === 200) { if (prop_('GEMINI_MODEL_OK') !== model) PROPS.setProperty('GEMINI_MODEL_OK', model); return last; }
-    if (last.code !== 404) return last;
+    // 404: model đã ngừng · 429/500/503: quá tải tạm thời → thử model kế tiếp
+    if ([404, 429, 500, 503].indexOf(last.code) < 0) return last;
   }
   return last;
 }
@@ -1970,7 +1976,7 @@ function kiemTraGemini() {
   const r = geminiCall_('Trả về JSON {"ok":true,"chao":"Xin chào Fluxience"}', true);
   const out = r.code === 200 ? 'Gemini hoạt động · model ' + r.model + ' · ' + geminiText_(r).slice(0, 200)
     : 'Gemini lỗi HTTP ' + r.code + (r.model ? ' (model ' + r.model + ')' : '') + ': ' + String(r.body).slice(0, 300) +
-      (r.code === 400 || r.code === 403 ? '\n→ Kiểm tra lại khóa (copy đủ, không dấu cách) hoặc tạo khóa mới.' : r.code === 404 ? '\n→ Không model nào khả dụng: điền GEMINI_MODEL theo tên Google gợi ý trong thông báo.' : r.code === 429 ? '\n→ Hết hạn mức miễn phí tạm thời, thử lại sau ít phút.' : '');
+      (r.code === 400 || r.code === 403 ? '\n→ Kiểm tra lại khóa (copy đủ, không dấu cách) hoặc tạo khóa mới.' : r.code === 404 ? '\n→ Không model nào khả dụng: điền GEMINI_MODEL theo tên Google gợi ý trong thông báo.' : r.code === 429 || r.code === 503 || r.code === 500 ? '\n→ Máy chủ Gemini đang quá tải hoặc hết hạn mức tạm thời (đã tự thử lại và đổi model). Chạy lại sau vài phút.' : '');
   Logger.log(out);
   return out;
 }
