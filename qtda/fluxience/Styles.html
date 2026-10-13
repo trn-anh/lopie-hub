@@ -678,4 +678,20 @@ dialog .dlg-body{font-size:15px}
 .top .search{flex:0 1 380px}
 @media(max-width:900px){#app{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:900px){body:not(.nav-open) .side{box-shadow:none}}
+
+/* ---------- v1.9 · Màn đăng nhập một nút ---------- */
+.gate.auth-centered{background:var(--sl-bg-canvas)}
+.auth-centered .gate-card{width:min(440px,100%);padding:40px;box-shadow:0 1px 2px rgba(23,43,69,.04),0 12px 32px rgba(23,43,69,.06)}
+.auth-centered .gate-card>.h1{margin:0 0 8px}
+.auth-centered .gate-card>p{margin:0 0 28px}
+.gbtn.auth-google{height:52px;font-size:16px;font-weight:600;color:var(--sl-text-primary);gap:14px;transition:border-color .15s,box-shadow .15s,background .15s}
+.gbtn.auth-google:hover{border-color:var(--sl-border-strong);box-shadow:0 1px 3px rgba(23,43,69,.12)}
+.gbtn.auth-google:focus-visible{outline:2px solid var(--sl-focus);outline-offset:2px}
+.auth-points{list-style:none;margin:28px 0 0;padding:20px 0 0;border-top:1px solid var(--sl-border-default);display:flex;flex-direction:column;gap:10px}
+.auth-points li{display:flex;align-items:center;gap:10px;font-size:14px;line-height:22px;color:var(--sl-text-secondary)}
+.auth-points .ico{color:var(--sl-brand-default);flex:none}
+.g-accounts{display:flex;flex-direction:column;gap:0;border:1px solid var(--sl-border-default);border-radius:var(--sl-radius-8);overflow:hidden}
+.g-accounts .acc-btn{border:0;border-radius:0;border-bottom:1px solid var(--sl-border-default);margin:0}
+.g-accounts .acc-btn:last-child{border-bottom:0}
+@media(max-width:520px){.auth-centered .gate-card{padding:28px 22px}}
 </style>

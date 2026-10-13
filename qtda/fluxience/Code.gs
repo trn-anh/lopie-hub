@@ -27,7 +27,7 @@
 /* =====================================================================
    0. CẤU HÌNH
    ===================================================================== */
-const APP_VERSION = '1.8';
+const APP_VERSION = '1.9';
 const TZ = 'Asia/Ho_Chi_Minh';
 const SESSION_HOURS = 12;
 const MAX_UPLOAD_MB = 20;
@@ -1010,12 +1010,12 @@ function requestAccess_(email, name, ws) {
     if (x) return x;
     x = {
       email: email, name: name || email.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: now_(), createdBy: 'request', lastLogin: now_(),
-      requestedRole: ws === 'admin' ? 'admin' : 'expert', reviewNote: '', reviewedBy: '', reviewedAt: ''
+      requestedRole: 'expert', reviewNote: '', reviewedBy: '', reviewedAt: ''
     };
     upsert_('Users', x, 'email');
     log_(email, 'access_request', email, x.requestedRole);
     notifyAdmins_('Yêu cầu truy cập mới: ' + email,
-      '<p><b>' + esc_(x.name) + '</b> (' + esc_(email) + ') đã đăng nhập Google và xin quyền ' + (x.requestedRole === 'admin' ? 'quản trị' : 'chuyên gia') + '.</p>' +
+      '<p><b>' + esc_(x.name) + '</b> (' + esc_(email) + ') đã đăng nhập Google và xin quyền sử dụng Fluxience.</p>' +
       '<p>Duyệt tại <b>Duyệt &amp; xác minh → Tài khoản</b>.</p>');
     return x;
   });
@@ -1057,13 +1057,14 @@ function api_bootstrap(token, ws) {
     const s = AUTH.readToken(token);
     if (!s) return { state: 'login', authUrl: AUTH.loginUrl(), settings: brand, version: APP_VERSION };
     const u = account_(s.email, s.name, ws);
-    if (!u) return { state: 'denied', email: s.email, settings: brand, version: APP_VERSION, contact: ownerEmail_() };
-    if (u.status === 'pending') return { state: 'requested', email: s.email, name: u.name, requestedAt: u.createdAt, requestedRole: u.requestedRole, settings: brand, version: APP_VERSION, contact: ownerEmail_() };
-    if (u.status === 'rejected') return { state: 'denied', rejected: true, note: u.reviewNote, email: s.email, settings: brand, version: APP_VERSION, contact: ownerEmail_() };
-    if (u.status !== 'active') return { state: 'disabled', email: s.email, settings: brand, version: APP_VERSION, contact: ownerEmail_() };
+    if (!u) return { state: 'denied', email: s.email, settings: brand, version: APP_VERSION };
+    if (u.status === 'pending') return { state: 'requested', email: s.email, name: u.name, requestedAt: u.createdAt, settings: brand, version: APP_VERSION };
+    if (u.status === 'rejected') return { state: 'denied', rejected: true, note: u.reviewNote, email: s.email, settings: brand, version: APP_VERSION };
+    if (u.status !== 'active') return { state: 'disabled', email: s.email, settings: brand, version: APP_VERSION };
     const roles = rolesOf_(u);
-    if (!roles.length) return { state: 'denied', email: s.email, settings: brand, version: APP_VERSION, contact: ownerEmail_() };
-    const w = roles.indexOf(ws) >= 0 ? ws : roles[0];
+    if (!roles.length) return { state: 'denied', email: s.email, settings: brand, version: APP_VERSION };
+    // Không chọn vai trò khi đăng nhập: tài khoản có quyền quản trị mặc định vào không gian quản trị.
+    const w = roles.indexOf(ws) >= 0 ? ws : roles.indexOf('admin') >= 0 ? 'admin' : roles[0];
     if (!u.lastLogin || u.lastLogin.slice(0, 10) !== today_()) {
       try { tx_(() => { const x = T_('Users').find(r => r.email === u.email); if (x) { x.lastLogin = now_(); upsert_('Users', x, 'email'); } }); } catch (e) {}
     }

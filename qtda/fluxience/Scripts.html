@@ -712,7 +712,7 @@ const ServerAPI = {
    Quy tắc nghiệp vụ dùng chung khối SL nên kết quả giống bản chạy thật.
    ===================================================================== */
 const MockAPI = (function () {
-  const KEY = 'fx-demo-db-v1_8', WHO = 'fx-demo-who-v1_8';
+  const KEY = 'fx-demo-db-v1_9', WHO = 'fx-demo-who-v1_9';
   const ME = 'anh.tran@demo.fluxience.vn', ADMIN = 'qlkh@demo.fluxience.vn';
   const EX = ['hoang.nguyen@demo.fluxience.vn', 'ha.le@demo.fluxience.vn', 'huy.pham@demo.fluxience.vn', 'linh.vo@demo.fluxience.vn'];
   let db = null;
@@ -822,18 +822,18 @@ const MockAPI = (function () {
     const brand = { APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME, CITY: st.CITY, FORM_CODE: st.FORM_CODE, PUB_CRITERIA: st.PUB_CRITERIA };
     const e = who();
     const accounts = db.Users.map(u => ({ email: u.email, name: u.name, unit: u.unit, roles: u.roles, status: u.status }));
-    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.8-demo' });
+    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.9-demo' });
     const u = db.Users.find(x => x.email === e);
     if (!u) {
-      const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: ws === 'admin' ? 'admin' : 'expert' };
+      const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: 'expert' };
       db.Users.push(x); log(e, 'access_request', e, x.requestedRole); save();
       return wait({ state: 'requested', email: e, name: x.name, requestedAt: x.createdAt, requestedRole: x.requestedRole, settings: brand, accounts, contact: ADMIN });
     }
     if (u.status === 'pending') return wait({ state: 'requested', email: e, name: u.name, requestedAt: u.createdAt, requestedRole: u.requestedRole, settings: brand, accounts, contact: ADMIN });
     if (u.status === 'rejected') return wait({ state: 'denied', rejected: true, note: u.reviewNote, email: e, settings: brand, accounts, contact: ADMIN });
     if (u.status !== 'active') return wait({ state: 'disabled', email: e, settings: brand, accounts, contact: ADMIN });
-    const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs[0];
-    const base = { state: 'ok', demo: true, version: '1.8-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
+    const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs.indexOf('admin') >= 0 ? 'admin' : rs[0];
+    const base = { state: 'ok', demo: true, version: '1.9-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
     if (w === 'admin') {
       const der = {}; db.Users.forEach(x => { der[x.email] = derived(x.email); });
       return wait(Object.assign(base, { users: db.Users, profiles: db.Profiles, derivedAll: der, credentials: db.Credentials, pubs: db.Publications, needsAll: db.Needs, work: db.Work, projects: db.Projects, awards: db.Awards, rounds: db.Rounds, matchesAll: db.Matches, files: db.Files, supportAll: db.Support }));
@@ -1123,7 +1123,7 @@ const API = IS_GAS ? ServerAPI : MockAPI;
 /* =====================================================================
    TRẠNG THÁI & ĐIỀU HƯỚNG
    ===================================================================== */
-const UI_VERSION = '1.8';
+const UI_VERSION = '1.9';
 const S = { data: null, ws: '', route: { page: '', q: {} }, busy: 0, ui: {}, drafts: {}, formDrafts: {}, structuredDirty: {} };
 let sessionRevision = 0, refreshRevision = 0;
 const WS_KEY = 'sl-ws';
@@ -1414,10 +1414,8 @@ const GOOGLE_G = '<svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="t
 const LOGO = "<img class=\"logo-mark\" src=\"data:image/svg+xml;base64,PHN2ZyBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiBvdmVyZmxvdz0idmlzaWJsZSIgc3R5bGU9ImRpc3BsYXk6IGJsb2NrOyIgd2lkdGg9IjIzLjExMTEiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAyMy4xMTExIDMyIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZyBpZD0iUmliYm9uIEYiIGNsaXAtcGF0aD0idXJsKCNjbGlwMF8wXzE4MikiPgo8cGF0aCBpZD0icmliYm9uLXRvcCIgZD0iTTAgNi44ODg4OUwxNC42NjY3IDBMMjMuMTExMSAzLjU1NTU2TDE0LjQ0NDQgNi44ODg4OUwwIDE0VjYuODg4ODlaIiBmaWxsPSIjMjU2M0VCIi8+CjxwYXRoIGlkPSJmb2xkLXRvcCIgZD0iTTE0LjQ0NDQgNi44ODg4OUwyMy4xMTExIDMuNTU1NTZWMTAuNDQ0NEwxNC40NDQ0IDYuODg4ODlaIiBmaWxsPSIjMTUzRTkxIi8+CjxwYXRoIGlkPSJmb2xkLW1pZGRsZSIgZD0iTTAgMTRMNy43Nzc3OCAxMEwxNy43Nzc4IDEzLjU1NTZMNy43Nzc3OCAxNy43Nzc4TDAgMTRaIiBmaWxsPSIjMTUzRTkxIi8+CjxwYXRoIGlkPSJyaWJib24tbG93ZXIiIGQ9Ik0wIDIxLjMzMzNMMTcuNzc3OCAxMy41NTU2VjIwTDAgMjguMjIyMlYyMS4zMzMzWiIgZmlsbD0iIzI1NjNFQiIvPgo8cGF0aCBpZD0iZm9sZC1ib3R0b20iIGQ9Ik0wIDI4LjIyMjJMOCAyNC42NjY3VjMyTDAgMjguMjIyMloiIGZpbGw9IiMxNTNFOTEiLz4KPC9nPgo8ZGVmcz4KPGNsaXBQYXRoIGlkPSJjbGlwMF8wXzE4MiI+CjxyZWN0IHdpZHRoPSIyMy4xMTExIiBoZWlnaHQ9IjMyIiBmaWxsPSJ3aGl0ZSIvPgo8L2NsaXBQYXRoPgo8L2RlZnM+Cjwvc3ZnPgo=\" alt=\"Fluxience\">";
 
 const AUTH_LOGO = "<span class=\"auth-logo\"><img class=\"auth-logo-light\" src=\"data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzEzIiBoZWlnaHQ9IjcyIiB2aWV3Qm94PSIwIDAgMzEzIDcyIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZyBjbGlwLXBhdGg9InVybCgjY2xpcDBfNzFfMTkpIj4KPHBhdGggZD0iTTAgMTUuNUwzMyAwTDUyIDhMMzIuNSAxNS41TDAgMzEuNVYxNS41WiIgZmlsbD0iIzI1NjNFQiIvPgo8cGF0aCBkPSJNMzIuNSAxNS41TDUyIDhWMjMuNUwzMi41IDE1LjVaIiBmaWxsPSIjMTUzRTkxIi8+CjxwYXRoIGQ9Ik0wIDMxLjVMMTcuNSAyMi41TDQwIDMwLjVMMTcuNSA0MEwwIDMxLjVaIiBmaWxsPSIjMTUzRTkxIi8+CjxwYXRoIGQ9Ik0wIDQ4TDQwIDMwLjVWNDVMMCA2My41VjQ4WiIgZmlsbD0iIzI1NjNFQiIvPgo8cGF0aCBkPSJNMCA2My41TDE4IDU1LjVWNzJMMCA2My41WiIgZmlsbD0iIzE1M0U5MSIvPgo8L2c+CjxwYXRoIGQ9Ik03NS42NCA1NlYxOC41Nkg5OC4xODJWMjQuODI2SDgxLjkwNlYzNC4xNkg5NS4wNjJWNDAuNEg4MS45MDZWNTZINzUuNjRaTTEwMy4zNzkgNTZWMTcuNzhIMTA5LjY0NVY1NkgxMDMuMzc5Wk0xMjcuOTYzIDU2LjgwNkMxMjUuODgzIDU2LjgwNiAxMjQuMTY3IDU2LjQ1OTMgMTIyLjgxNSA1NS43NjZDMTIxLjQ2MyA1NS4wNzI3IDEyMC4zODggNTQuMTg4NyAxMTkuNTkxIDUzLjExNEMxMTguNzk0IDUyLjAzOTMgMTE4LjIwNCA1MC44OTUzIDExNy44MjMgNDkuNjgyQzExNy40NDIgNDguNDY4NyAxMTcuMTkgNDcuMzI0NyAxMTcuMDY5IDQ2LjI1QzExNi45NjUgNDUuMTU4IDExNi45MTMgNDQuMjc0IDExNi45MTMgNDMuNTk4VjI3LjkySDEyMy4yNTdWNDEuNDRDMTIzLjI1NyA0Mi4zMDY3IDEyMy4zMTggNDMuMjg2IDEyMy40MzkgNDQuMzc4QzEyMy41NiA0NS40NTI3IDEyMy44MzggNDYuNDkyNyAxMjQuMjcxIDQ3LjQ5OEMxMjQuNzIyIDQ4LjQ4NiAxMjUuMzggNDkuMzAwNyAxMjYuMjQ3IDQ5Ljk0MkMxMjcuMTMxIDUwLjU4MzMgMTI4LjMxOCA1MC45MDQgMTI5LjgwOSA1MC45MDRDMTMwLjYwNiA1MC45MDQgMTMxLjM5NSA1MC43NzQgMTMyLjE3NSA1MC41MTRDMTMyLjk1NSA1MC4yNTQgMTMzLjY1NyA0OS44MTIgMTM0LjI4MSA0OS4xODhDMTM0LjkyMiA0OC41NDY3IDEzNS40MzQgNDcuNjcxMyAxMzUuODE1IDQ2LjU2MkMxMzYuMTk2IDQ1LjQ1MjcgMTM2LjM4NyA0NC4wNDg3IDEzNi4zODcgNDIuMzVMMTQwLjEwNSA0My45MzZDMTQwLjEwNSA0Ni4zMjggMTM5LjYzNyA0OC40OTQ3IDEzOC43MDEgNTAuNDM2QzEzNy43ODIgNTIuMzc3MyAxMzYuNDIyIDUzLjkyODcgMTM0LjYxOSA1NS4wOUMxMzIuODE2IDU2LjIzNCAxMzAuNTk4IDU2LjgwNiAxMjcuOTYzIDU2LjgwNlpNMTM3LjE0MSA1NlY0Ny4yOUgxMzYuMzg3VjI3LjkySDE0Mi42NzlWNTZIMTM3LjE0MVpNMTQ2Ljg2NCA1NkwxNTcuMTM0IDQxLjgwNEwxNDcuMDcyIDI3LjkySDE1NC40NTZMMTYwLjc3NCAzNi44OUwxNjYuOTg4IDI3LjkySDE3NC4zNzJMMTY0LjMxIDQxLjgwNEwxNzQuNjMyIDU2SDE2Ny4yNDhMMTYwLjc3NCA0Ni43MThMMTU0LjI0OCA1NkgxNDYuODY0Wk0xNzkuMjk3IDIzLjY1NlYxNy45MUgxODUuNTYzVjIzLjY1NkgxNzkuMjk3Wk0xNzkuMjk3IDU2VjI3LjkySDE4NS41NjNWNTZIMTc5LjI5N1pNMjA2LjExNyA1Ni43OEMyMDMuMjc0IDU2Ljc4IDIwMC43NzggNTYuMTY0NyAxOTguNjI5IDU0LjkzNEMxOTYuNDggNTMuNzAzMyAxOTQuNzk4IDUxLjk5NiAxOTMuNTg1IDQ5LjgxMkMxOTIuMzg5IDQ3LjYyOCAxOTEuNzkxIDQ1LjExNDcgMTkxLjc5MSA0Mi4yNzJDMTkxLjc5MSAzOS4yMDQgMTkyLjM4IDM2LjU0MzMgMTkzLjU1OSAzNC4yOUMxOTQuNzM4IDMyLjAxOTMgMTk2LjM3NiAzMC4yNiAxOTguNDczIDI5LjAxMkMyMDAuNTcgMjcuNzY0IDIwMi45OTcgMjcuMTQgMjA1Ljc1MyAyNy4xNEMyMDguNjY1IDI3LjE0IDIxMS4xMzUgMjcuODI0NyAyMTMuMTYzIDI5LjE5NEMyMTUuMjA4IDMwLjU0NiAyMTYuNzI1IDMyLjQ2MTMgMjE3LjcxMyAzNC45NEMyMTguNzAxIDM3LjQxODcgMjE5LjA3NCA0MC4zMzkzIDIxOC44MzEgNDMuNzAySDIxMi42MTdWNDEuNDE0QzIxMi42IDM4LjM2MzMgMjEyLjA2MiAzNi4xMzYgMjExLjAwNSAzNC43MzJDMjA5Ljk0OCAzMy4zMjggMjA4LjI4NCAzMi42MjYgMjA2LjAxMyAzMi42MjZDMjAzLjQ0OCAzMi42MjYgMjAxLjU0MSAzMy40MjMzIDIwMC4yOTMgMzUuMDE4QzE5OS4wNDUgMzYuNTk1MyAxOTguNDIxIDM4LjkwOTMgMTk4LjQyMSA0MS45NkMxOTguNDIxIDQ0LjgwMjcgMTk5LjA0NSA0Ny4wMDQgMjAwLjI5MyA0OC41NjRDMjAxLjU0MSA1MC4xMjQgMjAzLjM2MSA1MC45MDQgMjA1Ljc1MyA1MC45MDRDMjA3LjI5NiA1MC45MDQgMjA4LjYyMiA1MC41NjYgMjA5LjczMSA0OS44OUMyMTAuODU4IDQ5LjE5NjcgMjExLjcyNCA0OC4yIDIxMi4zMzEgNDYuOUwyMTguNTE5IDQ4Ljc3MkMyMTcuNDQ0IDUxLjMwMjcgMjE1Ljc4IDUzLjI3IDIxMy41MjcgNTQuNjc0QzIxMS4yOTEgNTYuMDc4IDIwOC44MjEgNTYuNzggMjA2LjExNyA1Ni43OFpNMTk2LjQ0NSA0My43MDJWMzguOTdIMjE1Ljc2M1Y0My43MDJIMTk2LjQ0NVpNMjQzLjI5MiA1NlY0Mi40OEMyNDMuMjkyIDQxLjU5NiAyNDMuMjMyIDQwLjYxNjcgMjQzLjExIDM5LjU0MkMyNDIuOTg5IDM4LjQ2NzMgMjQyLjcwMyAzNy40MzYgMjQyLjI1MiAzNi40NDhDMjQxLjgxOSAzNS40NDI3IDI0MS4xNiAzNC42MTkzIDI0MC4yNzYgMzMuOTc4QzIzOS40MSAzMy4zMzY3IDIzOC4yMzEgMzMuMDE2IDIzNi43NCAzMy4wMTZDMjM1Ljk0MyAzMy4wMTYgMjM1LjE1NCAzMy4xNDYgMjM0LjM3NCAzMy40MDZDMjMzLjU5NCAzMy42NjYgMjMyLjg4NCAzNC4xMTY3IDIzMi4yNDIgMzQuNzU4QzIzMS42MTggMzUuMzgyIDIzMS4xMTYgMzYuMjQ4NyAyMzAuNzM0IDM3LjM1OEMyMzAuMzUzIDM4LjQ1IDIzMC4xNjIgMzkuODU0IDIzMC4xNjIgNDEuNTdMMjI2LjQ0NCAzOS45ODRDMjI2LjQ0NCAzNy41OTIgMjI2LjkwNCAzNS40MjUzIDIyNy44MjIgMzMuNDg0QzIyOC43NTggMzEuNTQyNyAyMzAuMTI4IDMwIDIzMS45MyAyOC44NTZDMjMzLjczMyAyNy42OTQ3IDIzNS45NTIgMjcuMTE0IDIzOC41ODYgMjcuMTE0QzI0MC42NjYgMjcuMTE0IDI0Mi4zODIgMjcuNDYwNyAyNDMuNzM0IDI4LjE1NEMyNDUuMDg2IDI4Ljg0NzMgMjQ2LjE2MSAyOS43MzEzIDI0Ni45NTggMzAuODA2QzI0Ny43NTYgMzEuODgwNyAyNDguMzQ1IDMzLjAyNDcgMjQ4LjcyNiAzNC4yMzhDMjQ5LjEwOCAzNS40NTEzIDI0OS4zNSAzNi42MDQgMjQ5LjQ1NCAzNy42OTZDMjQ5LjU3NiAzOC43NzA3IDI0OS42MzYgMzkuNjQ2IDI0OS42MzYgNDAuMzIyVjU2SDI0My4yOTJaTTIyMy44MTggNTZWMjcuOTJIMjI5LjQwOFYzNi42M0gyMzAuMTYyVjU2SDIyMy44MThaTTI2OC4xNTggNTYuNzhDMjY1LjI2NCA1Ni43OCAyNjIuNzk0IDU2LjEzODcgMjYwLjc0OCA1NC44NTZDMjU4LjcwMyA1My41NTYgMjU3LjEzNCA1MS43ODggMjU2LjA0MiA0OS41NTJDMjU0Ljk2OCA0Ny4zMTYgMjU0LjQyMiA0NC43ODUzIDI1NC40MDQgNDEuOTZDMjU0LjQyMiAzOS4wODI3IDI1NC45ODUgMzYuNTM0NyAyNTYuMDk0IDM0LjMxNkMyNTcuMjIxIDMyLjA4IDI1OC44MTYgMzAuMzI5MyAyNjAuODc4IDI5LjA2NEMyNjIuOTQxIDI3Ljc4MTMgMjY1LjM5NCAyNy4xNCAyNjguMjM2IDI3LjE0QzI3MS40MjYgMjcuMTQgMjc0LjEyMSAyNy45NDYgMjc2LjMyMiAyOS41NThDMjc4LjU0MSAzMS4xNTI3IDI3OS45ODggMzMuMzM2NyAyODAuNjY0IDM2LjExTDI3NC40MjQgMzcuOEMyNzMuOTM5IDM2LjI5MiAyNzMuMTMzIDM1LjEyMiAyNzIuMDA2IDM0LjI5QzI3MC44OCAzMy40NDA3IDI2OS41OTcgMzMuMDE2IDI2OC4xNTggMzMuMDE2QzI2Ni41MjkgMzMuMDE2IDI2NS4xODYgMzMuNDA2IDI2NC4xMjggMzQuMTg2QzI2My4wNzEgMzQuOTQ4NyAyNjIuMjkxIDM2LjAwNiAyNjEuNzg4IDM3LjM1OEMyNjEuMjg2IDM4LjcxIDI2MS4wMzQgNDAuMjQ0IDI2MS4wMzQgNDEuOTZDMjYxLjAzNCA0NC42MjkzIDI2MS42MzIgNDYuNzg3MyAyNjIuODI4IDQ4LjQzNEMyNjQuMDI0IDUwLjA4MDcgMjY1LjgwMSA1MC45MDQgMjY4LjE1OCA1MC45MDRDMjY5LjgyMiA1MC45MDQgMjcxLjEzMSA1MC41MjI3IDI3Mi4wODQgNDkuNzZDMjczLjA1NSA0OC45OTczIDI3My43ODMgNDcuODk2NyAyNzQuMjY4IDQ2LjQ1OEwyODAuNjY0IDQ3Ljg4OEMyNzkuNzk4IDUwLjc0OCAyNzguMjgxIDUyLjk0OTMgMjc2LjExNCA1NC40OTJDMjczLjk0OCA1Ni4wMTczIDI3MS4yOTYgNTYuNzggMjY4LjE1OCA1Ni43OFpNMjk3Ljg3OSA1Ni43OEMyOTUuMDM2IDU2Ljc4IDI5Mi41NCA1Ni4xNjQ3IDI5MC4zOTEgNTQuOTM0QzI4OC4yNDEgNTMuNzAzMyAyODYuNTYgNTEuOTk2IDI4NS4zNDcgNDkuODEyQzI4NC4xNTEgNDcuNjI4IDI4My41NTMgNDUuMTE0NyAyODMuNTUzIDQyLjI3MkMyODMuNTUzIDM5LjIwNCAyODQuMTQyIDM2LjU0MzMgMjg1LjMyMSAzNC4yOUMyODYuNDk5IDMyLjAxOTMgMjg4LjEzNyAzMC4yNiAyOTAuMjM1IDI5LjAxMkMyOTIuMzMyIDI3Ljc2NCAyOTQuNzU5IDI3LjE0IDI5Ny41MTUgMjcuMTRDMzAwLjQyNyAyNy4xNCAzMDIuODk3IDI3LjgyNDcgMzA0LjkyNSAyOS4xOTRDMzA2Ljk3IDMwLjU0NiAzMDguNDg3IDMyLjQ2MTMgMzA5LjQ3NSAzNC45NEMzMTAuNDYzIDM3LjQxODcgMzEwLjgzNSA0MC4zMzkzIDMxMC41OTMgNDMuNzAySDMwNC4zNzlWNDEuNDE0QzMwNC4zNjEgMzguMzYzMyAzMDMuODI0IDM2LjEzNiAzMDIuNzY3IDM0LjczMkMzMDEuNzA5IDMzLjMyOCAzMDAuMDQ1IDMyLjYyNiAyOTcuNzc1IDMyLjYyNkMyOTUuMjA5IDMyLjYyNiAyOTMuMzAzIDMzLjQyMzMgMjkyLjA1NSAzNS4wMThDMjkwLjgwNyAzNi41OTUzIDI5MC4xODMgMzguOTA5MyAyOTAuMTgzIDQxLjk2QzI5MC4xODMgNDQuODAyNyAyOTAuODA3IDQ3LjAwNCAyOTIuMDU1IDQ4LjU2NEMyOTMuMzAzIDUwLjEyNCAyOTUuMTIzIDUwLjkwNCAyOTcuNTE1IDUwLjkwNEMyOTkuMDU3IDUwLjkwNCAzMDAuMzgzIDUwLjU2NiAzMDEuNDkzIDQ5Ljg5QzMwMi42MTkgNDkuMTk2NyAzMDMuNDg2IDQ4LjIgMzA0LjA5MyA0Ni45TDMxMC4yODEgNDguNzcyQzMwOS4yMDYgNTEuMzAyNyAzMDcuNTQyIDUzLjI3IDMwNS4yODkgNTQuNjc0QzMwMy4wNTMgNTYuMDc4IDMwMC41ODMgNTYuNzggMjk3Ljg3OSA1Ni43OFpNMjg4LjIwNyA0My43MDJWMzguOTdIMzA3LjUyNVY0My43MDJIMjg4LjIwN1oiIGZpbGw9IiMxNzJCNDUiLz4KPGRlZnM+CjxjbGlwUGF0aCBpZD0iY2xpcDBfNzFfMTkiPgo8cmVjdCB3aWR0aD0iNTIiIGhlaWdodD0iNzIiIGZpbGw9IndoaXRlIi8+CjwvY2xpcFBhdGg+CjwvZGVmcz4KPC9zdmc+Cgo=\" alt=\"Fluxience\" width=\"243\" height=\"56\"><img class=\"auth-logo-dark\" src=\"data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzEzIiBoZWlnaHQ9IjcyIiB2aWV3Qm94PSIwIDAgMzEzIDcyIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZyBjbGlwLXBhdGg9InVybCgjY2xpcDBfNzFfMzQpIj4KPHBhdGggZD0iTTAgMTUuNUwzMyAwTDUyIDhMMzIuNSAxNS41TDAgMzEuNVYxNS41WiIgZmlsbD0id2hpdGUiLz4KPHBhdGggZD0iTTMyLjUgMTUuNUw1MiA4VjIzLjVMMzIuNSAxNS41WiIgZmlsbD0id2hpdGUiLz4KPHBhdGggZD0iTTAgMzEuNUwxNy41IDIyLjVMNDAgMzAuNUwxNy41IDQwTDAgMzEuNVoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0wIDQ4TDQwIDMwLjVWNDVMMCA2My41VjQ4WiIgZmlsbD0id2hpdGUiLz4KPHBhdGggZD0iTTAgNjMuNUwxOCA1NS41VjcyTDAgNjMuNVoiIGZpbGw9IndoaXRlIi8+CjwvZz4KPHBhdGggZD0iTTc1LjY0IDU2VjE4LjU2SDk4LjE4MlYyNC44MjZIODEuOTA2VjM0LjE2SDk1LjA2MlY0MC40SDgxLjkwNlY1Nkg3NS42NFpNMTAzLjM3OSA1NlYxNy43OEgxMDkuNjQ1VjU2SDEwMy4zNzlaTTEyNy45NjMgNTYuODA2QzEyNS44ODMgNTYuODA2IDEyNC4xNjcgNTYuNDU5MyAxMjIuODE1IDU1Ljc2NkMxMjEuNDYzIDU1LjA3MjcgMTIwLjM4OCA1NC4xODg3IDExOS41OTEgNTMuMTE0QzExOC43OTQgNTIuMDM5MyAxMTguMjA0IDUwLjg5NTMgMTE3LjgyMyA0OS42ODJDMTE3LjQ0MiA0OC40Njg3IDExNy4xOSA0Ny4zMjQ3IDExNy4wNjkgNDYuMjVDMTE2Ljk2NSA0NS4xNTggMTE2LjkxMyA0NC4yNzQgMTE2LjkxMyA0My41OThWMjcuOTJIMTIzLjI1N1Y0MS40NEMxMjMuMjU3IDQyLjMwNjcgMTIzLjMxOCA0My4yODYgMTIzLjQzOSA0NC4zNzhDMTIzLjU2IDQ1LjQ1MjcgMTIzLjgzOCA0Ni40OTI3IDEyNC4yNzEgNDcuNDk4QzEyNC43MjIgNDguNDg2IDEyNS4zOCA0OS4zMDA3IDEyNi4yNDcgNDkuOTQyQzEyNy4xMzEgNTAuNTgzMyAxMjguMzE4IDUwLjkwNCAxMjkuODA5IDUwLjkwNEMxMzAuNjA2IDUwLjkwNCAxMzEuMzk1IDUwLjc3NCAxMzIuMTc1IDUwLjUxNEMxMzIuOTU1IDUwLjI1NCAxMzMuNjU3IDQ5LjgxMiAxMzQuMjgxIDQ5LjE4OEMxMzQuOTIyIDQ4LjU0NjcgMTM1LjQzNCA0Ny42NzEzIDEzNS44MTUgNDYuNTYyQzEzNi4xOTYgNDUuNDUyNyAxMzYuMzg3IDQ0LjA0ODcgMTM2LjM4NyA0Mi4zNUwxNDAuMTA1IDQzLjkzNkMxNDAuMTA1IDQ2LjMyOCAxMzkuNjM3IDQ4LjQ5NDcgMTM4LjcwMSA1MC40MzZDMTM3Ljc4MiA1Mi4zNzczIDEzNi40MjIgNTMuOTI4NyAxMzQuNjE5IDU1LjA5QzEzMi44MTYgNTYuMjM0IDEzMC41OTggNTYuODA2IDEyNy45NjMgNTYuODA2Wk0xMzcuMTQxIDU2VjQ3LjI5SDEzNi4zODdWMjcuOTJIMTQyLjY3OVY1NkgxMzcuMTQxWk0xNDYuODY0IDU2TDE1Ny4xMzQgNDEuODA0TDE0Ny4wNzIgMjcuOTJIMTU0LjQ1NkwxNjAuNzc0IDM2Ljg5TDE2Ni45ODggMjcuOTJIMTc0LjM3MkwxNjQuMzEgNDEuODA0TDE3NC42MzIgNTZIMTY3LjI0OEwxNjAuNzc0IDQ2LjcxOEwxNTQuMjQ4IDU2SDE0Ni44NjRaTTE3OS4yOTcgMjMuNjU2VjE3LjkxSDE4NS41NjNWMjMuNjU2SDE3OS4yOTdaTTE3OS4yOTcgNTZWMjcuOTJIMTg1LjU2M1Y1NkgxNzkuMjk3Wk0yMDYuMTE3IDU2Ljc4QzIwMy4yNzQgNTYuNzggMjAwLjc3OCA1Ni4xNjQ3IDE5OC42MjkgNTQuOTM0QzE5Ni40OCA1My43MDMzIDE5NC43OTggNTEuOTk2IDE5My41ODUgNDkuODEyQzE5Mi4zODkgNDcuNjI4IDE5MS43OTEgNDUuMTE0NyAxOTEuNzkxIDQyLjI3MkMxOTEuNzkxIDM5LjIwNCAxOTIuMzggMzYuNTQzMyAxOTMuNTU5IDM0LjI5QzE5NC43MzggMzIuMDE5MyAxOTYuMzc2IDMwLjI2IDE5OC40NzMgMjkuMDEyQzIwMC41NyAyNy43NjQgMjAyLjk5NyAyNy4xNCAyMDUuNzUzIDI3LjE0QzIwOC42NjUgMjcuMTQgMjExLjEzNSAyNy44MjQ3IDIxMy4xNjMgMjkuMTk0QzIxNS4yMDggMzAuNTQ2IDIxNi43MjUgMzIuNDYxMyAyMTcuNzEzIDM0Ljk0QzIxOC43MDEgMzcuNDE4NyAyMTkuMDc0IDQwLjMzOTMgMjE4LjgzMSA0My43MDJIMjEyLjYxN1Y0MS40MTRDMjEyLjYgMzguMzYzMyAyMTIuMDYyIDM2LjEzNiAyMTEuMDA1IDM0LjczMkMyMDkuOTQ4IDMzLjMyOCAyMDguMjg0IDMyLjYyNiAyMDYuMDEzIDMyLjYyNkMyMDMuNDQ4IDMyLjYyNiAyMDEuNTQxIDMzLjQyMzMgMjAwLjI5MyAzNS4wMThDMTk5LjA0NSAzNi41OTUzIDE5OC40MjEgMzguOTA5MyAxOTguNDIxIDQxLjk2QzE5OC40MjEgNDQuODAyNyAxOTkuMDQ1IDQ3LjAwNCAyMDAuMjkzIDQ4LjU2NEMyMDEuNTQxIDUwLjEyNCAyMDMuMzYxIDUwLjkwNCAyMDUuNzUzIDUwLjkwNEMyMDcuMjk2IDUwLjkwNCAyMDguNjIyIDUwLjU2NiAyMDkuNzMxIDQ5Ljg5QzIxMC44NTggNDkuMTk2NyAyMTEuNzI0IDQ4LjIgMjEyLjMzMSA0Ni45TDIxOC41MTkgNDguNzcyQzIxNy40NDQgNTEuMzAyNyAyMTUuNzggNTMuMjcgMjEzLjUyNyA1NC42NzRDMjExLjI5MSA1Ni4wNzggMjA4LjgyMSA1Ni43OCAyMDYuMTE3IDU2Ljc4Wk0xOTYuNDQ1IDQzLjcwMlYzOC45N0gyMTUuNzYzVjQzLjcwMkgxOTYuNDQ1Wk0yNDMuMjkyIDU2VjQyLjQ4QzI0My4yOTIgNDEuNTk2IDI0My4yMzIgNDAuNjE2NyAyNDMuMTEgMzkuNTQyQzI0Mi45ODkgMzguNDY3MyAyNDIuNzAzIDM3LjQzNiAyNDIuMjUyIDM2LjQ0OEMyNDEuODE5IDM1LjQ0MjcgMjQxLjE2IDM0LjYxOTMgMjQwLjI3NiAzMy45NzhDMjM5LjQxIDMzLjMzNjcgMjM4LjIzMSAzMy4wMTYgMjM2Ljc0IDMzLjAxNkMyMzUuOTQzIDMzLjAxNiAyMzUuMTU0IDMzLjE0NiAyMzQuMzc0IDMzLjQwNkMyMzMuNTk0IDMzLjY2NiAyMzIuODg0IDM0LjExNjcgMjMyLjI0MiAzNC43NThDMjMxLjYxOCAzNS4zODIgMjMxLjExNiAzNi4yNDg3IDIzMC43MzQgMzcuMzU4QzIzMC4zNTMgMzguNDUgMjMwLjE2MiAzOS44NTQgMjMwLjE2MiA0MS41N0wyMjYuNDQ0IDM5Ljk4NEMyMjYuNDQ0IDM3LjU5MiAyMjYuOTA0IDM1LjQyNTMgMjI3LjgyMiAzMy40ODRDMjI4Ljc1OCAzMS41NDI3IDIzMC4xMjggMzAgMjMxLjkzIDI4Ljg1NkMyMzMuNzMzIDI3LjY5NDcgMjM1Ljk1MiAyNy4xMTQgMjM4LjU4NiAyNy4xMTRDMjQwLjY2NiAyNy4xMTQgMjQyLjM4MiAyNy40NjA3IDI0My43MzQgMjguMTU0QzI0NS4wODYgMjguODQ3MyAyNDYuMTYxIDI5LjczMTMgMjQ2Ljk1OCAzMC44MDZDMjQ3Ljc1NiAzMS44ODA3IDI0OC4zNDUgMzMuMDI0NyAyNDguNzI2IDM0LjIzOEMyNDkuMTA4IDM1LjQ1MTMgMjQ5LjM1IDM2LjYwNCAyNDkuNDU0IDM3LjY5NkMyNDkuNTc2IDM4Ljc3MDcgMjQ5LjYzNiAzOS42NDYgMjQ5LjYzNiA0MC4zMjJWNTZIMjQzLjI5MlpNMjIzLjgxOCA1NlYyNy45MkgyMjkuNDA4VjM2LjYzSDIzMC4xNjJWNTZIMjIzLjgxOFpNMjY4LjE1OCA1Ni43OEMyNjUuMjY0IDU2Ljc4IDI2Mi43OTQgNTYuMTM4NyAyNjAuNzQ4IDU0Ljg1NkMyNTguNzAzIDUzLjU1NiAyNTcuMTM0IDUxLjc4OCAyNTYuMDQyIDQ5LjU1MkMyNTQuOTY4IDQ3LjMxNiAyNTQuNDIyIDQ0Ljc4NTMgMjU0LjQwNCA0MS45NkMyNTQuNDIyIDM5LjA4MjcgMjU0Ljk4NSAzNi41MzQ3IDI1Ni4wOTQgMzQuMzE2QzI1Ny4yMjEgMzIuMDggMjU4LjgxNiAzMC4zMjkzIDI2MC44NzggMjkuMDY0QzI2Mi45NDEgMjcuNzgxMyAyNjUuMzk0IDI3LjE0IDI2OC4yMzYgMjcuMTRDMjcxLjQyNiAyNy4xNCAyNzQuMTIxIDI3Ljk0NiAyNzYuMzIyIDI5LjU1OEMyNzguNTQxIDMxLjE1MjcgMjc5Ljk4OCAzMy4zMzY3IDI4MC42NjQgMzYuMTFMMjc0LjQyNCAzNy44QzI3My45MzkgMzYuMjkyIDI3My4xMzMgMzUuMTIyIDI3Mi4wMDYgMzQuMjlDMjcwLjg4IDMzLjQ0MDcgMjY5LjU5NyAzMy4wMTYgMjY4LjE1OCAzMy4wMTZDMjY2LjUyOSAzMy4wMTYgMjY1LjE4NiAzMy40MDYgMjY0LjEyOCAzNC4xODZDMjYzLjA3MSAzNC45NDg3IDI2Mi4yOTEgMzYuMDA2IDI2MS43ODggMzcuMzU4QzI2MS4yODYgMzguNzEgMjYxLjAzNCA0MC4yNDQgMjYxLjAzNCA0MS45NkMyNjEuMDM0IDQ0LjYyOTMgMjYxLjYzMiA0Ni43ODczIDI2Mi44MjggNDguNDM0QzI2NC4wMjQgNTAuMDgwNyAyNjUuODAxIDUwLjkwNCAyNjguMTU4IDUwLjkwNEMyNjkuODIyIDUwLjkwNCAyNzEuMTMxIDUwLjUyMjcgMjcyLjA4NCA0OS43NkMyNzMuMDU1IDQ4Ljk5NzMgMjczLjc4MyA0Ny44OTY3IDI3NC4yNjggNDYuNDU4TDI4MC42NjQgNDcuODg4QzI3OS43OTggNTAuNzQ4IDI3OC4yODEgNTIuOTQ5MyAyNzYuMTE0IDU0LjQ5MkMyNzMuOTQ4IDU2LjAxNzMgMjcxLjI5NiA1Ni43OCAyNjguMTU4IDU2Ljc4Wk0yOTcuODc5IDU2Ljc4QzI5NS4wMzYgNTYuNzggMjkyLjU0IDU2LjE2NDcgMjkwLjM5MSA1NC45MzRDMjg4LjI0MSA1My43MDMzIDI4Ni41NiA1MS45OTYgMjg1LjM0NyA0OS44MTJDMjg0LjE1MSA0Ny42MjggMjgzLjU1MyA0NS4xMTQ3IDI4My41NTMgNDIuMjcyQzI4My41NTMgMzkuMjA0IDI4NC4xNDIgMzYuNTQzMyAyODUuMzIxIDM0LjI5QzI4Ni40OTkgMzIuMDE5MyAyODguMTM3IDMwLjI2IDI5MC4yMzUgMjkuMDEyQzI5Mi4zMzIgMjcuNzY0IDI5NC43NTkgMjcuMTQgMjk3LjUxNSAyNy4xNEMzMDAuNDI3IDI3LjE0IDMwMi44OTcgMjcuODI0NyAzMDQuOTI1IDI5LjE5NEMzMDYuOTcgMzAuNTQ2IDMwOC40ODcgMzIuNDYxMyAzMDkuNDc1IDM0Ljk0QzMxMC40NjMgMzcuNDE4NyAzMTAuODM1IDQwLjMzOTMgMzEwLjU5MyA0My43MDJIMzA0LjM3OVY0MS40MTRDMzA0LjM2MSAzOC4zNjMzIDMwMy44MjQgMzYuMTM2IDMwMi43NjcgMzQuNzMyQzMwMS43MDkgMzMuMzI4IDMwMC4wNDUgMzIuNjI2IDI5Ny43NzUgMzIuNjI2QzI5NS4yMDkgMzIuNjI2IDI5My4zMDMgMzMuNDIzMyAyOTIuMDU1IDM1LjAxOEMyOTAuODA3IDM2LjU5NTMgMjkwLjE4MyAzOC45MDkzIDI5MC4xODMgNDEuOTZDMjkwLjE4MyA0NC44MDI3IDI5MC44MDcgNDcuMDA0IDI5Mi4wNTUgNDguNTY0QzI5My4zMDMgNTAuMTI0IDI5NS4xMjMgNTAuOTA0IDI5Ny41MTUgNTAuOTA0QzI5OS4wNTcgNTAuOTA0IDMwMC4zODMgNTAuNTY2IDMwMS40OTMgNDkuODlDMzAyLjYxOSA0OS4xOTY3IDMwMy40ODYgNDguMiAzMDQuMDkzIDQ2LjlMMzEwLjI4MSA0OC43NzJDMzA5LjIwNiA1MS4zMDI3IDMwNy41NDIgNTMuMjcgMzA1LjI4OSA1NC42NzRDMzAzLjA1MyA1Ni4wNzggMzAwLjU4MyA1Ni43OCAyOTcuODc5IDU2Ljc4Wk0yODguMjA3IDQzLjcwMlYzOC45N0gzMDcuNTI1VjQzLjcwMkgyODguMjA3WiIgZmlsbD0id2hpdGUiLz4KPGRlZnM+CjxjbGlwUGF0aCBpZD0iY2xpcDBfNzFfMzQiPgo8cmVjdCB3aWR0aD0iNTIiIGhlaWdodD0iNzIiIGZpbGw9IndoaXRlIi8+CjwvY2xpcFBhdGg+CjwvZGVmcz4KPC9zdmc+Cgo=\" alt=\"Fluxience\" width=\"243\" height=\"56\"></span>";
-const LOGIN_ROLE_KEY = 'fx-login-role';
-function loginIntent() { try { const r=localStorage.getItem(LOGIN_ROLE_KEY);return ['expert','admin'].includes(r)?r:''; }catch(e){return '';} }
-function rememberLoginRole(role) { if(!['expert','admin'].includes(role))return;try{localStorage.setItem(LOGIN_ROLE_KEY,role);localStorage.setItem(WS_KEY,role);}catch(e){} }
-function clearLoginIntent() { try{localStorage.removeItem(LOGIN_ROLE_KEY);}catch(e){} }
+/* v1.9: một nút đăng nhập duy nhất — vai trò do hệ thống tự nhận diện sau khi xác thực. */
+try { localStorage.removeItem('fx-login-role'); } catch (e) {}
 function gate(inner) {
   $('#app').hidden=true;const g=$('#gate');g.hidden=false;
   const st=(S.data&&S.data.settings)||{};
@@ -1434,55 +1432,52 @@ async function boot(ws) {
   splash();
   let d;
   let storedWS = ''; try { storedWS = localStorage.getItem(WS_KEY) || ''; } catch (e) {}
-  const requestedRole=ws||loginIntent();
-  try { d = await API.bootstrap(requestedRole || storedWS); }
+  try { d = await API.bootstrap(ws || storedWS); }
   catch (e) { d = { state: 'error', message: e.message }; }
   if (request !== sessionRevision) return;
   if (S.draftOwner && d.me && S.draftOwner !== d.me.email) clearSessionDrafts();
   if (d.me) S.draftOwner = d.me.email;
   if (['login','denied','disabled','requested'].includes(d.state)) { clearSessionDrafts(); $('#main').innerHTML = ''; }
   S.data = d;
-  if (d.state === 'ok' && requestedRole && !(d.roles||[]).includes(requestedRole)) return showRoleDenied(d,requestedRole);
-  if (d.state === 'ok') { clearLoginIntent(); S.ws = d.ws;if(!Object.prototype.hasOwnProperty.call(VIEWS[S.ws],parseHash().page))location.hash='#/overview'; try { localStorage.setItem(WS_KEY, d.ws); } catch (e) {} $('#gate').hidden = true; $('#app').hidden = false; route(); return; }
+  if (d.state === 'ok') { S.ws = d.ws;if(!Object.prototype.hasOwnProperty.call(VIEWS[S.ws],parseHash().page))location.hash='#/overview'; try { localStorage.setItem(WS_KEY, d.ws); } catch (e) {} $('#gate').hidden = true; $('#app').hidden = false; route(); return; }
   if (d.state === 'login') return showLogin(d);
   if (d.state === 'requested') return showRequested(d);
   if (d.state === 'denied' || d.state === 'disabled') return showDenied(d);
   gate(`${LOGO}<div class="h2">Chưa mở được ứng dụng</div><p>${esc(d.message || 'Lỗi không xác định.')}</p><button type="button" class="btn primary block" data-act="reload">${icon('refresh', 'sm')}Thử lại</button>`);
 }
 function showLogin(d) {
-  const roles=[['expert','Chuyên gia','Quản lý hồ sơ, công bố và kết nối'],['admin','Quản trị viên','Rà soát dữ liệu và quản lý theo đơn vị']];
-  const selected=S.ui.loginRole;
-  if(API.demo&&selected){
-    const accts=MockAPI.accounts().filter(u=>u.status!=='pending'&&u.status!=='rejected'&&String(u.roles).split(/[;, ]+/).includes(selected));
-    gate(`<div class="auth-eyebrow">KHÔNG GIAN ${selected==='admin'?'QUẢN TRỊ':'CHUYÊN GIA'}</div><h1 class="h1">Chọn tài khoản mẫu</h1><p>Thử trải nghiệm ${selected==='admin'?'quản trị viên':'chuyên gia'} trong bản demo.</p><div class="accounts">${accts.map(u=>`<button type="button" class="acc-btn" data-act="demo-login" data-role="${selected}" data-email="${esc(u.email)}"><span class="avatar">${esc(initials(u.name))}</span><span><b>${esc(u.name)}</b><small>${esc(u.email)}${u.status!=='active'?' · đang khóa':''}</small></span></button>`).join('')}<button type="button" class="acc-btn" data-act="demo-login" data-role="${selected}" data-email="khach.moi@gmail.com"><span class="avatar">?</span><span><b>Tài khoản Google chưa được cấp</b><small>khach.moi@gmail.com · thử gửi yêu cầu truy cập</small></span></button></div><button type="button" class="btn ghost block auth-back" data-act="login-role-back">Chọn vai trò khác</button>`);
+  const org = esc((d.settings && d.settings.ORG_NAME) || 'đơn vị');
+  if (API.demo && S.ui.demoPick) {
+    // Bản demo: mô phỏng hộp "Chọn tài khoản" của Google. Không nêu vai trò — hệ thống tự nhận diện.
+    const accts = MockAPI.accounts().filter(u => u.status === 'active').sort((a, b) => String(a.roles).includes('admin') - String(b.roles).includes('admin'));
+    gate(`<h1 class="h1">Chọn tài khoản</h1><p>để tiếp tục tới Fluxience</p>
+      <div class="accounts g-accounts">${accts.map(u => `<button type="button" class="acc-btn" data-act="demo-login" data-email="${esc(u.email)}"><span class="avatar">${esc(initials(u.name))}</span><span><b>${esc(u.name)}</b><small>${esc(u.email)}</small></span></button>`).join('')}
+      <button type="button" class="acc-btn" data-act="demo-login" data-email="khach.moi@gmail.com"><span class="avatar">${icon('user', 'sm')}</span><span><b>Sử dụng một tài khoản khác</b><small>khach.moi@gmail.com · chưa được cấp quyền</small></span></button></div>
+      <button type="button" class="btn ghost block auth-back" data-act="demo-pick-back">${icon('back', 'sm')}Quay lại</button>`);
     return;
   }
-  const buttons=roles.map(([role,label,desc])=>{
-    const body=`${GOOGLE_G}<span>Đăng nhập ${label}</span>${icon('arrow','sm')}`;
-    const button=API.demo?`<button type="button" class="gbtn auth-role" data-act="choose-login-role" data-role="${role}">${body}</button>`:d.authUrl?`<a class="gbtn auth-role" href="${esc(d.authUrl)}" target="_top" rel="noopener" data-auth-role="${role}">${body}</a>`:'<div class="callout warn">Chưa cấu hình đăng nhập Google.</div>';
-    return `<div class="auth-choice">${button}<span class="auth-choice-note">${desc}</span></div>`;
-  }).join('');
-  gate(`<div class="auth-eyebrow">CHÀO MỪNG ĐẾN FLUXIENCE</div><h1 class="h1">Đăng nhập</h1><p>Chọn không gian làm việc và tiếp tục bằng tài khoản Google của bạn.</p><div class="auth-roles">${buttons}</div><div class="auth-support">${icon('shield','sm')}<span>Quyền truy cập theo tài khoản đã được đơn vị cấp.</span></div>${API.demo?'<div class="auth-demo-note">Bản demo · dùng dữ liệu mẫu</div>':'<div class="auth-help">Chưa được cấp quyền? Liên hệ quản trị của đơn vị.</div>'}`);
-}
-function showRoleDenied(d,requested) {
-  const allowed=(d.roles||[]).includes('expert')?'expert':'admin';
-  gate(`<div class="auth-eyebrow">QUYỀN TRUY CẬP</div><h1 class="h1">Chưa có quyền ${requested==='admin'?'quản trị':'chuyên gia'}</h1><p>Tài khoản ${esc(d.me.email)} chưa được đơn vị cấp quyền vào không gian này.</p><button type="button" class="btn primary block" data-act="open-allowed-role" data-role="${allowed}">Vào không gian ${allowed==='admin'?'quản trị':'chuyên gia'}</button><button type="button" class="btn block auth-back" data-act="logout">Dùng tài khoản khác</button>`);
+  const btn = API.demo ? `<button type="button" class="gbtn auth-google" data-act="demo-pick">${GOOGLE_G}<span>Đăng nhập với Google</span></button>`
+    : d.authUrl ? `<a class="gbtn auth-google" href="${esc(d.authUrl)}" target="_top" rel="noopener">${GOOGLE_G}<span>Đăng nhập với Google</span></a>`
+    : '<div class="callout warn">Ứng dụng chưa được cấu hình đăng nhập Google.</div>';
+  gate(`<h1 class="h1">Đăng nhập</h1><p>Sử dụng tài khoản Google đã được ${org} cấp quyền. Fluxience không dùng mật khẩu riêng.</p>
+    ${btn}
+    <ul class="auth-points"><li>${icon('shield', 'sm')}<span>Xác thực an toàn qua Google</span></li><li>${icon('user', 'sm')}<span>Tự động mở đúng không gian làm việc của tài khoản</span></li></ul>
+    ${API.demo ? '<div class="auth-demo-note">Bản demo · dữ liệu minh họa lưu trên trình duyệt</div>' : ''}`);
 }
 function showRequested(d) {
-  const contact = d.contact ? '<a href="mailto:' + esc(d.contact) + '">' + esc(d.contact) + '</a>' : 'quản trị viên đơn vị';
+  const org = esc((d.settings && d.settings.ORG_NAME) || 'đơn vị');
   gate(`<div class="auth-eyebrow">QUYỀN TRUY CẬP</div><h1 class="h1">Đã gửi yêu cầu truy cập</h1>
-    <p>Google đã xác thực <b>${esc(d.email)}</b>. Yêu cầu vào không gian <b>${d.requestedRole === 'admin' ? 'quản trị' : 'chuyên gia'}</b> đã được gửi tới quản trị viên${d.requestedAt ? ' lúc ' + esc(fmtDT(d.requestedAt)) : ''}.</p>
-    <div class="auth-steps"><div class="done">${icon('check', 'sm')}<span>Xác thực tài khoản Google</span></div><div class="done">${icon('check', 'sm')}<span>Gửi yêu cầu tới quản trị viên</span></div><div class="wait">${icon('refresh', 'sm')}<span>Chờ duyệt · bạn sẽ nhận email khi có kết quả</span></div></div>
+    <p>Google đã xác thực <b>${esc(d.email)}</b>. Yêu cầu sử dụng Fluxience đã được chuyển tới ${org}${d.requestedAt ? ' lúc ' + esc(fmtDT(d.requestedAt)) : ''}.</p>
+    <div class="auth-steps"><div class="done">${icon('check', 'sm')}<span>Xác thực tài khoản Google</span></div><div class="done">${icon('check', 'sm')}<span>Gửi yêu cầu cấp quyền</span></div><div class="wait">${icon('refresh', 'sm')}<span>Chờ phê duyệt · bạn sẽ nhận email khi có kết quả</span></div></div>
     <button type="button" class="btn primary block" data-act="reload">${icon('refresh', 'sm')}Kiểm tra lại</button>
-    <button type="button" class="btn block auth-back" data-act="logout">${icon('swap', 'sm')}Đăng nhập bằng tài khoản khác</button>
-    <div class="auth-help">Cần gấp? Liên hệ ${contact}.</div>`);
+    <button type="button" class="btn block auth-back" data-act="logout">${icon('swap', 'sm')}Đăng nhập bằng tài khoản khác</button>`);
 }
 function showDenied(d) {
-  const contact = d.contact ? ' <a href="mailto:' + esc(d.contact) + '">' + esc(d.contact) + '</a>' : '';
-  const msg = d.state === 'disabled' ? 'Tài khoản <b>' + esc(d.email) + '</b> đang bị khoá. Liên hệ quản trị viên' + contact + ' để mở lại.'
-    : d.rejected ? 'Yêu cầu truy cập của <b>' + esc(d.email) + '</b> chưa được chấp nhận.' + (d.note ? '<br><span class="muted">Lý do: ' + esc(d.note) + '</span>' : '') + '<br>Liên hệ quản trị viên' + contact + ' nếu cần xem xét lại.'
-    : 'Tài khoản Google <b>' + esc(d.email) + '</b> đã xác thực nhưng chưa được cấp quyền tại Fluxience. Liên hệ quản trị viên' + contact + ' để được thêm vào.';
-  gate(`<div class="auth-eyebrow">QUYỀN TRUY CẬP</div><h1 class="h1">${d.state === 'disabled' ? 'Tài khoản đang bị khoá' : 'Chưa có quyền truy cập'}</h1><p>${msg}</p>
+  const org = esc((d.settings && d.settings.ORG_NAME) || 'đơn vị');
+  const msg = d.state === 'disabled' ? 'Tài khoản <b>' + esc(d.email) + '</b> đang tạm khoá. Liên hệ ' + org + ' để được mở lại.'
+    : d.rejected ? 'Yêu cầu truy cập của <b>' + esc(d.email) + '</b> chưa được chấp nhận.' + (d.note ? '<br><span class="muted">Lý do: ' + esc(d.note) + '</span>' : '') + '<br>Liên hệ ' + org + ' nếu cần xem xét lại.'
+    : 'Tài khoản Google <b>' + esc(d.email) + '</b> đã xác thực nhưng chưa được cấp quyền sử dụng Fluxience. Liên hệ ' + org + ' để được hỗ trợ.';
+  gate(`<div class="auth-eyebrow">QUYỀN TRUY CẬP</div><h1 class="h1">${d.state === 'disabled' ? 'Tài khoản đang tạm khoá' : 'Chưa có quyền truy cập'}</h1><p>${msg}</p>
     <button type="button" class="btn block auth-back" data-act="logout">${icon('swap', 'sm')}Đăng nhập bằng tài khoản khác</button>`);
 }
 
@@ -1738,10 +1733,9 @@ const ACT = {
   'logout': () => { API.logout(); clearSessionDrafts(); S.data = null; $('#main').innerHTML = ''; location.hash = ''; boot(); },
   'reload': () => boot(),
   'route-retry': () => route(),
-  'demo-login': el => { rememberLoginRole(el.dataset.role); MockAPI.login(el.dataset.email); boot(el.dataset.role); },
-  'choose-login-role': el => { rememberLoginRole(el.dataset.role); S.ui.loginRole=el.dataset.role; showLogin(S.data); },
-  'login-role-back': () => { S.ui.loginRole=''; clearLoginIntent(); showLogin(S.data); },
-  'open-allowed-role': el => { clearLoginIntent(); boot(el.dataset.role); },
+  'demo-login': el => { S.ui.demoPick = false; try { localStorage.removeItem(WS_KEY); } catch (e) {} MockAPI.login(el.dataset.email); boot(); },
+  'demo-pick': () => { S.ui.demoPick = true; showLogin(S.data); },
+  'demo-pick-back': () => { S.ui.demoPick = false; showLogin(S.data); },
   'nav-toggle': () => document.body.classList.toggle('nav-open'),
   'theme': () => {
     const r = document.documentElement, cur = r.getAttribute('data-theme');
@@ -1767,7 +1761,6 @@ const ACT = {
   'ws-retry': el => { const c = WS.cur[el.dataset.root] || { page: el.dataset.root, q: {} }; wsRenderSection(el.dataset.root, c.page, c.q); }
 };
 document.addEventListener('click', e => {
-  const auth=e.target.closest('a[data-auth-role]');if(auth)rememberLoginRole(auth.dataset.authRole);
   const link = e.target.closest('a[href^="#/"]');
   if (link && !e.defaultPrevented && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
     e.preventDefault();
@@ -3030,7 +3023,7 @@ ACT['sl-out'] = async el => {
 const RV_KIND = { acc: ['Tài khoản', 'info', 'key'], cred: ['Học vị / chức danh', 'warning', 'shield'], pub: ['Công bố', 'ai', 'file'] };
 function rvQueues() {
   const d = S.data;
-  const acc = (d.users || []).filter(u => u.status === 'pending').map(u => ({ k: 'acc', id: u.email, email: u.email, at: u.createdAt, title: 'Xin quyền ' + (u.requestedRole === 'admin' ? 'quản trị' : 'chuyên gia'), sub: u.email, raw: u }));
+  const acc = (d.users || []).filter(u => u.status === 'pending').map(u => ({ k: 'acc', id: u.email, email: u.email, at: u.createdAt, title: 'Xin quyền sử dụng Fluxience', sub: u.email, raw: u }));
   const cred = d.credentials.filter(c => c.status === 'pending').map(c => ({ k: 'cred', id: c.id, email: c.email, at: c.createdAt, title: SL.labelOf(SL.CRED_KINDS, c.kind) + ': ' + c.value, sub: [SL.fmtDate(c.date), c.fileId ? 'có minh chứng' : 'chưa có minh chứng'].filter(Boolean).join(' · '), raw: c }));
   const pub = d.pubs.filter(p => p.status === 'pending').map(p => ({ k: 'pub', id: p.id, email: p.email, at: p.uploadedAt, title: p.title, sub: [pubType(p.type), p.venue, p.year].filter(Boolean).join(' · '), raw: p }));
   const byAge = (a, b) => String(a.at || '').localeCompare(String(b.at || ''));
@@ -3102,7 +3095,7 @@ function rvOpen(q) {
   let bodyHtml, foot;
   if (t === 'acc') {
     const u = item, dom = u.email.split('@')[1] || '';
-    bodyHtml = `<dl class="kv rv-kv"><dt>Họ tên Google</dt><dd>${esc(u.name || '—')}</dd><dt>Email</dt><dd>${esc(u.email)}</dd><dt>Tên miền</dt><dd>${esc(dom)}${/edu\.vn$/.test(dom) ? ' ' + badge('Email trường', 'success') : ' ' + badge('Email cá nhân', '')}</dd><dt>Không gian xin vào</dt><dd>${esc(u.requestedRole === 'admin' ? 'Quản trị' : 'Chuyên gia')}</dd><dt>Gửi lúc</dt><dd>${esc(fmtDT(u.createdAt))}</dd></dl>
+    bodyHtml = `<dl class="kv rv-kv"><dt>Họ tên Google</dt><dd>${esc(u.name || '—')}</dd><dt>Email</dt><dd>${esc(u.email)}</dd><dt>Tên miền</dt><dd>${esc(dom)}${/edu\.vn$/.test(dom) ? ' ' + badge('Email trường', 'success') : ' ' + badge('Email cá nhân', '')}</dd><dt>Vai trò đề xuất</dt><dd>Chuyên gia</dd><dt>Gửi lúc</dt><dd>${esc(fmtDT(u.createdAt))}</dd></dl>
       <div class="callout" style="margin:20px 0">${icon('info', 'sm')}<div>Google đã xác thực danh tính của email này. Bạn quyết định họ được vào không gian nào trong Fluxience.</div></div>
       <form class="stack" data-form="acc-review" data-email="${esc(u.email)}" onsubmit="return false">
         <div><div class="label" style="margin-bottom:6px">Cấp vai trò</div>
