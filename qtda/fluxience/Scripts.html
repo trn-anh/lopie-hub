@@ -823,7 +823,7 @@ const MockAPI = (function () {
     const brand = { APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME, CITY: st.CITY, FORM_CODE: st.FORM_CODE, PUB_CRITERIA: st.PUB_CRITERIA };
     const e = who();
     const accounts = db.Users.map(u => ({ email: u.email, name: u.name, unit: u.unit, roles: u.roles, status: u.status }));
-    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.11-demo' });
+    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.12-demo' });
     const u = db.Users.find(x => x.email === e);
     if (!u) {
       const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: 'expert' };
@@ -834,7 +834,7 @@ const MockAPI = (function () {
     if (u.status === 'rejected') return wait({ state: 'denied', rejected: true, note: u.reviewNote, email: e, settings: brand, accounts, contact: ADMIN });
     if (u.status !== 'active') return wait({ state: 'disabled', email: e, settings: brand, accounts, contact: ADMIN });
     const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs.indexOf('admin') >= 0 ? 'admin' : rs[0];
-    const base = { state: 'ok', demo: true, version: '1.11-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
+    const base = { state: 'ok', demo: true, version: '1.12-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
     if (w === 'admin') {
       const der = {}; db.Users.forEach(x => { der[x.email] = derived(x.email); });
       return wait(Object.assign(base, { users: db.Users, profiles: db.Profiles, derivedAll: der, credentials: db.Credentials, pubs: db.Publications, needsAll: db.Needs, work: db.Work, projects: db.Projects, awards: db.Awards, rounds: db.Rounds, matchesAll: db.Matches, files: db.Files, supportAll: db.Support }));
@@ -1124,7 +1124,7 @@ const API = IS_GAS ? ServerAPI : MockAPI;
 /* =====================================================================
    TRẠNG THÁI & ĐIỀU HƯỚNG
    ===================================================================== */
-const UI_VERSION = '1.11';
+const UI_VERSION = '1.12';
 const S = { data: null, ws: '', route: { page: '', q: {} }, busy: 0, ui: {}, drafts: {}, formDrafts: {}, structuredDirty: {} };
 let sessionRevision = 0, refreshRevision = 0;
 const WS_KEY = 'sl-ws';
@@ -2912,9 +2912,7 @@ VIEWS.admin.overview = {
     const month = todayISO().slice(0, 7);
     const upMonth = SL.dedupe(d.pubs.filter(p => String(p.uploadedAt).slice(0, 7) === month));
     const openR = d.rounds.filter(r => r.status !== 'closed');
-    const sys = d.system || {}, canon = sys.canonicalVersion || '';
-    const warn = !API.demo && canon !== UI_VERSION ? `<div class="callout bad deploy-warn">${icon('alert', 'sm')}<div><b class="strong">Link đăng nhập chính thức ${canon ? 'đang chạy phiên bản ' + esc(canon) : 'chưa xác nhận phiên bản'} — trang này là ${esc(UI_VERSION)}.</b><br>Sau khi đăng nhập Google, mọi người được chuyển về link trong <code>WEBAPP_URL</code>${sys.webAppUrl ? ' (<span class="mono">' + esc(sys.webAppUrl.replace(/^https:\/\/script\.google\.com\/macros\/s\//, '…/').slice(0, 40)) + '…</span>)' : ''}. Vào <b>Triển khai → Quản lý triển khai</b>, chọn đúng bản triển khai của link đó → ✏️ → <b>Phiên bản mới</b>, rồi lưu trữ các bản triển khai còn lại. Đăng xuất và đăng nhập lại để xác nhận.</div></div>` : '';
-    return warn + pageHead('Tổng quan quản trị', 'Hàng chờ xác minh, mức hoàn thiện hồ sơ và hoạt động ghép nối.', `<button type="button" class="btn" data-act="go" data-page="stats">${icon('chart')}Thống kê</button><button type="button" class="btn primary" data-act="go" data-page="matching" data-q='{"r":"new"}'>${icon('plus')}Tạo đợt ghép nối</button>`) +
+    return pageHead('Tổng quan quản trị', 'Hàng chờ xác minh, mức hoàn thiện hồ sơ và hoạt động ghép nối.', `<button type="button" class="btn" data-act="go" data-page="stats">${icon('chart')}Thống kê</button><button type="button" class="btn primary" data-act="go" data-page="matching" data-q='{"r":"new"}'>${icon('plus')}Tạo đợt ghép nối</button>`) +
       `<div class="kpis">${kpi('Chuyên gia đang hoạt động', ex.filter(x => x.user.status === 'active').length, ex.filter(x => x.comp.pct >= 80).length + ' hồ sơ hoàn thiện ≥ 80%')}${kpi('Chờ xác minh', pendC.length + pendP.length, pendC.length + ' học vị/chức danh · ' + pendP.length + ' công bố', pendC.length + pendP.length ? 'warn-t' : 'ok-t')}
       ${kpi('Công bố tải lên tháng này', upMonth.length, 'Cùng DOI chỉ tính một')}${kpi('Đợt ghép nối', openR.length, d.matchesAll.filter(m => m.status === 'interested').length + ' phản hồi quan tâm')}</div>
       <div class="grid2"><div class="stack"><div class="card"><div class="row between"><div class="h2">Hàng chờ xác minh</div><button type="button" class="btn sm" data-act="go" data-page="review">Mở hàng chờ${icon('arrow', 'sm')}</button></div>
@@ -3482,7 +3480,7 @@ ACT['build-info'] = async () => {
   const server = installedServerVersion(S.data && S.data.version);
   const fonts = await inspectQdpFonts(document.fonts);
   if (!$('#dlg').open || $('#dlgTitle').textContent !== 'Về Fluxience') return;
-  $('#dlgBody').innerHTML = `<dl class="kv"><dt>Giao diện</dt><dd>${esc(UI_VERSION)}</dd><dt>Máy chủ</dt><dd>${esc(server || 'Chưa xác định')}</dd><dt>Bộ chữ Inter</dt><dd>${fonts.every(f => f.loaded) ? 'Đã tải đủ 4 kiểu chữ' : 'Chưa tải đủ; đang có thể dùng chữ dự phòng'}</dd></dl>
+  $('#dlgBody').innerHTML = `<dl class="kv"><dt>Giao diện</dt><dd>${esc(UI_VERSION)}</dd><dt>Máy chủ</dt><dd>${esc(server || 'Chưa xác định')}</dd>${S.data && S.data.system ? `<dt>Link đăng nhập</dt><dd>${S.data.system.canonicalVersion === UI_VERSION ? 'Đồng bộ · ' + esc(UI_VERSION) : 'Đang chạy ' + esc(S.data.system.canonicalVersion || 'phiên bản chưa rõ') + ' — cập nhật bản triển khai của WEBAPP_URL'}</dd>` : ''}<dt>Bộ chữ Inter</dt><dd>${fonts.every(f => f.loaded) ? 'Đã tải đủ 4 kiểu chữ' : 'Chưa tải đủ; đang có thể dùng chữ dự phòng'}</dd></dl>
     ${server && server !== UI_VERSION ? '<div class="callout warn" style="margin-top:16px">Giao diện và máy chủ khác phiên bản. Kiểm tra các file và deployment đang mở.</div>' : ''}
     <div class="tbl-wrap" style="margin-top:16px"><table class="tbl"><thead><tr><th>Kiểu chữ</th><th>Trạng thái</th></tr></thead><tbody>${fonts.map(f => `<tr><td>${esc(f.family.replace('Fluxience ', ''))} ${({ 400: 'Regular', 500: 'Medium', 600: 'SemiBold', 700: 'Bold' })[f.weight]}</td><td>${f.loaded ? 'Đã tải' : f.reason === 'timeout' ? 'Quá thời gian chờ' : f.reason === 'unsupported' ? 'Trình duyệt chưa hỗ trợ kiểm tra' : 'Chưa tải'}</td></tr>`).join('')}</tbody></table></div>
     <p class="caption" style="margin-top:16px">Nếu font chưa tải, kiểm tra Styles.html có đủ font nhúng và mở lại đúng link triển khai sau khi cập nhật.</p>`;
