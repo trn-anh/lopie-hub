@@ -27,7 +27,7 @@
 /* =====================================================================
    0. CẤU HÌNH
    ===================================================================== */
-const APP_VERSION = '1.20';
+const APP_VERSION = '1.21';
 const TZ = 'Asia/Ho_Chi_Minh';
 const SESSION_HOURS = 12;
 const MAX_UPLOAD_MB = 20;
@@ -459,9 +459,24 @@ var SL = (function () {
    * doc = { paras, tables } → bản nháp. Mỗi trường có { value, flag } ; flag = lý do cần kiểm tra.
    * Không ghi gì vào hồ sơ: chỉ tạo bản nháp để người dùng rà soát.
    */
+  /** Bảng không viền dạng "Nhãn: giá trị" (VD: mẫu trống tải từ ứng dụng) được đọc như các dòng văn bản, đúng thứ tự trong file. */
+  function kvTable(t) {
+    var cells = 0, kv = 0;
+    t.forEach(function (r) { r.forEach(function (c) { c = trim(c); if (!c) return; cells++; if (/^[^:\n]{2,80}:/.test(c)) kv++; }); });
+    return cells >= 4 && kv / cells >= 0.6;
+  }
+  function llkhText(doc) {
+    if (!doc.blocks || !doc.blocks.length) return (doc.paras || []).join('\n');
+    var lines = [];
+    doc.blocks.forEach(function (b) {
+      if (b.p != null) lines.push(b.p);
+      else if (b.t && kvTable(b.t)) b.t.forEach(function (r) { lines.push(r.filter(function (c) { return trim(c); }).join('\t')); });
+    });
+    return lines.join('\n');
+  }
   function parseLLKH(doc, ctx) {
     ctx = ctx || {};
-    var text = (doc.paras || []).join('\n');
+    var text = llkhText(doc);
     var out = { fields: {}, languages: [], work: [], projects: [], pubs: [], books: [], awards: [], credentials: [], notes: [], template: false };
     // 1) Vị trí từng nhãn, tìm tuần tự để nhãn trùng tên (Nơi đào tạo, Năm cấp bằng) rơi đúng mục
     var found = [], pos = 0;
@@ -487,6 +502,8 @@ var SL = (function () {
       if (f.key === '_title') out._title = v;
       if (f.key === '_titleYear') out._titleYear = v;
     }
+    // Nhãn "Số CMND/CCCD" (mẫu của ứng dụng) → bỏ phần "/CCCD:" còn dính vào giá trị
+    if (out.fields.idNumber) { out.fields.idNumber.value = cleanVal(out.fields.idNumber.value.replace(/^\/?\s*CCCD\s*:?/i, '')); if (!out.fields.idNumber.value) delete out.fields.idNumber; }
     // Kiểm tra từng trường
     if (out.fields.dob) {
       var d = parseDate(out.fields.dob.value);
@@ -533,7 +550,7 @@ var SL = (function () {
       for (var r = 0; r < Math.min(2, t.length) && !kind; r++) { kind = headerKind(t[r]); hi = r; }
       if (!kind) {
         // Bảng ngoại ngữ trong mẫu không có hàng tiêu đề riêng
-        if (/ngoai ngu|muc do su dung/.test(fold(JSON.stringify(t)))) { kind = 'lang'; hi = -1; }
+        if (/ngoai ngu|muc do su dung/.test(fold(JSON.stringify(t))) && !kvTable(t)) { kind = 'lang'; hi = -1; }
         else return;
       }
       var rows = t.slice(hi + 1).filter(function (row) {
@@ -628,7 +645,7 @@ var SL = (function () {
     }
     function parseLangText(s) {
       var re2 = /\d\s*[.)]\s*([^\n\d]+?)\s*M[ứu]c\s+đ[ộo]\s+s[ửu]\s+d[ụu]ng\s*:?\s*([^\n]*)/gi, mm2;
-      while ((mm2 = re2.exec(s))) { var nn = cleanVal(mm2[1]); if (nn) out.languages.push({ name: nn, level: cleanVal(mm2[2]) }); }
+      while ((mm2 = re2.exec(s))) { var nn = cleanVal(mm2[1].replace(/^\s*Ngoại\s+ngữ\s*:?/i, '')); if (nn) out.languages.push({ name: nn, level: cleanVal(mm2[2]) }); }
     }
   }
 
@@ -1604,14 +1621,16 @@ function docFromDocx_(blob) {
 function docViaDrive_(blob, mime) {
   if (typeof Drive === 'undefined') throw new Error('Để đọc file .doc hoặc .pdf, quản trị viên cần bật dịch vụ "Drive API" (Services → Drive API v3). Hoặc lưu CV sang .docx rồi tải lại.');
   const opts = mime === 'application/pdf' ? { ocrLanguage: 'vi' } : {};
+  // Mẫu trống tải từ ứng dụng là .doc dạng HTML (Word mở được): chuyển như HTML để Google Docs đọc đúng.
+  if (mime === 'application/msword' && /^\s*(\ufeff)?\s*<(html|!doctype)/i.test(blob.getDataAsString('UTF-8').slice(0, 400))) blob = Utilities.newBlob(blob.getDataAsString('UTF-8'), 'text/html', 'cv.html');
   const tmp = Drive.Files.create({ name: 'tmp-cv-' + Date.now(), mimeType: MimeType.GOOGLE_DOCS, parents: [rootFolder_().getId()] }, blob, opts);
   try {
     const body = DocumentApp.openById(tmp.id).getBody();
-    const paras = [], tables = [];
+    const paras = [], tables = [], blocks = [];
     for (let i = 0; i < body.getNumChildren(); i++) {
       const el = body.getChild(i);
       const t = el.getType();
-      if (t === DocumentApp.ElementType.PARAGRAPH || t === DocumentApp.ElementType.LIST_ITEM) paras.push(el.asText().getText());
+      if (t === DocumentApp.ElementType.PARAGRAPH || t === DocumentApp.ElementType.LIST_ITEM) { paras.push(el.asText().getText()); blocks.push({ p: el.asText().getText() }); }
       else if (t === DocumentApp.ElementType.TABLE) {
         const tb = el.asTable(), rows = [];
         for (let r = 0; r < tb.getNumRows(); r++) {
@@ -1619,10 +1638,10 @@ function docViaDrive_(blob, mime) {
           for (let k = 0; k < row.getNumCells(); k++) cells.push(row.getCell(k).getText());
           rows.push(cells);
         }
-        tables.push(rows);
+        tables.push(rows); blocks.push({ t: rows });
       }
     }
-    return { paras: paras, tables: tables };
+    return { paras: paras, tables: tables, blocks: blocks };
   } finally {
     try { DriveApp.getFileById(tmp.id).setTrashed(true); } catch (e) {}
   }

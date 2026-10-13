@@ -80,6 +80,7 @@ h1,h2,h3{margin:0;font-weight:600}
 .acct span{display:block;margin-top:14px;font-size:12px;line-height:18px;color:var(--sl-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .linkbtn{display:inline-flex;align-items:center;gap:8px;border:0;background:none;padding:0;color:var(--sl-text-secondary);cursor:pointer}
 .linkbtn:hover{color:var(--sl-text-primary)}
+.callout .linkbtn{display:inline;color:var(--sl-brand-ink);font-weight:600;text-decoration:underline;font-size:inherit}
 .work{min-width:0;display:flex;flex-direction:column}
 .top{position:sticky;top:0;z-index:20;height:78px;display:flex;align-items:center;gap:16px;padding:0 24px;background:var(--sl-bg-surface);border-bottom:1px solid var(--sl-border-default)}
 .crumb{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -261,6 +262,7 @@ dialog::backdrop{background:var(--sl-overlay)}
 .toast{display:flex;gap:10px;align-items:flex-start;padding:12px 16px;border-radius:var(--sl-radius-8);background:var(--sl-text-primary);color:var(--sl-bg-surface);box-shadow:var(--sl-shadow);font-size:13.5px;line-height:20px}
 .toast.error{background:var(--sl-danger-text);color:#fff}
 .toast.ok{background:var(--sl-success-text);color:#fff}
+.toast a{color:inherit;text-decoration:underline;font-weight:600}
 #progress{position:fixed;top:0;left:0;right:0;height:3px;z-index:120;overflow:hidden}
 #progress::after{content:"";position:absolute;inset:0;width:35%;background:var(--sl-brand-default);animation:bar 1s ease-in-out infinite}
 @keyframes bar{from{transform:translateX(-100%)}to{transform:translateX(300%)}}

@@ -408,9 +408,24 @@ var SL = (function () {
    * doc = { paras, tables } → bản nháp. Mỗi trường có { value, flag } ; flag = lý do cần kiểm tra.
    * Không ghi gì vào hồ sơ: chỉ tạo bản nháp để người dùng rà soát.
    */
+  /** Bảng không viền dạng "Nhãn: giá trị" (VD: mẫu trống tải từ ứng dụng) được đọc như các dòng văn bản, đúng thứ tự trong file. */
+  function kvTable(t) {
+    var cells = 0, kv = 0;
+    t.forEach(function (r) { r.forEach(function (c) { c = trim(c); if (!c) return; cells++; if (/^[^:\n]{2,80}:/.test(c)) kv++; }); });
+    return cells >= 4 && kv / cells >= 0.6;
+  }
+  function llkhText(doc) {
+    if (!doc.blocks || !doc.blocks.length) return (doc.paras || []).join('\n');
+    var lines = [];
+    doc.blocks.forEach(function (b) {
+      if (b.p != null) lines.push(b.p);
+      else if (b.t && kvTable(b.t)) b.t.forEach(function (r) { lines.push(r.filter(function (c) { return trim(c); }).join('\t')); });
+    });
+    return lines.join('\n');
+  }
   function parseLLKH(doc, ctx) {
     ctx = ctx || {};
-    var text = (doc.paras || []).join('\n');
+    var text = llkhText(doc);
     var out = { fields: {}, languages: [], work: [], projects: [], pubs: [], books: [], awards: [], credentials: [], notes: [], template: false };
     // 1) Vị trí từng nhãn, tìm tuần tự để nhãn trùng tên (Nơi đào tạo, Năm cấp bằng) rơi đúng mục
     var found = [], pos = 0;
@@ -436,6 +451,8 @@ var SL = (function () {
       if (f.key === '_title') out._title = v;
       if (f.key === '_titleYear') out._titleYear = v;
     }
+    // Nhãn "Số CMND/CCCD" (mẫu của ứng dụng) → bỏ phần "/CCCD:" còn dính vào giá trị
+    if (out.fields.idNumber) { out.fields.idNumber.value = cleanVal(out.fields.idNumber.value.replace(/^\/?\s*CCCD\s*:?/i, '')); if (!out.fields.idNumber.value) delete out.fields.idNumber; }
     // Kiểm tra từng trường
     if (out.fields.dob) {
       var d = parseDate(out.fields.dob.value);
@@ -482,7 +499,7 @@ var SL = (function () {
       for (var r = 0; r < Math.min(2, t.length) && !kind; r++) { kind = headerKind(t[r]); hi = r; }
       if (!kind) {
         // Bảng ngoại ngữ trong mẫu không có hàng tiêu đề riêng
-        if (/ngoai ngu|muc do su dung/.test(fold(JSON.stringify(t)))) { kind = 'lang'; hi = -1; }
+        if (/ngoai ngu|muc do su dung/.test(fold(JSON.stringify(t))) && !kvTable(t)) { kind = 'lang'; hi = -1; }
         else return;
       }
       var rows = t.slice(hi + 1).filter(function (row) {
@@ -577,7 +594,7 @@ var SL = (function () {
     }
     function parseLangText(s) {
       var re2 = /\d\s*[.)]\s*([^\n\d]+?)\s*M[ứu]c\s+đ[ộo]\s+s[ửu]\s+d[ụu]ng\s*:?\s*([^\n]*)/gi, mm2;
-      while ((mm2 = re2.exec(s))) { var nn = cleanVal(mm2[1]); if (nn) out.languages.push({ name: nn, level: cleanVal(mm2[2]) }); }
+      while ((mm2 = re2.exec(s))) { var nn = cleanVal(mm2[1].replace(/^\s*Ngoại\s+ngữ\s*:?/i, '')); if (nn) out.languages.push({ name: nn, level: cleanVal(mm2[2]) }); }
     }
   }
 
@@ -1042,7 +1059,7 @@ const MockAPI = (function () {
     const brand = { APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME, CITY: st.CITY, FORM_CODE: st.FORM_CODE, PUB_CRITERIA: st.PUB_CRITERIA };
     const e = who();
     const accounts = db.Users.map(u => ({ email: u.email, name: u.name, unit: u.unit, roles: u.roles, status: u.status }));
-    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.20-demo' });
+    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.21-demo' });
     const u = db.Users.find(x => x.email === e);
     if (!u) {
       const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: 'expert' };
@@ -1053,7 +1070,7 @@ const MockAPI = (function () {
     if (u.status === 'rejected') return wait({ state: 'denied', rejected: true, note: u.reviewNote, email: e, settings: brand, accounts, contact: ADMIN });
     if (u.status !== 'active') return wait({ state: 'disabled', email: e, settings: brand, accounts, contact: ADMIN });
     const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs.indexOf('admin') >= 0 ? 'admin' : rs[0];
-    const base = { state: 'ok', demo: true, version: '1.20-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
+    const base = { state: 'ok', demo: true, version: '1.21-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
     if (w === 'admin') {
       const der = {}; db.Users.forEach(x => { der[x.email] = derived(x.email); });
       return wait(Object.assign(base, { users: db.Users, profiles: db.Profiles, derivedAll: der, credentials: db.Credentials, pubs: db.Publications, needsAll: db.Needs, work: db.Work, projects: db.Projects, awards: db.Awards, rounds: db.Rounds, matchesAll: db.Matches, files: db.Files, supportAll: db.Support }));
@@ -1343,7 +1360,7 @@ const API = IS_GAS ? ServerAPI : MockAPI;
 /* =====================================================================
    TRẠNG THÁI & ĐIỀU HƯỚNG
    ===================================================================== */
-const UI_VERSION = '1.20';
+const UI_VERSION = '1.21';
 const S = { data: null, ws: '', route: { page: '', q: {} }, busy: 0, ui: {}, drafts: {}, formDrafts: {}, structuredDirty: {} };
 let sessionRevision = 0, refreshRevision = 0;
 const WS_KEY = 'sl-ws';
@@ -1443,10 +1460,10 @@ function clearSessionDrafts() {
 const NAV = {
   expert: [
     ['overview', 'home', 'Tổng quan'], ['profile', 'user', 'Hồ sơ của tôi'], ['pubs', 'file', 'Công bố khoa học'],
-    ['needs', 'brief', 'Thông tin bổ sung'], ['matches', 'spark', 'Đề xuất kết nối'], ['export', 'download', 'Xuất hồ sơ'], ['help', 'chat', 'Hỗ trợ & nhập nhanh']
+    ['needs', 'brief', 'Thông tin bổ sung'], ['matches', 'spark', 'Đề xuất kết nối'], ['export', 'download', 'Xuất lý lịch khoa học'], ['help', 'chat', 'Hỗ trợ & nhập nhanh']
   ],
   admin: [
-    ['overview', 'grid', 'Tổng quan'], ['experts', 'user', 'Hồ sơ chuyên gia'], ['matching', 'link', 'Ghép nối nhu cầu'],
+    ['overview', 'grid', 'Tổng quan'], ['experts', 'user', 'Hồ sơ chuyên gia'], ['export', 'download', 'Xuất lý lịch khoa học'], ['matching', 'link', 'Ghép nối nhu cầu'],
     ['review', 'shield', 'Duyệt & xác minh'], ['stats', 'chart', 'Thống kê công bố'], ['rules', 'gear', 'Quy tắc & danh mục'],
     ['files', 'file', 'Kho tài liệu'], ['accounts', 'key', 'Tài khoản & quyền'], ['logs', 'list', 'Nhật ký & hỗ trợ']
   ]
@@ -1513,7 +1530,8 @@ function openDialog({ title, body, foot, wide, onOpen }) {
   return new Promise(r => { DLG_RESOLVE = r; });
 }
 function closeDialog(v) { const d = $('#dlg'); if (d.open) d.close(); const r = DLG_RESOLVE; DLG_RESOLVE = null; if (r) r(v); }
-$('#dlg').addEventListener('close', () => { const r = DLG_RESOLVE; DLG_RESOLVE = null; if (r) r(null); });
+// Sự kiện close đến trễ (sau khi hộp thoại kế tiếp đã mở) thì bỏ qua, tránh hủy nhầm hộp thoại mới.
+$('#dlg').addEventListener('close', () => { if ($('#dlg').open) return; const r = DLG_RESOLVE; DLG_RESOLVE = null; if (r) r(null); });
 function confirmBox(title, html, ok, danger) {
   return openDialog({
     title, body: '<div>' + html + '</div>',
@@ -1562,11 +1580,17 @@ function downloadB64(name, mime, b64) {
   for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
   downloadBlob(name, new Blob([arr], { type: mime }));
 }
+/** Tải file. Kèm thông báo có liên kết tải lại phòng khi trình duyệt chặn tải tự động trong khung Apps Script. */
 function downloadBlob(name, blob) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = name;
-  document.body.appendChild(a); a.click();
-  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  const el = document.createElement('div');
+  el.className = 'toast ok';
+  el.innerHTML = icon('check', 'sm') + '<span>Đã tải <b>' + esc(name) + '</b> · <a href="' + url + '" download="' + esc(name) + '" target="_blank" rel="noopener">Chưa thấy file? Tải lại</a></span>';
+  $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), 9000);
+  setTimeout(() => URL.revokeObjectURL(url), 120000);
 }
 async function openFile(id, btn) {
   const f = await call(API.getFile(id), btn);
@@ -1799,7 +1823,6 @@ function wsRoot(page) {
   const nav = NAV[S.ws] || [];
   if (nav.some(n => n[0] === page)) return page;
   if (SUBPAGES[page]) return SUBPAGES[page];
-  if (S.ws === 'admin' && page === 'export') return 'experts';
   return nav.length ? nav[0][0] : 'overview';
 }
 function wsHash(page, q) {
@@ -2135,7 +2158,7 @@ function cvHeader(m, opts, st) {
 }
 function cvSign(m, st) {
   const d = new Date();
-  return `<p style="${CV.F};text-align:right;font-style:italic;margin:18pt 0 6pt">${esc(st.CITY || '……………')}, ngày ${SL.pad(d.getDate())} tháng ${SL.pad(d.getMonth() + 1)} năm ${d.getFullYear()}</p>
+  return `<p style="${CV.F};text-align:right;font-style:italic;margin:18pt 0 6pt">${esc(st.CITY || '……………')}, ${st.BLANK ? 'ngày …… tháng …… năm ………' : `ngày ${SL.pad(d.getDate())} tháng ${SL.pad(d.getMonth() + 1)} năm ${d.getFullYear()}`}</p>
   <table width="100%" border="0" style="width:100%;border-collapse:collapse" cellpadding="0" cellspacing="0"><tr>
   <td width="50%" valign="top" align="center" style="${CV.F};width:50%;text-align:center;vertical-align:top;font-weight:bold">Xác nhận của cơ quan</td>
   <td width="50%" valign="top" align="center" style="${CV.F};width:50%;text-align:center;vertical-align:top"><b>Người khai ký tên</b><br><i>(Ghi rõ chức danh, học vị)</i><br><br><br><br><b>${esc([honor(m.d), m.p.fullName].filter(Boolean).join(' '))}</b></td></tr></table>`;
@@ -2597,7 +2620,7 @@ VIEWS.expert.import = {
       return pageHead('Nhập hồ sơ từ CV', 'Tải lý lịch khoa học hiện có. Kiểm tra nội dung trước khi lưu.') + steps +
         `<div class="grid2"><div class="stack"><div class="card"><div class="h2">Bắt đầu từ file của bạn</div>
           <div class="drop" id="cvDrop" tabindex="0" role="button" aria-label="Chọn file CV">${icon('upload')}<b class="h3">Kéo thả file CV vào đây</b><span class="caption">DOC, DOCX, PDF · tối đa 20 MB</span><input type="file" hidden accept=".doc,.docx,.pdf"></div>
-          <div class="row" style="margin-top:16px"><button type="button" class="btn primary" data-act="cv-pick">${icon('upload')}Chọn file từ máy</button></div>
+          <div class="row" style="margin-top:16px"><button type="button" class="btn primary" data-act="cv-pick">${icon('upload')}Chọn file từ máy</button><button type="button" class="btn" data-act="exp-blank">${icon('file')}Tải mẫu trống để điền</button></div>
           <p class="caption" style="margin:12px 0 0">DOC, DOCX hoặc PDF. Đọc tốt nhất với lý lịch theo mẫu Bộ GD&ĐT (TT 08/2011). ${API.demo ? 'Bản demo đọc .docx ngay trên trình duyệt; bản chạy thật đọc thêm .doc/.pdf qua Google Drive.' : 'File scan có thể cần OCR và kiểm tra thêm.'}</p>
           ${im.error ? `<div class="callout bad" style="margin-top:16px">${icon('alert', 'sm')}<div><b>File chưa đọc được.</b> ${esc(im.error)}<br>File đã chọn vẫn được giữ: thử lại hoặc lưu sang .docx.</div></div>` : ''}
         </div>
@@ -2993,7 +3016,6 @@ ACT['demo-reset'] = async () => { if (!await confirmBox('Đặt lại dữ liệ
    Hai điểm kiểm tra: xem toàn bộ → xác nhận bản xem trước → xuất.
    Đổi dữ liệu, mục hoặc mẫu sau khi xác nhận ⇒ hủy xác nhận cũ.
    ===================================================================== */
-const FORMATS = [['docx', 'Word (.docx)'], ['pdf', 'PDF (.pdf)'], ['doc', 'Word tương thích (.doc)'], ['print', 'In / Lưu PDF từ trình duyệt']];
 function expSrc(email) {
   const d = S.data;
   if (S.ws === 'expert') return { email: d.me.email, profile: d.profile, derived: d.derived, credentials: d.credentials, work: d.work, projects: d.projects, pubs: d.pubs, awards: d.awards, needs: d.needs || {} };
@@ -3030,38 +3052,37 @@ async function expAskScope(q) {
 }
 ACT['exp-scope-ok'] = () => { const v = ($('input[name=expScope]:checked') || {}).value || 'std'; closeDialog(v); };
 const exportView = {
-  crumb: q => S.ws === 'admin' ? 'Quản trị / Xuất CV đầy đủ · ' + nameOf(q.e) : 'Không gian chuyên gia / Xuất hồ sơ',
+  crumb: q => S.ws === 'admin' ? 'Quản trị / Xuất lý lịch khoa học' + (q.e ? ' · ' + nameOf(q.e) : '') : 'Không gian chuyên gia / Xuất lý lịch khoa học',
   render(q) {
-    if (S.ws === 'admin' && !q.e) return emptyState('user', 'Chọn chuyên gia từ Hồ sơ chuyên gia hoặc Ghép nối nhu cầu.', `<button class="btn" data-act="go" data-page="experts">Mở danh sách</button>`);
+    if (S.ws === 'admin' && !q.e) return expPicker();
     const st = expState(), src = expSrc(q.e), tpl = CV_TEMPLATES.find(t => t.code === st.tpl);
     const sig = expSig(src, st), ok = st.confirmed === sig;
     const m = cvModel(src, expOpts(st)), labels = SECTION_LABELS[st.tpl];
     const comp = SL.completeness(src.profile, { degree: src.derived.degree, work: src.work.length, pubs: src.pubs.length, needsFile: src.pubs.filter(SL.pubNeedsFile).length });
-    const fmt = FORMATS.find(f => f[0] === st.format);
-    return pageHead(S.ws === 'admin' ? 'Xuất CV đầy đủ · ' + nameOf(q.e) : 'Xuất hồ sơ', 'Chọn mẫu và nội dung → kiểm tra bản xem trước → xác nhận xuất.' + (S.ws === 'admin' ? ' Bản xuất được ghi nhật ký người xuất, mục đích và thời điểm.' : ''),
-      ok ? `<button type="button" class="btn primary" data-act="exp-download">${icon('download')}Xuất ${esc(fmt[1])}</button>` : `<button type="button" class="btn primary" data-act="exp-preview">${icon('eye')}Xem trước mẫu</button>`) +
+    return pageHead(S.ws === 'admin' ? 'Xuất lý lịch · ' + nameOf(q.e) : 'Xuất lý lịch khoa học', 'Chọn mẫu → xem trước → tải Word hoặc PDF ngay trong bản xem trước.' + (S.ws === 'admin' ? ' Mỗi lần xuất được ghi nhật ký.' : ''),
+      (S.ws === 'admin' ? `<button type="button" class="btn" data-act="go" data-page="export">${icon('user')}Đổi chuyên gia</button>` : `<button type="button" class="btn" data-act="exp-blank">${icon('file')}Tải mẫu trống</button>`) +
+      `<button type="button" class="btn primary" data-act="exp-preview">${icon('download')}Xem trước & tải</button>`) +
       `<div class="grid2"><div class="card"><div class="h2">1. Chọn mẫu & nội dung</div>
         <div class="tabs" role="tablist" style="margin-bottom:16px">${[['form', 'Lý lịch theo mẫu'], ['cv', 'CV học thuật'], ['intro', 'Hồ sơ giới thiệu']].map(t => `<button type="button" role="tab" aria-selected="${st.tab === t[0]}" data-act="exp-tab" data-v="${t[0]}">${t[1]}</button>`).join('')}</div>
-        <div class="fgrid"><label class="field c8"><span>Mẫu xuất</span><select data-exp="tpl">${CV_TEMPLATES.filter(t => t.group === st.tab).map(t => `<option value="${t.code}" ${t.code === st.tpl ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select></label>
-        <label class="field c4"><span>Định dạng</span><select data-exp="format">${FORMATS.map(f => `<option value="${f[0]}" ${f[0] === st.format ? 'selected' : ''}>${f[1]}</option>`).join('')}</select></label></div>
+        <div class="fgrid"><label class="field c12"><span>Mẫu xuất</span><select data-exp="tpl">${CV_TEMPLATES.filter(t => t.group === st.tab).map(t => `<option value="${t.code}" ${t.code === st.tpl ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select></label></div>
         <div class="h3" style="margin:20px 0 4px">Các mục trong bản xuất</div>
         ${tpl.sections.map(s => `<label class="check"><input type="checkbox" data-exp-sec="${s}" ${st.sections[s] !== false ? 'checked' : ''}> <span>${esc(labels[s])}</span></label>`).join('')}
         ${st.tpl === 'bgd' ? `<div class="scope-now"><div><span class="label">Phạm vi nội dung</span><div>${esc((EXP_SCOPES.find(x => x[0] === expScopeKey(st.extra)) || EXP_SCOPES[0])[1])}${st.extra ? '' : ' <span class="caption">(sẽ hỏi khi xem trước)</span>'}</div></div><button type="button" class="btn sm" data-act="exp-scope">Đổi</button></div>` : ''}
         <div class="scope-now"><div><span class="label">Học hàm · học vị cao nhất (tự chọn)</span><div>${esc([src.derived.title && src.derived.title + (src.derived.titleDate ? ' (' + SL.yearOf(src.derived.titleDate) + ')' : ''), src.derived.degree && src.derived.degree + (src.derived.degreeDate ? ' (' + SL.yearOf(src.derived.degreeDate) + ')' : '')].filter(Boolean).join(' · ') || 'Chưa có mục đã xác minh')}</div></div></div>
         <hr class="div"><label class="check"><input type="checkbox" data-exp="contact" ${st.contact && st.tpl !== 'intro' ? 'checked' : ''} ${st.tpl === 'intro' ? 'disabled' : ''}> <span>Kèm thông tin liên hệ & số định danh${st.tpl === 'intro' ? ' (hồ sơ giới thiệu luôn ẩn)' : ''}</span></label>
         <label class="field" style="margin-top:12px"><span>Công bố đưa vào bản xuất</span><select data-exp="pubFilter">${PUB_FILTERS.map(f => `<option value="${f[0]}" ${f[0] === st.pubFilter ? 'selected' : ''}>${f[1]}</option>`).join('')}</select></label>
-        <p class="caption" style="margin:12px 0 0">Thay đổi mẫu hoặc nội dung sẽ yêu cầu xem lại bản xuất.${st.format === 'docx' || st.format === 'pdf' ? ' .docx/.pdf được dựng qua Google Docs trên máy chủ.' : ''}</p>
+        <p class="caption" style="margin:12px 0 0">Đổi mẫu hoặc nội dung thì xem trước lại trước khi tải.</p>
       </div>
       <div class="stack"><div class="card"><div class="h2">2. Kiểm tra trước khi xuất</div>
-        ${ok ? badge('Đã xác nhận bản xem trước · ' + st.confirmedAt, 'success block') : badge('Chưa xác nhận bản xem trước', 'warning block')}
+        ${ok ? badge('Đã xem trước · ' + st.confirmedAt, 'success block') : badge('Chưa xem trước bản xuất', 'warning block')}
         <div class="mini-doc" style="margin-top:16px"><div class="t">${st.tpl === 'cv' ? 'CV HỌC THUẬT' : st.tpl === 'intro' ? 'HỒ SƠ GIỚI THIỆU' : 'LÝ LỊCH KHOA HỌC'}</div>
           <div>${esc([honor(src.derived), src.profile.fullName].filter(Boolean).join(' ') || '—')}</div><br>${tpl.sections.filter(s => st.sections[s] !== false).map(s => `<div>${esc(labels[s])}</div>`).join('')}</div>
         <hr class="div"><div class="caption">Liên hệ: ${st.contact && st.tpl !== 'intro' ? 'đang kèm' : 'đang ẩn'}<br>Mẫu: ${esc(tpl.label)}<br>Dữ liệu: ${m.allPubs.length} công bố, ${m.projects.length} đề tài theo bộ lọc · hồ sơ hoàn thiện ${comp.pct}%</div>
         ${comp.missing.filter(x => x.sec === 'I' || x.sec === 'II').length ? `<div class="callout warn" style="margin-top:12px">${icon('alert', 'sm')}<div>Còn trống: ${esc(comp.missing.filter(x => x.sec === 'I' || x.sec === 'II').map(x => x.label).join(', '))}. Ô trống in thành dòng chấm để điền tay.</div></div>` : ''}
-        <button type="button" class="btn primary block" style="margin-top:16px" data-act="exp-preview">${icon('file')}Xem toàn bộ bản xuất</button>
-        ${ok ? `<div class="row" style="margin-top:12px">${FORMATS.map(f => `<button type="button" class="btn sm" data-act="exp-download" data-f="${f[0]}">${icon(f[0] === 'print' ? 'print' : 'download', 'sm')}${f[0] === 'print' ? 'In' : '.' + f[0]}</button>`).join('')}</div>` : ''}
+        <button type="button" class="btn primary block" style="margin-top:16px" data-act="exp-preview">${icon('download')}Xem trước & tải</button>
+        ${ok ? `<div class="row" style="margin-top:12px">${expFormats().map(f => `<button type="button" class="btn sm" data-act="exp-download" data-f="${f[0]}">${icon(f[0] === 'print' ? 'print' : 'download', 'sm')}${esc(f[2])}</button>`).join('')}</div>` : ''}
       </div>
-      <div class="callout">${icon('info', 'sm')}<div>Mẫu Bộ GD&ĐT theo Thông tư 08/2011/TT-BGDĐT, Phụ lục V. Mẫu đơn vị v2 là cấu trúc đã chốt cho prototype; mẫu chính thức thay bằng biểu mẫu thực tế của đơn vị.</div></div></div></div>`;
+      <div class="callout">${icon('info', 'sm')}<div>Mẫu Bộ GD&ĐT theo Thông tư 08/2011/TT-BGDĐT, Phụ lục V.${S.ws === 'expert' ? ` Muốn điền tay? <button type="button" class="linkbtn" data-act="exp-blank">Tải mẫu trống</button>, điền trong Word rồi tải lên ở <button type="button" class="linkbtn" data-act="go" data-page="import">Nhập từ CV</button>.` : ''}</div></div></div></div>`;
   },
   mount() {
     $$('[data-exp]').forEach(el => el.addEventListener('change', () => {
@@ -3080,30 +3101,57 @@ function expBody(q) { const st = expState(); return cvBody(expSrc(q.e), expOpts(
 ACT['exp-preview'] = async el => {
   const q = S.route.q, st = expState();
   if (st.tpl === 'bgd' && (!st.extra || !(el && el.dataset.keep))) { if (!await expAskScope(q)) return; }
-  const src = expSrc(q.e), sig = expSig(src, st);
+  const src = expSrc(q.e), sig = expSig(src, st), fs = expFormats();
   const r = await openDialog({
-    title: 'Xem toàn bộ bản xuất', wide: true,
+    title: 'Xem trước bản xuất', wide: true,
     body: `<div class="paper-wrap"><div class="paper">${expBody(q)}</div></div>`,
-    foot: `<span class="caption" style="margin-right:auto">Kiểm tra toàn bộ nội dung trước khi xác nhận.</span><button type="button" class="btn" data-act="dlg-close">Đóng</button><button type="button" class="btn primary" data-act="dlg-ok">${icon('check')}Xác nhận bản xem trước</button>`
+    foot: `<span class="caption" style="margin-right:auto">Kiểm tra nội dung rồi chọn định dạng để tải.</span><button type="button" class="btn" data-act="dlg-close">Đóng</button>` +
+      fs.map((f, i) => `<button type="button" class="btn${i === 0 ? ' primary' : ''}" data-act="exp-dl-now" data-f="${f[0]}">${icon(f[0] === 'print' ? 'print' : 'download', 'sm')}${esc(f[2])}</button>`).join('')
   });
   if (!r) return;
   st.confirmed = sig;
   const d = new Date(); st.confirmedAt = SL.pad(d.getHours()) + ':' + SL.pad(d.getMinutes()) + ' ' + SL.pad(d.getDate()) + '/' + SL.pad(d.getMonth() + 1);
-  toast('Đã xác nhận. Chọn định dạng để tải xuống.', 'ok');
   S.ui.keepScroll = true; route();
+  await ACT['exp-download']({ dataset: { f: r } });
+};
+ACT['exp-dl-now'] = el => closeDialog(el.dataset.f);
+/** Định dạng tải: [mã, nhãn đầy đủ, nhãn nút]. Bản demo không có máy chủ Google Docs nên chỉ có .doc và In. */
+function expFormats() {
+  const all = [['docx', 'Word (.docx)', 'Word .docx'], ['pdf', 'PDF (.pdf)', 'PDF'], ['doc', 'Word tương thích (.doc)', 'Word .doc'], ['print', 'In / Lưu PDF', 'In']];
+  return API.demo ? all.filter(f => f[0] === 'doc' || f[0] === 'print') : all;
+}
+/** Quản trị: chọn chuyên gia để xuất lý lịch. */
+function expPicker() {
+  const ex = experts().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'vi'));
+  return pageHead('Xuất lý lịch khoa học', 'Chọn chuyên gia để xem trước và tải lý lịch theo mẫu Bộ GD&ĐT, CV học thuật hoặc hồ sơ giới thiệu.', `<button type="button" class="btn" data-act="exp-blank">${icon('file')}Tải mẫu trống</button>`) +
+    `<div class="card">${ex.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Chuyên gia</th><th>Đơn vị</th><th>Học hàm · học vị</th><th>Hoàn thiện</th><th></th></tr></thead><tbody>${ex.map(x => `<tr class="click" data-act="go" data-page="export" data-q='${esc(JSON.stringify({ e: x.email }))}'><td><b>${esc(x.name || x.email)}</b><div class="caption">${esc(x.email)}</div></td><td>${esc(x.unit || '—')}</td><td>${esc([x.der.title, x.der.degree].filter(Boolean).join(' · ') || '—')}</td><td>${x.comp.pct}%</td><td><span class="btn sm">${icon('download', 'sm')}Xuất</span></td></tr>`).join('')}</tbody></table></div>`
+      : emptyState('user', 'Chưa có tài khoản chuyên gia. Cấp tài khoản ở mục Tài khoản & quyền.')}</div>`;
+}
+/** Mẫu lý lịch trống (mẫu Bộ, đủ mục I–VI): người dùng điền tay rồi tải lên ở "Nhập từ CV". */
+ACT['exp-blank'] = async el => {
+  const src = { email: '', profile: {}, derived: {}, credentials: [], work: [], projects: [], pubs: [], awards: [], needs: {} };
+  const body = cvBody(src, { tpl: 'bgd', sections: {}, contact: true, pubFilter: 'all', extra: { books: true, awards: true } }, Object.assign({}, S.data.settings || {}, { CITY: '', BLANK: true }));
+  const name = 'Mau_trong_Ly_lich_khoa_hoc', meta = { template: 'blank', name, format: 'docx' };
+  if (!API.demo) {
+    try { const r = await call(API.renderDoc(gdocHtml(body, name), name, 'docx', meta), el instanceof Element ? el : null); downloadB64(r.name, r.mime, r.data); return; } catch (e) {}
+  }
+  downloadBlob(name + '.doc', new Blob([wordDoc(body, name)], { type: 'application/msword' }));
 };
 ACT['exp-download'] = async el => {
   const q = S.route.q, st = expState(), src = expSrc(q.e);
   if (st.confirmed !== expSig(src, st)) { toast('Bản xem trước đã thay đổi. Xem lại và xác nhận trước khi xuất.', 'error'); S.ui.keepScroll = true; route(); return; }
-  const fmt = el.dataset.f || st.format, body = expBody(q), m = cvModel(src, expOpts(st)), name = cvFileName(m, st.tpl);
+  const fmt = el.dataset.f || st.format, body = expBody(q), m = cvModel(src, expOpts(st)), name = cvFileName(m, st.tpl), btn = el instanceof Element ? el : null;
   const meta = { email: src.email, template: st.tpl, sections: Object.keys(st.sections).filter(k => st.sections[k] === false).map(k => '-' + k).join(' '), name, format: fmt };
-  if (fmt === 'doc') { downloadBlob(name + '.doc', new Blob([wordDoc(body, name)], { type: 'application/msword' })); API.logExport(meta).catch(() => {}); toast('Đã tải ' + name + '.doc', 'ok'); return; }
+  if (fmt === 'doc') { downloadBlob(name + '.doc', new Blob([wordDoc(body, name)], { type: 'application/msword' })); API.logExport(meta).catch(() => {}); return; }
   if (fmt === 'print') { API.logExport(meta).catch(() => {}); printBody(body); return; }
   try {
-    const r = await call(API.renderDoc(gdocHtml(body, name), name, fmt, meta), el);
+    const r = await call(API.renderDoc(gdocHtml(body, name), name, fmt, meta), btn);
     downloadB64(r.name, r.mime, r.data);
-    toast('Đã tải ' + r.name, 'ok');
-  } catch (e) { toast('Có thể dùng "Word tương thích (.doc)" hoặc "In / Lưu PDF" thay thế.', '', 7000); }
+  } catch (e) {
+    // Máy chủ chưa dựng được .docx/.pdf (VD: chưa bật Drive API) → vẫn trả file Word tương thích để người dùng không bị kẹt.
+    downloadBlob(name + '.doc', new Blob([wordDoc(body, name)], { type: 'application/msword' }));
+    API.logExport(Object.assign({}, meta, { format: 'doc' })).catch(() => {});
+  }
 };
 
 /* =====================================================================
