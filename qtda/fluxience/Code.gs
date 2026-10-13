@@ -27,7 +27,7 @@
 /* =====================================================================
    0. CẤU HÌNH
    ===================================================================== */
-const APP_VERSION = '1.17';
+const APP_VERSION = '1.18';
 const TZ = 'Asia/Ho_Chi_Minh';
 const SESSION_HOURS = 12;
 const MAX_UPLOAD_MB = 20;
@@ -1482,12 +1482,12 @@ function api_parseCV(token, f) {
 const AI_FIELDS = ['fullName', 'gender', 'dob', 'birthPlace', 'hometown', 'ethnicity', 'position', 'unit', 'address', 'mobile', 'phoneOffice', 'contactEmail',
   'ugSystem', 'ugPlace', 'ugMajor', 'ugCountry', 'ugYear', 'msMajor', 'msYear', 'msPlace', 'phdMajor', 'phdYear', 'phdPlace', 'thesis', 'field', 'keywords'];
 /** Gọi Gemini; tự thử model kế tiếp khi model bị ngừng (404). Model chạy được được nhớ lại. */
-const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-2.5-flash'];
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-flash-lite-latest'];
 function geminiCall_(text, json) {
   const key = prop_('GEMINI_API_KEY');
   if (!key) return { code: 0, body: 'Chưa có GEMINI_API_KEY' };
   const list = [prop_('GEMINI_MODEL'), prop_('GEMINI_MODEL_OK')].concat(GEMINI_MODELS).filter((m, i, a) => m && a.indexOf(m) === i);
-  let last = { code: 0, body: '' };
+  let last = { code: 0, body: '' }, busy = null;
   for (const model of list) {
     let res;
     for (let attempt = 0; attempt < 3; attempt++) {   // quá tải tạm thời: chờ 2s, 4s rồi thử lại cùng model
@@ -1502,8 +1502,9 @@ function geminiCall_(text, json) {
     if (last.code === 200) { if (prop_('GEMINI_MODEL_OK') !== model) PROPS.setProperty('GEMINI_MODEL_OK', model); return last; }
     // 404: model đã ngừng · 429/500/503: quá tải tạm thời → thử model kế tiếp
     if ([404, 429, 500, 503].indexOf(last.code) < 0) return last;
+    if (last.code !== 404 && !busy) busy = last;   // nhớ lỗi quá tải: đó mới là nguyên nhân chính, không phải 404 của model dự phòng
   }
-  return last;
+  return busy || last;
 }
 function geminiText_(r) {
   const body = JSON.parse(r.body), parts = (((body.candidates || [])[0] || {}).content || {}).parts || [];
