@@ -15,19 +15,19 @@
  *  - Quy tắc dùng chung với giao diện nằm trong khối SL-SHARED (học vị cao nhất, điều kiện
  *    vai trò, khử trùng công bố, tách CV, chấm điểm ghép nối).
  *
- * CÀI ĐẶT: xem README.md, hoặc tóm tắt:
- *  1. Chạy setup_()                         → tạo Google Sheet + danh mục mặc định, bạn là quản trị viên
- *  2. Deploy > New deployment > Web app     → Execute as: Me · Who has access: Anyone
- *  3. Google Cloud Console tạo OAuth Client (Web application), redirect URI = URL /exec
- *  4. Điền napCauHinh_() rồi chạy            → lưu CLIENT_ID, CLIENT_SECRET, URL /exec
- *  5. Chạy capQuyen_()                       → cấp quyền Drive, Docs, gửi mail, gọi mạng
- *  6. (Tùy chọn) napDuLieuMau_()              → dữ liệu minh họa để trình bày
+ * CÀI ĐẶT (chọn hàm trong ô "Chạy" của trình soạn thảo):
+ *  1. B1_taoCoSoDuLieu        → tạo/nối Google Sheet + kho tài liệu, bạn là quản trị viên
+ *  2. Triển khai web app MỘT lần (Thực thi: Tôi · Bất kỳ ai), lấy link /exec
+ *  3. Google Cloud: OAuth client (Web), redirect URI = link /exec
+ *  4. Thuộc tính tập lệnh: OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, WEBAPP_URL → chạy B2_luuCauHinhDangNhap
+ *  5. B3_capQuyen             → cấp quyền Drive, Docs, Mail
+ *  Cập nhật code về sau: Quản lý triển khai → ✏️ → Phiên bản mới (KHÔNG tạo triển khai mới).
  */
 
 /* =====================================================================
    0. CẤU HÌNH
    ===================================================================== */
-const APP_VERSION = '1.12';
+const APP_VERSION = '1.13';
 const TZ = 'Asia/Ho_Chi_Minh';
 const SESSION_HOURS = 12;
 const MAX_UPLOAD_MB = 20;
@@ -802,7 +802,7 @@ function ss_() {
   const id = prop_('SPREADSHEET_ID');
   if (id) {
     try { return SpreadsheetApp.openById(id); }
-    catch (e) { throw new Error('Không mở được Google Sheet (ID ' + id + '). Quản trị viên chạy setup_() để tạo lại.'); }
+    catch (e) { throw new Error('Không mở được Google Sheet (ID ' + id + '). Chủ dự án chạy B1_taoCoSoDuLieu để tạo lại.'); }
   }
   let ss = null;
   try { ss = SpreadsheetApp.getActiveSpreadsheet(); } catch (e) {}
@@ -1053,7 +1053,7 @@ function publicSettings_(st) {
 function api_bootstrap(token, ws) {
   try {
     if (!AUTH.isConfigured()) {
-      return { state: 'error', message: 'Ứng dụng chưa cấu hình đăng nhập Google. Quản trị viên chạy napCauHinh_() trong Apps Script (xem README).' };
+      return { state: 'error', message: 'Ứng dụng chưa cấu hình đăng nhập Google. Quản trị viên chạy B2_luuCauHinhDangNhap trong Apps Script.' };
     }
     const st = settings_();
     const brand = publicSettings_(st);
@@ -1930,7 +1930,27 @@ function notifyAdmins_(subject, html) {
 
 /* =====================================================================
    13. CÀI ĐẶT — CHẠY TRONG TRÌNH SOẠN THẢO APPS SCRIPT
+   Chọn tên hàm trong ô "Chạy" theo thứ tự B1 → B2 → B3. Các hàm này chỉ chạy được
+   bởi chủ dự án trong trình soạn thảo; người dùng web không gọi được.
    ===================================================================== */
+function ownerOnly_() {
+  let a = '', e = '';
+  try { a = String(Session.getActiveUser().getEmail() || '').toLowerCase(); e = String(Session.getEffectiveUser().getEmail() || '').toLowerCase(); } catch (err) {}
+  if (!a || a !== e) throw new Error('Chỉ chủ dự án được chạy hàm này trong trình soạn thảo Apps Script.');
+}
+/** B1 — Tạo (hoặc nối lại) Google Sheet dữ liệu, kho tài liệu; bạn là quản trị viên. */
+function B1_taoCoSoDuLieu() { ownerOnly_(); return setup_(); }
+/** B2 — Lưu cấu hình đăng nhập Google. Trước đó điền OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, WEBAPP_URL trong Thuộc tính tập lệnh. */
+function B2_luuCauHinhDangNhap() { ownerOnly_(); return napCauHinh_(); }
+/** B3 — Cấp quyền Drive, Docs, Mail, gọi mạng (Google sẽ hỏi xác nhận). */
+function B3_capQuyen() { ownerOnly_(); return capQuyen_(); }
+/** Xem tình trạng cấu hình (không in bí mật). */
+function kiemTraCauHinh() { ownerOnly_(); return kiemTraCauHinh_(); }
+/** Tùy chọn: nạp dữ liệu minh họa để trình bày. */
+function napDuLieuMau() { ownerOnly_(); return napDuLieuMau_(); }
+/** Khẩn cấp: đăng xuất mọi người (khi nghi lộ phiên). */
+function dangXuatTatCa() { ownerOnly_(); return dangXuatTatCa_(); }
+
 /** BƯỚC 1 — tạo Google Sheet, danh mục mặc định; bạn (chủ script) là quản trị viên. */
 function setup_() {
   const ss = ss_();
@@ -1958,12 +1978,11 @@ function setup_() {
     'Quản trị viên  : ' + me,
     'URL web app    : ' + (url || '(chưa deploy — Deploy > New deployment > Web app)'),
     '',
-    'TIẾP THEO (xem README.md):',
-    '1. Deploy > New deployment > Web app · Execute as: Me · Who has access: Anyone',
-    '2. Google Cloud Console > Credentials > OAuth client (Web application)',
-    '   Authorized redirect URIs = URL /exec ở trên',
-    '3. Điền 3 giá trị vào napCauHinh_() rồi chạy',
-    '4. Chạy capQuyen_() để cấp quyền Drive/Docs/Mail',
+    'TIẾP THEO:',
+    '1. Triển khai > Tùy chọn triển khai mới > Ứng dụng web · Thực thi: Tôi · Quyền truy cập: Bất kỳ ai (CHỈ LÀM 1 LẦN)',
+    '2. Google Cloud > Clients > thêm URL /exec vào Authorized redirect URIs',
+    '3. Thuộc tính tập lệnh: OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, WEBAPP_URL → chạy B2_luuCauHinhDangNhap',
+    '4. Chạy B3_capQuyen',
     '================================================'
   ].join('\n');
   Logger.log(out);
@@ -2011,7 +2030,7 @@ function capQuyen_() {
 function kiemTraCauHinh_() {
   const out = [
     'Phiên bản code      : ' + APP_VERSION,
-    'SPREADSHEET_ID      : ' + (prop_('SPREADSHEET_ID') || '(chưa có — chạy setup_())'),
+    'SPREADSHEET_ID      : ' + (prop_('SPREADSHEET_ID') || '(chưa có — chạy B1_taoCoSoDuLieu)'),
     'Kho tài liệu        : ' + (prop_('FILES_FOLDER') ? 'đã tạo' : '(chưa có)'),
     'OAUTH_CLIENT_ID     : ' + (prop_('OAUTH_CLIENT_ID') || '(CHƯA CÓ)'),
     'OAUTH_CLIENT_SECRET : ' + (prop_('OAUTH_CLIENT_SECRET') ? '(đã lưu)' : '(CHƯA CÓ)'),
