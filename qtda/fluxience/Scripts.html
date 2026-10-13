@@ -823,7 +823,7 @@ const MockAPI = (function () {
     const brand = { APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME, CITY: st.CITY, FORM_CODE: st.FORM_CODE, PUB_CRITERIA: st.PUB_CRITERIA };
     const e = who();
     const accounts = db.Users.map(u => ({ email: u.email, name: u.name, unit: u.unit, roles: u.roles, status: u.status }));
-    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.13-demo' });
+    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.14-demo' });
     const u = db.Users.find(x => x.email === e);
     if (!u) {
       const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: 'expert' };
@@ -834,7 +834,7 @@ const MockAPI = (function () {
     if (u.status === 'rejected') return wait({ state: 'denied', rejected: true, note: u.reviewNote, email: e, settings: brand, accounts, contact: ADMIN });
     if (u.status !== 'active') return wait({ state: 'disabled', email: e, settings: brand, accounts, contact: ADMIN });
     const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs.indexOf('admin') >= 0 ? 'admin' : rs[0];
-    const base = { state: 'ok', demo: true, version: '1.13-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
+    const base = { state: 'ok', demo: true, version: '1.14-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
     if (w === 'admin') {
       const der = {}; db.Users.forEach(x => { der[x.email] = derived(x.email); });
       return wait(Object.assign(base, { users: db.Users, profiles: db.Profiles, derivedAll: der, credentials: db.Credentials, pubs: db.Publications, needsAll: db.Needs, work: db.Work, projects: db.Projects, awards: db.Awards, rounds: db.Rounds, matchesAll: db.Matches, files: db.Files, supportAll: db.Support }));
@@ -1124,7 +1124,7 @@ const API = IS_GAS ? ServerAPI : MockAPI;
 /* =====================================================================
    TRẠNG THÁI & ĐIỀU HƯỚNG
    ===================================================================== */
-const UI_VERSION = '1.13';
+const UI_VERSION = '1.14';
 const S = { data: null, ws: '', route: { page: '', q: {} }, busy: 0, ui: {}, drafts: {}, formDrafts: {}, structuredDirty: {} };
 let sessionRevision = 0, refreshRevision = 0;
 const WS_KEY = 'sl-ws';
@@ -1305,7 +1305,7 @@ function promptBox(title, label, opts) {
   opts = opts || {};
   return openDialog({
     title,
-    body: (opts.html || '') + `<label class="field"><span>${esc(label)}${opts.required ? ' *' : ''}</span><textarea id="dlgInput" rows="${opts.rows || 3}" maxlength="${opts.max || 500}" placeholder="${esc(opts.placeholder || '')}">${esc(opts.value || '')}</textarea></label>`,
+    body: (opts.html || '') + `<label class="field"><span>${esc(label)}${opts.required ? ' *' : ''}</span><textarea id="dlgInput" rows="${opts.rows || 3}" maxlength="${opts.max || 500}" placeholder="${esc(opts.placeholder || '')}">${esc(opts.value || '')}<\/textarea></label>`,
     foot: `<button type="button" class="btn" data-act="dlg-close">Hủy</button><button type="button" class="btn ${opts.danger ? 'danger' : 'primary'}" data-act="dlg-ok-input" data-required="${opts.required ? 1 : ''}">${esc(opts.ok || 'Gửi')}</button>`,
     onOpen: () => setTimeout(() => $('#dlgInput').focus(), 30)
   });
@@ -2049,9 +2049,9 @@ function shortlistBody(round, rows, st) {
 /** Bọc thân văn bản thành file Word (.doc dạng HTML: Word mở trực tiếp, đúng khổ A4 và lề). */
 function wordDoc(body, title) {
   return '﻿<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>' + esc(title) +
-    '</title><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]--><style>@page WordSection1{size:21cm 29.7cm;margin:2cm 2cm 2cm 3cm;mso-header-margin:1cm;mso-footer-margin:1cm}div.WordSection1{page:WordSection1}body{font-family:"Times New Roman";font-size:13pt}table{border-collapse:collapse}p{margin:0}</style></head><body><div class="WordSection1">' + body + '</div></body></html>';
+    '<\/title><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument><\/xml><![endif]--><style>@page WordSection1{size:21cm 29.7cm;margin:2cm 2cm 2cm 3cm;mso-header-margin:1cm;mso-footer-margin:1cm}div.WordSection1{page:WordSection1}body{font-family:"Times New Roman";font-size:13pt}table{border-collapse:collapse}p{margin:0}<\/style><\/head><body><div class="WordSection1">' + body + '</div><\/body><\/html>';
 }
-function gdocHtml(body, title) { return '<html><head><meta charset="utf-8"><title>' + esc(title) + '</title></head><body>' + body + '</body></html>'; }
+function gdocHtml(body, title) { return '<html><head><meta charset="utf-8"><title>' + esc(title) + '<\/title><\/head><body>' + body + '<\/body><\/html>'; }
 function printBody(body) {
   $('#printArea').innerHTML = `<div class="paper">${body}</div>`;
   document.body.classList.add('printing');
@@ -2185,7 +2185,7 @@ function fieldInput(key, opts) {
   let ctl;
   if (opts.list) ctl = combo(key, v, opts.list, { free: opts.free, placeholder: opts.placeholder });
   else if (opts.select) ctl = `<select name="${key}"><option value="">— Chọn —</option>${opts.select.map(o => `<option ${o === v ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
-  else if (opts.area) ctl = `<textarea name="${key}" rows="3" maxlength="1500">${esc(v)}</textarea>`;
+  else if (opts.area) ctl = `<textarea name="${key}" rows="3" maxlength="1500">${esc(v)}<\/textarea>`;
   else ctl = `<input name="${key}" value="${esc(v)}" ${f.type === 'date' ? 'placeholder="dd/mm/yyyy" inputmode="numeric"' : ''} ${/Year$/.test(key) ? 'inputmode="numeric" maxlength="4" placeholder="yyyy"' : ''} ${opts.placeholder ? `placeholder="${esc(opts.placeholder)}"` : ''}>`;
   return `<label class="field ${opts.c || 'c6'}"><span>${esc(label)}${f.req ? ' *' : ''}</span>${ctl}${opts.hint ? `<span class="hint">${esc(opts.hint)}</span>` : ''}</label>`;
 }
@@ -2270,7 +2270,7 @@ function renderProfileSection(tab) {
           <label class="field"><span>Ngày đạt / bổ nhiệm *</span><input name="date" placeholder="dd/mm/yyyy" inputmode="numeric"></label>
           <label class="field"><span>Nước / cơ quan cấp</span><input name="country" placeholder="Việt Nam"></label>
           <label class="field"><span>File minh chứng (bằng, quyết định)</span><input type="file" name="file" accept=".pdf,.png,.jpg,.jpeg"></label>
-          <label class="field"><span>Ghi chú cho người duyệt</span><textarea name="note" rows="2"></textarea></label>
+          <label class="field"><span>Ghi chú cho người duyệt</span><textarea name="note" rows="2"><\/textarea></label>
           <button class="btn primary block">${icon('send')}Gửi xác minh</button>
           <div class="caption">Quản trị viên thấy hồ sơ trước và sau khi xác minh. Kết quả gửi về Thông báo riêng.</div>
         </div></form></div>`;
@@ -2724,14 +2724,14 @@ VIEWS.expert.help = {
     const mine = (d.support || []).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     let body = '';
     if (tab === 'quick') body = `<div class="grid2"><div class="card"><div class="h2">Nhập nhanh công bố</div><p class="muted" style="margin:-8px 0 16px">Dán danh sách trích dẫn (mỗi dòng một bài, dạng APA hoặc "Tên bài, Tạp chí, Năm"; có DOI càng tốt). Hệ thống tách thành bản nháp để bạn kiểm tra.</p>
-        <label class="field"><span>Danh sách trích dẫn</span><textarea id="quickText" rows="8" placeholder="Tran, M. A., & Le, T. H. (2024). Lean in SMEs. Journal of Operations, 3(1). https://doi.org/10.xxxx/yyyy">${esc((qp && qp.text) || '')}</textarea></label>
+        <label class="field"><span>Danh sách trích dẫn</span><textarea id="quickText" rows="8" placeholder="Tran, M. A., & Le, T. H. (2024). Lean in SMEs. Journal of Operations, 3(1). https://doi.org/10.xxxx/yyyy">${esc((qp && qp.text) || '')}<\/textarea></label>
         <div class="row" style="margin-top:12px"><button type="button" class="btn primary" data-act="quick-parse">${icon('spark')}Tách dữ liệu</button>${qp && qp.rows ? `<button type="button" class="btn" data-act="quick-clear">Xóa</button>` : ''}</div>
         ${qp && qp.rows ? `<hr class="div"><div class="h3" style="margin-bottom:8px">${qp.rows.length} bài tách được</div>${qp.rows.map((r, i) => `<div class="rev-item ${r.on ? '' : 'skip'}"><input type="checkbox" ${r.on ? 'checked' : ''} data-act="quick-toggle" data-i="${i}" style="width:18px;height:18px;margin-top:4px;accent-color:var(--sl-brand-default)" aria-label="Chọn"><div><b class="strong">${esc(r.title || '(chưa rõ tên bài)')}</b><div class="caption">${esc([r.authors, r.venue, r.year, r.doi && 'DOI ' + r.doi].filter(Boolean).join(' · '))}</div>${r.dup ? `<div class="flag">Trùng với "${esc(r.dup.title)}" — mặc định bỏ qua.</div>` : (!r.year || !r.venue) ? '<div class="flag">Thiếu năm hoặc nơi đăng: bổ sung sau khi lưu nháp.</div>' : ''}</div><span class="caption">${r.dup ? 'Bỏ qua' : 'Lưu nháp'}</span></div>`).join('')}
           <div class="row" style="margin-top:16px;justify-content:flex-end"><button type="button" class="btn primary" data-act="quick-save">${icon('check')}Lưu các bài đã chọn (nháp)</button></div>` : ''}
       </div><div class="stack"><div class="card"><div class="h3">Mẹo</div><ul style="margin:8px 0 0;padding-left:20px;line-height:24px;color:var(--sl-text-secondary)"><li>Dòng có DOI cho kết quả tốt nhất; mở từng bài để <b>Đối chiếu metadata</b> với Crossref.</li><li>Bài thiếu tạp chí/năm vẫn lưu được ở dạng nháp với thông tin tạm "(cần bổ sung)".</li><li>Bài lưu nháp chưa tính vào thống kê cho tới khi được xác minh.</li></ul></div>
       <div class="card"><div class="h3">Nhập cả lý lịch</div><p class="muted" style="margin:8px 0 12px">Có sẵn lý lịch khoa học dạng Word/PDF? Nhập một lần cho toàn bộ hồ sơ.</p><button type="button" class="btn" data-act="go" data-page="import">${icon('upload')}Nhập từ CV</button></div></div></div>`;
     else if (tab === 'support') body = `<div class="grid2"><div class="card"><div class="h2">Yêu cầu của tôi</div>${mine.length ? `<div class="list">${mine.map(s => `<div class="li" style="align-items:flex-start"><div class="grow"><div class="row between"><b class="strong">${esc(s.subject)}</b>${badge(s.status === 'open' ? 'Đang chờ' : s.status === 'answered' ? 'Đã phản hồi' : 'Đã đóng', s.status === 'open' ? 'warning' : 'success')}</div><div class="caption">${esc(fmtDT(s.createdAt))}</div><p style="margin:6px 0">${esc(s.body)}</p>${s.reply ? `<div class="panel-ok"><b class="strong">Phản hồi:</b> ${esc(s.reply)}<div class="caption">${esc(fmtDT(s.repliedAt))}</div></div>` : ''}</div></div>`).join('')}</div>` : emptyState('chat', 'Chưa gửi yêu cầu nào.')}</div>
-      <form class="card" data-form="support"><div class="h3">Gửi yêu cầu đến quản trị viên</div><div class="stack" style="margin-top:12px"><label class="field"><span>Tiêu đề *</span><input name="subject" maxlength="150" placeholder="Ví dụ: Cập nhật chức danh PGS"></label><label class="field"><span>Nội dung *</span><textarea name="body" rows="6" maxlength="3000"></textarea></label><button class="btn primary block">${icon('send')}Gửi yêu cầu</button></div></form></div>`;
+      <form class="card" data-form="support"><div class="h3">Gửi yêu cầu đến quản trị viên</div><div class="stack" style="margin-top:12px"><label class="field"><span>Tiêu đề *</span><input name="subject" maxlength="150" placeholder="Ví dụ: Cập nhật chức danh PGS"></label><label class="field"><span>Nội dung *</span><textarea name="body" rows="6" maxlength="3000"><\/textarea></label><button class="btn primary block">${icon('send')}Gửi yêu cầu</button></div></form></div>`;
     else body = `<div class="card">${FAQ.map(f => `<details class="faq"><summary>${esc(f[0])}</summary><p>${esc(f[1])}</p></details>`).join('')}</div>
       ${API.demo ? `<div class="card" style="margin-top:20px"><div class="h3">Bản demo</div><p class="muted" style="margin:8px 0 12px">Dữ liệu demo lưu trong trình duyệt này. Đặt lại để quay về bộ dữ liệu minh họa ban đầu.</p><button type="button" class="btn danger" data-act="demo-reset">${icon('refresh')}Đặt lại dữ liệu demo</button></div>` : ''}`;
     return pageHead('Hỗ trợ & nhập nhanh', 'Nhập nhanh danh sách công bố, câu hỏi thường gặp và gửi yêu cầu đến quản trị viên.') +
@@ -3192,7 +3192,7 @@ function rvOpen(q) {
           <label class="check"><input type="checkbox" name="r-expert" ${u.requestedRole !== 'admin' ? 'checked' : ''}> <span>Chuyên gia · hồ sơ cá nhân, công bố, xuất CV</span></label>
           <label class="check"><input type="checkbox" name="r-admin" ${u.requestedRole === 'admin' ? 'checked' : ''}> <span>Quản trị · xác minh, ghép nối, thống kê</span></label></div>
         <label class="field"><span>Đơn vị</span><input name="unit" value="${esc(u.unit || '')}" placeholder="VD: Khoa Kinh tế"></label>
-        <label class="field"><span>Ghi chú / lý do từ chối</span><textarea id="revNote" name="note" rows="3" placeholder="Bắt buộc khi từ chối; người dùng sẽ nhận được nội dung này."></textarea></label>
+        <label class="field"><span>Ghi chú / lý do từ chối</span><textarea id="revNote" name="note" rows="3" placeholder="Bắt buộc khi từ chối; người dùng sẽ nhận được nội dung này."><\/textarea></label>
       </form>`;
     foot = `<button type="button" class="btn danger" data-act="acc-do" data-d="reject" data-email="${esc(u.email)}">${icon('x')}Từ chối</button><button type="button" class="btn primary" data-act="acc-do" data-d="approve" data-email="${esc(u.email)}">${icon('check')}Cấp quyền</button>`;
   } else if (t === 'cred') {
@@ -3206,7 +3206,7 @@ function rvOpen(q) {
         <div class="panel-ok"><div class="label">Sau khi xác minh</div><div class="h3" style="margin-top:4px">${esc(after ? after.value : '—')}</div><div class="caption">${esc(kl)} cao nhất${after ? ' · ' + esc(SL.fmtDate(after.date)) : ''}</div></div></div>
       ${before && after && before.id === after.id && c.kind !== 'position' ? `<div class="callout" style="margin-top:12px">${icon('info', 'sm')}<div>Mục này không làm thay đổi ${esc(kl.toLowerCase())} cao nhất.</div></div>` : ''}
       <div class="stack" style="margin-top:20px"><label class="check"><input type="checkbox" id="revChk"> <span>Đã kiểm tra tên, ngày đạt và đơn vị cấp trên minh chứng.</span></label>
-      <label class="field"><span>Ghi chú xác minh</span><textarea id="revNote" rows="3" placeholder="Bắt buộc khi yêu cầu bổ sung hoặc không ghi nhận."></textarea></label></div>`;
+      <label class="field"><span>Ghi chú xác minh</span><textarea id="revNote" rows="3" placeholder="Bắt buộc khi yêu cầu bổ sung hoặc không ghi nhận."><\/textarea></label></div>`;
     foot = `<button type="button" class="btn danger" data-act="rev-do" data-k="cred" data-id="${esc(c.id)}" data-d="rejected">Không ghi nhận</button><button type="button" class="btn" data-act="rev-do" data-k="cred" data-id="${esc(c.id)}" data-d="needs_info">Yêu cầu bổ sung</button><button type="button" class="btn primary" data-act="rev-do" data-k="cred" data-id="${esc(c.id)}" data-d="verified">${icon('check')}Xác minh & cập nhật</button>`;
   } else {
     const p = item, own = d.pubs.filter(x => x.email === p.email && x.id !== p.id), dup = SL.findDup(p, own);
@@ -3217,7 +3217,7 @@ function rvOpen(q) {
         <dt>Metadata</dt><dd><div class="row" style="gap:8px">${{ match: badge('Khớp Crossref', 'success'), mismatch: badge('Lệch metadata', 'warning'), notfound: badge('Không có trên Crossref', 'warning') }[ms] || badge('Chưa đối chiếu', '')}${p.doi ? `<button type="button" class="btn sm" data-act="rev-meta" data-id="${esc(p.id)}">${icon('search', 'sm')}Đối chiếu DOI</button>` : ''}</div>${(meta && meta.notes && meta.notes.length) || p.metaNote ? `<div class="caption warn-t" style="margin-top:4px">${esc(meta ? meta.notes.join(' ') : p.metaNote)}</div>` : ''}</dd>
         <dt>Trùng lặp</dt><dd>${dup ? badge('Trùng: ' + dup.title, 'warning') : badge('Không trùng trong hồ sơ', 'success')}${co.length ? `<div class="caption" style="margin-top:4px">Đồng tác giả cùng DOI: ${esc(co.map(x => nameOf(x.email)).join(', '))} · thống kê đơn vị chỉ tính một lần.</div>` : ''}</dd></dl>
       <div class="panel-sub" style="margin-top:20px"><div class="h3" style="margin-bottom:6px">Tiêu chí xét duyệt ${esc(d.settings.PUB_CRITERIA || 'v1')}</div>${['Nơi đăng thuộc danh mục được tính của đơn vị', 'Chủ hồ sơ có tên trong danh sách tác giả', 'File minh chứng khớp tiêu đề, năm, nơi đăng', 'Năm/tháng xuất bản hợp lệ, không trùng bản ghi đã tính'].map((x, i) => `<label class="check"><input type="checkbox" class="revCrit" data-i="${i}"> <span>${x}</span></label>`).join('')}</div>
-      <label class="field" style="margin-top:16px"><span>Ghi chú xét duyệt</span><textarea id="revNote" rows="3" placeholder="Bắt buộc khi yêu cầu bổ sung hoặc không đạt."></textarea></label>
+      <label class="field" style="margin-top:16px"><span>Ghi chú xét duyệt</span><textarea id="revNote" rows="3" placeholder="Bắt buộc khi yêu cầu bổ sung hoặc không đạt."><\/textarea></label>
       <div class="callout warn" style="margin-top:16px">${icon('shield', 'sm')}<div>Metadata khớp chưa đủ kết luận đạt: cần đối chiếu file và tiêu chí của đơn vị.</div></div>`;
     foot = `<button type="button" class="btn danger" data-act="rev-do" data-k="pub" data-id="${esc(p.id)}" data-d="rejected">Không đạt</button><button type="button" class="btn" data-act="rev-do" data-k="pub" data-id="${esc(p.id)}" data-d="needs_info">Yêu cầu bổ sung</button><button type="button" class="btn primary" data-act="rev-do" data-k="pub" data-id="${esc(p.id)}" data-d="verified">${icon('check')}Đạt · xác minh</button>`;
   }
@@ -3325,8 +3325,8 @@ VIEWS.admin.rules = {
           <div class="tbl-wrap"><table class="tbl edit"><thead><tr><th>Mã</th><th>Bậc đào tạo</th><th>Học vị tối thiểu</th><th class="w-xs"></th></tr></thead><tbody>${rules.map((r, i) => `<tr data-rule="${i}"><td><input name="code" value="${esc(r.code)}"></td><td><input name="label" value="${esc(r.label)}"></td><td><select name="minDegree">${degs.map(x => `<option ${x.label === r.minDegree ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></td><td><button type="button" class="iconbtn" data-act="rule-del" data-i="${i}" aria-label="Xóa">${icon('trash', 'sm')}</button></td></tr>`).join('')}</tbody></table></div>
           <div class="row between" style="margin-top:12px"><button type="button" class="btn sm" data-act="rule-add">${icon('plus', 'sm')}Thêm bậc</button><button type="button" class="btn sm primary" data-act="rule-save">Lưu quy tắc</button></div></div>
         ${rankTable('degree', degs)}${rankTable('title', titles)}
-        <div class="fgrid"><form class="card c6" data-form="cat-lines" data-type="field"><div class="h3">Lĩnh vực chuyên môn</div><p class="caption" style="margin:4px 0 8px">Mỗi dòng một mục; thứ tự là thứ tự hiển thị.</p><textarea class="input" name="lines" rows="9">${esc(lines('field'))}</textarea><div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn sm primary">Lưu</button></div></form>
-        <form class="card c6" data-form="cat-lines" data-type="projectLevel"><div class="h3">Cấp đề tài</div><p class="caption" style="margin:4px 0 8px">Dùng trong mục IV.1 của lý lịch.</p><textarea class="input" name="lines" rows="9">${esc(lines('projectLevel'))}</textarea><div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn sm primary">Lưu</button></div></form></div>
+        <div class="fgrid"><form class="card c6" data-form="cat-lines" data-type="field"><div class="h3">Lĩnh vực chuyên môn</div><p class="caption" style="margin:4px 0 8px">Mỗi dòng một mục; thứ tự là thứ tự hiển thị.</p><textarea class="input" name="lines" rows="9">${esc(lines('field'))}<\/textarea><div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn sm primary">Lưu</button></div></form>
+        <form class="card c6" data-form="cat-lines" data-type="projectLevel"><div class="h3">Cấp đề tài</div><p class="caption" style="margin:4px 0 8px">Dùng trong mục IV.1 của lý lịch.</p><textarea class="input" name="lines" rows="9">${esc(lines('projectLevel'))}<\/textarea><div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn sm primary">Lưu</button></div></form></div>
       </div>
       <form class="card" data-form="settings"><div class="h2">Cài đặt chung</div><div class="stack">
         <label class="field"><span>Tên ứng dụng</span><input name="APP_NAME" value="${esc(st.APP_NAME || '')}"></label>
@@ -3400,7 +3400,7 @@ VIEWS.admin.accounts = {
           <div><div class="label" style="margin-bottom:4px">Vai trò</div><label class="check"><input type="checkbox" name="r-expert" ${!edit || String(edit.roles).includes('expert') ? 'checked' : ''}> <span>Chuyên gia (hồ sơ cá nhân)</span></label><label class="check"><input type="checkbox" name="r-admin" ${edit && String(edit.roles).includes('admin') ? 'checked' : ''}> <span>Quản trị (xác minh, ghép nối, thống kê)</span></label></div>
           <label class="field"><span>Trạng thái</span><select name="status"><option value="active">Hoạt động</option><option value="disabled" ${edit && edit.status === 'disabled' ? 'selected' : ''}>Khoá</option></select></label>
           <div class="row">${edit ? `<button type="button" class="btn" data-act="go" data-page="accounts">Hủy</button>` : ''}<button class="btn primary" style="flex:1">${icon('check')}${edit ? 'Lưu thay đổi' : 'Cấp tài khoản'}</button></div></div></form>
-        <form class="card" data-form="users-bulk"><div class="h3">Cấp hàng loạt</div><p class="caption" style="margin:4px 0 8px">Mỗi dòng: email, Họ tên, Đơn vị, vai trò (chuyên gia/quản trị). Dán trực tiếp từ Excel cũng được.</p><textarea class="input" name="text" rows="5" placeholder="anh.tm@hcmute.edu.vn, Trần Minh Anh, Khoa Kinh tế, chuyên gia"></textarea><div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn sm primary">Cấp tài khoản</button></div></form></div></div>`;
+        <form class="card" data-form="users-bulk"><div class="h3">Cấp hàng loạt</div><p class="caption" style="margin:4px 0 8px">Mỗi dòng: email, Họ tên, Đơn vị, vai trò (chuyên gia/quản trị). Dán trực tiếp từ Excel cũng được.</p><textarea class="input" name="text" rows="5" placeholder="anh.tm@hcmute.edu.vn, Trần Minh Anh, Khoa Kinh tế, chuyên gia"><\/textarea><div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn sm primary">Cấp tài khoản</button></div></form></div></div>`;
   }
 };
 ACT['form-user'] = async f => {
