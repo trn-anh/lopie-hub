@@ -27,7 +27,7 @@
 /* =====================================================================
    0. CẤU HÌNH
    ===================================================================== */
-const APP_VERSION = '1.14';
+const APP_VERSION = '1.15';
 const TZ = 'Asia/Ho_Chi_Minh';
 const SESSION_HOURS = 12;
 const MAX_UPLOAD_MB = 20;
@@ -1948,6 +1948,22 @@ function B3_capQuyen() { ownerOnly_(); return capQuyen_(); }
 function kiemTraCauHinh() { ownerOnly_(); return kiemTraCauHinh_(); }
 /** Tùy chọn: nạp dữ liệu minh họa để trình bày. */
 function napDuLieuMau() { ownerOnly_(); return napDuLieuMau_(); }
+/** Kiểm tra khóa Gemini: gửi một câu hỏi ngắn, in kết quả trong Nhật ký thực thi. */
+function kiemTraGemini() {
+  ownerOnly_();
+  const key = prop_('GEMINI_API_KEY');
+  if (!key) { Logger.log('Chưa có GEMINI_API_KEY trong Thuộc tính tập lệnh.'); return 'Chưa có khóa'; }
+  const model = prop_('GEMINI_MODEL') || 'gemini-2.5-flash';
+  const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': key },
+    payload: JSON.stringify({ contents: [{ parts: [{ text: 'Trả về JSON {"ok":true,"chao":"Xin chào Fluxience"}' }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } })
+  });
+  const code = res.getResponseCode();
+  const out = code === 200 ? 'Gemini hoạt động (' + model + '): ' + res.getContentText().match(/"text":\s*"([^"]*)/)[1].slice(0, 200)
+    : 'Gemini lỗi HTTP ' + code + ': ' + res.getContentText().slice(0, 300) + (code === 400 || code === 403 ? '\n→ Kiểm tra lại khóa (copy đủ, không dấu cách) hoặc tạo khóa mới.' : code === 404 ? '\n→ Tên model sai: xóa GEMINI_MODEL để dùng mặc định.' : code === 429 ? '\n→ Hết hạn mức miễn phí tạm thời, thử lại sau ít phút.' : '');
+  Logger.log(out);
+  return out;
+}
 /** Khẩn cấp: đăng xuất mọi người (khi nghi lộ phiên). */
 function dangXuatTatCa() { ownerOnly_(); return dangXuatTatCa_(); }
 
