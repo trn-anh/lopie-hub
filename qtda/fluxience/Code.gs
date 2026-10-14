@@ -27,7 +27,7 @@
 /* =====================================================================
    0. CẤU HÌNH
    ===================================================================== */
-const APP_VERSION = '1.61';
+const APP_VERSION = '1.62';
 const TZ = 'Asia/Ho_Chi_Minh';
 const SESSION_HOURS = 12;
 const MAX_UPLOAD_MB = 20;
@@ -754,7 +754,7 @@ var SL = (function () {
       var major = cleanVal(str(program).replace(/^(cử nhân|kỹ sư|thạc sĩ|tiến sĩ|bachelor|master|phd|engineer)\s*(of|ngành|chuyên ngành)?\s*/i, ''));
       var done = period.to && period.to !== 'nay', y = done ? yearOf(period.to) : '';
       var ongoing = 'Đang học (' + (period.from || '?') + ' – nay): chưa có năm tốt nghiệp.';
-      if (lvl === 'ug') { setF('ugPlace', school, done ? '' : ongoing); setF('ugMajor', major, done ? '' : ongoing); if (y) setF('ugYear', y); if (/chinh quy/.test(p)) setF('ugSystem', 'Chính quy'); }
+      if (lvl === 'ug') { setF('ugPlace', school, ''); setF('ugMajor', major, ''); if (done && y) setF('ugYear', y); if (!done) setF('ugStatus', 'studying'); if (/chinh quy/.test(p)) setF('ugSystem', 'Chính quy'); }
       if (lvl === 'ms') { setF('msPlace', school); setF('msMajor', major); if (y) setF('msYear', y); }
       if (lvl === 'phd') { setF('phdPlace', school); setF('phdMajor', major); if (y) setF('phdYear', y); }
       if (major) setF('field', major, 'Suy ra từ ngành học · kiểm tra lại');
@@ -1930,6 +1930,7 @@ function aiExtractCV_(source, deadline) {
     '"projects":[{"name":"","from":"","to":"","level":"","role":""}],',
     '"pubs":[{"title":"","authors":"","year":"","venue":"","doi":"","type":"journal|conference|book|textbook|chapter"}],',
     '"awards":[{"name":"","year":"","org":""}]}',
+    'Sinh viên CHƯA tốt nghiệp đại học: ugYear để rỗng (không ghi "nay", "đang học" hay năm dự kiến vào ugYear).',
     'Ghi chú: field = lĩnh vực chuyên môn; keywords = từ khóa nghiên cứu, ngăn cách bằng dấu chấm phẩy; ugSystem = hệ đào tạo (chính quy, tại chức…).',
     '--- VĂN BẢN CV ---'
   ].join('\n');
@@ -1945,6 +1946,13 @@ function mergeAI_(draft, ai, existingPubs) {
   let added = 0;
   const f = ai.fields || {};
   if (s(f.dob)) { const d = SL.parseDate(f.dob); if (d.ok) f.dob = d.iso; }
+  // Sinh viên chưa tốt nghiệp: không đưa "Đang học / nay / dự kiến" vào ô năm tốt nghiệp, chuyển thành trạng thái đào tạo
+  const studying = (draft.fields.ugStatus && draft.fields.ugStatus.value === 'studying') || (s(f.ugYear) && !/^(19|20)\d{2}$/.test(s(f.ugYear)) && SL.ugState({ ugYear: f.ugYear }) === 'studying');
+  if (studying) {
+    if (!draft.fields.ugStatus) { draft.fields.ugStatus = { value: 'studying', flag: FLAG }; added++; }
+    const ey = SL.yearOf(f.ugYear); if (ey && !draft.fields.ugExpectedYear && /du kien|expected/.test(SL.fold(f.ugYear))) draft.fields.ugExpectedYear = { value: ey, flag: FLAG };
+    f.ugYear = ''; delete draft.fields.ugYear;
+  } else if (s(f.ugYear) && !/^(19|20)\d{2}$/.test(s(f.ugYear))) f.ugYear = SL.yearOf(f.ugYear);
   AI_FIELDS.forEach(k => { if (s(f[k]) && !(draft.fields[k] && s(draft.fields[k].value))) { draft.fields[k] = { value: s(f[k]), flag: FLAG }; added++; } });
   const pick = (list, label) => { const v = SL.fold(s(label)); let hit = ''; (list || []).forEach(x => { if (SL.fold(x.label) === v) hit = x.label; }); return hit; };
   [['degree', SL.DEGREES], ['title', SL.TITLES]].forEach(([kind, list]) => {

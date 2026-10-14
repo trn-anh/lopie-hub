@@ -703,7 +703,7 @@ var SL = (function () {
       var major = cleanVal(str(program).replace(/^(cử nhân|kỹ sư|thạc sĩ|tiến sĩ|bachelor|master|phd|engineer)\s*(of|ngành|chuyên ngành)?\s*/i, ''));
       var done = period.to && period.to !== 'nay', y = done ? yearOf(period.to) : '';
       var ongoing = 'Đang học (' + (period.from || '?') + ' – nay): chưa có năm tốt nghiệp.';
-      if (lvl === 'ug') { setF('ugPlace', school, done ? '' : ongoing); setF('ugMajor', major, done ? '' : ongoing); if (y) setF('ugYear', y); if (/chinh quy/.test(p)) setF('ugSystem', 'Chính quy'); }
+      if (lvl === 'ug') { setF('ugPlace', school, ''); setF('ugMajor', major, ''); if (done && y) setF('ugYear', y); if (!done) setF('ugStatus', 'studying'); if (/chinh quy/.test(p)) setF('ugSystem', 'Chính quy'); }
       if (lvl === 'ms') { setF('msPlace', school); setF('msMajor', major); if (y) setF('msYear', y); }
       if (lvl === 'phd') { setF('phdPlace', school); setF('phdMajor', major); if (y) setF('phdYear', y); }
       if (major) setF('field', major, 'Suy ra từ ngành học · kiểm tra lại');
@@ -1237,7 +1237,7 @@ const MockAPI = (function () {
     const brand = { APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME, CITY: st.CITY, FORM_CODE: st.FORM_CODE, PUB_CRITERIA: st.PUB_CRITERIA };
     const e = who();
     const accounts = db.Users.map(u => ({ email: u.email, name: u.name, unit: u.unit, roles: u.roles, status: u.status }));
-    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.61-demo' });
+    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.62-demo' });
     const u = db.Users.find(x => x.email === e);
     if (!u) {
       const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: 'expert' };
@@ -1248,7 +1248,7 @@ const MockAPI = (function () {
     if (u.status === 'rejected') return wait({ state: 'denied', rejected: true, note: u.reviewNote, email: e, settings: brand, accounts, contact: ADMIN });
     if (u.status !== 'active') return wait({ state: 'disabled', email: e, settings: brand, accounts, contact: ADMIN });
     const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs.indexOf('admin') >= 0 ? 'admin' : rs[0];
-    const base = { state: 'ok', demo: true, version: '1.61-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
+    const base = { state: 'ok', demo: true, version: '1.62-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
     if (w === 'admin') {
       const der = {}; db.Users.forEach(x => { der[x.email] = derived(x.email); });
       return wait(Object.assign(base, { users: db.Users, profiles: db.Profiles, derivedAll: der, credentials: db.Credentials, pubs: db.Publications, needsAll: db.Needs, work: db.Work, projects: db.Projects, awards: db.Awards, rounds: db.Rounds, matchesAll: db.Matches, files: db.Files, supportAll: db.Support }));
@@ -1545,7 +1545,7 @@ const API = IS_GAS ? ServerAPI : MockAPI;
 /* =====================================================================
    TRẠNG THÁI & ĐIỀU HƯỚNG
    ===================================================================== */
-const UI_VERSION = '1.61';
+const UI_VERSION = '1.62';
 { const bi = document.querySelector('.build-info'); if (bi) bi.textContent = 'Fluxience · v' + UI_VERSION; }
 const S = { data: null, ws: '', route: { page: '', q: {} }, busy: 0, ui: {}, drafts: {}, formDrafts: {}, structuredDirty: {} };
 let sessionRevision = 0, refreshRevision = 0;
@@ -2336,7 +2336,8 @@ const CV = {
       const w = r.w || [100];
       let used = 0;
       const spans = w.map((x, i) => { const n = i === w.length - 1 ? 20 - used : Math.max(1, Math.round(x / 5)); used += n; return n; });
-      return `<tr>${r.pairs.map((pr, i) => td(`${esc(pr[0])}: ${CV.v(pr[1], pr[2])}`, spans[i])).join('')}</tr>`;
+      if (r.note) return `<tr>${td('<i>' + esc(r.pairs[0][0]) + '</i>', 20)}</tr>`;
+      return `<tr>${r.pairs.map((pr, i) => td(r.lang && i === 0 ? (CV.blank && !/\S\.\s\S/.test(pr[0]) ? esc(pr[0]) + CV.dots(20) : esc(pr[0])) : `${esc(pr[0])}: ${CV.v(pr[1], pr[2])}`, spans[i])).join('')}</tr>`;
     }).join('') + '</table>';
   },
   line(pairs, widths) {
@@ -2404,20 +2405,21 @@ function cvSecII(m, title) {
   const ugYear = SL.ugState(p) === 'studying' ? 'Đang học' + (p.ugExpectedYear ? ' (dự kiến ' + p.ugExpectedYear + ')' : '') : p.ugYear;
   const ms = CV.blank || has('msMajor', 'msYear', 'msPlace'), phd = CV.blank || has('phdMajor', 'phdYear', 'phdPlace', 'thesis');
   const langs = m.langs.length ? m.langs : CV.blank ? [{}, {}, {}] : [];
-  let n = 1;
-  const rows = [{ head: (n++) + '. Đại học:' },
+  // Số mục giữ cố định như mẫu Bộ (1. Đại học, 2. Sau đại học, 3. Ngoại ngữ); mục chưa có dữ liệu ghi "Chưa có".
+  const none = t => ({ pairs: [[t, '', 0]], w: [100], note: true });
+  const rows = [{ head: '1. Đại học:' },
     { pairs: [['Hệ đào tạo', p.ugSystem, 30]], w: [100], opt: true }, { pairs: [['Nơi đào tạo', p.ugPlace, 50]], w: [100] }, { pairs: [['Ngành học', p.ugMajor, 40]], w: [100] },
     { pairs: [['Nước đào tạo', p.ugCountry, 22], ['Năm tốt nghiệp', ugYear, 12]], w: CV_W2 },
     { pairs: [['Bằng đại học 2', p.ug2Major, 22], ['Năm tốt nghiệp', p.ug2Year, 12]], w: CV_W2, opt: true }];
-  if (ms || phd) {
-    rows.push({ head: (n++) + '. Sau đại học:' });
+  rows.push({ head: '2. Sau đại học:' });
+  if (!ms && !phd) rows.push(none('Chưa có'));
+  else {
     if (ms) rows.push({ pairs: [['- Thạc sĩ chuyên ngành', p.msMajor, 22], ['Năm cấp bằng', p.msYear, 12]], w: CV_W2 }, { pairs: [['   Nơi đào tạo', p.msPlace, 50]], w: [100] });
     if (phd) rows.push({ pairs: [['- Tiến sĩ chuyên ngành', p.phdMajor, 22], ['Năm cấp bằng', p.phdYear, 12]], w: CV_W2 }, { pairs: [['   Nơi đào tạo', p.phdPlace, 50]], w: [100] }, { pairs: [['- Tên luận án', p.thesis, 60]], w: [100], opt: true });
   }
-  if (langs.length) {
-    rows.push({ head: (n++) + '. Ngoại ngữ:' });
-    langs.slice(0, 5).forEach((l, i) => rows.push({ pairs: [[(i + 1) + '. Ngoại ngữ', l.name, 20], ['Mức độ sử dụng', l.level, 18]], w: CV_W2 }));
-  }
+  rows.push({ head: '3. Ngoại ngữ:' });
+  if (!langs.length) rows.push(none('Chưa có'));
+  langs.slice(0, 5).forEach((l, i) => rows.push({ pairs: [[(i + 1) + '. ' + (l.name || ''), '', 0], ['Mức độ sử dụng', l.level, 18]], w: CV_W2, lang: true }));
   return CV.h(title) + CV.grid(cvRows(rows));
 }
 function cvSecIII(m, title) {
@@ -2830,6 +2832,8 @@ function impItems() {
     if (!f) return;
     const cur = E.profile()[k] || '';
     const v = dr.fields[k].value;
+    if (!SL.trim(v)) return;   // không đề xuất ô trống
+    if (k === 'ugYear' && dr.fields.ugStatus && dr.fields.ugStatus.value === 'studying') return;
     const same = SL.fold(cur) === SL.fold(v);
     if (k === 'ugStatus') { items.push({ id: 'f:' + k, group: 'Đào tạo', label: f.label, key: k, value: v === 'studying' ? 'Đang học (chưa tốt nghiệp)' : 'Đã tốt nghiệp', cur: cur ? (SL.ugState({ ugStatus: cur }) === 'studying' ? 'Đang học (chưa tốt nghiệp)' : 'Đã tốt nghiệp') : '', same: SL.ugState({ ugStatus: cur }) === v, kind: 'field', flag: dr.fields[k].flag }); return; }
     items.push({ id: 'f:' + k, group: f.sec === 'II' ? 'Đào tạo' : 'Thông tin cá nhân', label: f.label, key: k, value: f.type === 'date' ? SL.fmtDate(v) : v, cur: f.type === 'date' ? SL.fmtDate(cur) : cur, flag: dr.fields[k].flag, same, kind: 'field' });
@@ -2851,6 +2855,7 @@ VIEWS.expert.import = {
     const steps = `<div class="steps">${['1 · Tải CV', '2 · Kiểm tra thông tin', '3 · Xác nhận lưu'].map((t, i) => `<span class="${im.step === i + 1 ? 'on' : im.step > i + 1 ? 'done' : ''}">${t}</span>`).join('')}</div>`;
     if (im.step === 1) {
       return pageHead('Nhập hồ sơ từ CV', 'Tải lý lịch khoa học hiện có. Kiểm tra nội dung trước khi lưu.') + steps +
+        (im.draft ? `<div class="callout ok" style="margin-bottom:16px">${icon('check', 'sm')}<div style="flex:1"><b>Bản nháp đã đọc vẫn được giữ</b> · ${esc((im.fileRow && im.fileRow.name) || (im.file && im.file.name) || 'CV')} · ${im.draft.summary ? im.draft.summary.total + ' mục' : ''}<br><span class="caption">Quay lại kiểm tra ngay, không phải chờ AI đọc lại. Tải file khác thì bản nháp này được thay.</span></div><button type="button" class="btn primary sm" data-act="imp-resume">${icon('arrow', 'sm')}Tiếp tục kiểm tra</button></div>` : '') +
         `<div class="grid2"><div class="stack"><div class="card"><div class="h2">Bắt đầu từ file của bạn</div>
           <div class="drop" id="cvDrop" tabindex="0" role="button" aria-label="Chọn file CV">${icon('upload')}<b class="h3">Kéo thả file CV vào đây</b><span class="caption">DOC, DOCX, PDF · tối đa 20 MB</span><input type="file" hidden accept=".doc,.docx,.pdf"></div>
           <div class="row" style="margin-top:16px"><button type="button" class="btn primary" data-act="cv-pick">${icon('upload')}Chọn file từ máy</button><button type="button" class="btn" data-act="exp-blank">${icon('file')}Tải mẫu trống để điền</button></div>
@@ -2871,7 +2876,7 @@ VIEWS.expert.import = {
       const groups = [...new Set(shown.map(i => i.group))];
       const nCheck = items.filter(i => i.flag).length, nDup = items.filter(i => i.dup || i.same).length;
       return pageHead('Kiểm tra trước khi lưu hồ sơ', esc(im.file.name) + ' · Đối chiếu, chỉnh sửa rồi xác nhận nhập.',
-        `<button type="button" class="btn" data-act="imp-reset">${icon('upload')}Thay file</button><button type="button" class="btn primary" data-act="imp-next">${icon('check')}Tiếp tục</button>`) + steps +
+        `<button type="button" class="btn" data-act="imp-back1">${icon('back')}Quay lại</button><button type="button" class="btn" data-act="imp-reset">${icon('upload')}Thay file</button><button type="button" class="btn primary" data-act="imp-next">${icon('check')}Tiếp tục</button>`) + steps +
         `<div class="callout warn" style="margin-bottom:20px">${icon('shield', 'sm')}<div>Đã tách ${items.length} mục. Có ${nCheck} mục cần kiểm tra và ${dr.summary.dups} công bố trùng với hồ sơ hiện tại.${dr.notes.map(n => '<br>' + esc(n)).join('')}</div></div>
         <div class="grid2"><div class="card"><div class="h2">Đối chiếu trước khi lưu</div>
           <div class="tabs" role="tablist" style="margin-bottom:8px">${[['all', 'Tất cả (' + items.length + ')'], ['check', 'Cần kiểm tra (' + nCheck + ')'], ['dup', 'Trùng / không đổi (' + nDup + ')']].map(t => `<a role="tab" href="#/import?tab=${t[0]}" aria-selected="${tab === t[0]}">${t[1]}</a>`).join('')}</div>
@@ -2944,6 +2949,9 @@ document.addEventListener('change', e => {
 });
 ACT['cv-pick'] = () => $('#cvDrop input').click();
 ACT['imp-reset'] = () => { S.imp = { step: 1 }; go('import'); };
+/* Quay lại bước 1 nhưng GIỮ bản nháp AI đã đọc: không phải chờ AI đọc lại. */
+ACT['imp-back1'] = () => { impState().step = 1; S.ui.keepScroll = false; go('import'); };
+ACT['imp-resume'] = () => { const im = impState(); if (im.draft) { im.step = 2; go('import'); } };
 ACT['imp-toggle'] = el => { const im = impState(); im.sel[el.dataset.id] = el.checked; el.closest('.rev-item').classList.toggle('skip', !el.checked); };
 ACT['imp-src'] = el => {
   const box = $('#srcBox'); if (!box) return;
@@ -3004,8 +3012,8 @@ VIEWS.expert.pubs = {
         <label class="field c3"><span>Năm xuất bản</span><select name="y"><option value="">Tất cả</option>${years.map(y => `<option ${fy === y ? 'selected' : ''}>${y}</option>`).join('')}</select></label>
       </form>
       ${list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="w-xs">TT</th><th>Tên công bố / tác giả</th><th>${ft === 'book' ? 'Nhà xuất bản' : ft === 'conference' ? 'Hội thảo' : 'Tạp chí / nơi đăng'}</th><th>Năm</th><th>Minh chứng</th><th>Trạng thái</th></tr></thead><tbody>
-        ${list.map((p, i) => `<tr class="click" data-act="go" data-page="pub" data-q='${esc(JSON.stringify({ id: p.id }))}'><td class="num">${i + 1}</td><td>${esc(p.title)}<span class="sub">${esc(p.authors || '—')} · ${esc(pubType(p.type))}${p.source === 'cv' ? ' · nhập từ CV' : ''}</span></td><td>${esc(p.venue || '—')}${p.issn ? `<span class="sub">ISSN ${esc(p.issn)}</span>` : ''}</td><td class="num">${esc([p.month, p.year].filter(Boolean).join('/'))}</td><td>${p.fileId ? `<button type="button" class="btn sm" data-act="open-file" data-id="${esc(p.fileId)}" title="${esc(p.fileName || '')}">${icon('file', 'sm')}PDF</button>` : '<span class="muted">Chưa có file</span>'}</td><td>${pubBadge(p)}</td></tr>`).join('')}
-      </tbody></table></div><div class="row between" style="margin-top:12px"><span class="caption">${list.length} / ${all.length} công bố</span>${needFile.length ? `<button type="button" class="btn" data-act="go" data-page="pubs" data-q='{"s":"needs_file"}'>${icon('upload')}Bổ sung minh chứng</button>` : ''}</div>`
+        ${list.map((p, i) => `<tr class="click" data-act="go" data-page="pub" data-q='${esc(JSON.stringify({ id: p.id }))}'><td class="num">${i + 1}</td><td>${esc(p.title)}<span class="sub">${esc(p.authors || '—')} · ${esc(pubType(p.type))}${p.source === 'cv' ? ' · nhập từ CV' : ''}</span></td><td>${esc(p.venue || '—')}${p.issn ? `<span class="sub">ISSN ${esc(p.issn)}</span>` : ''}</td><td class="num">${esc([p.month, p.year].filter(Boolean).join('/'))}</td><td>${p.fileId ? `<button type="button" class="btn sm" data-act="open-file" data-id="${esc(p.fileId)}" title="${esc(p.fileName || '')}">${icon('file', 'sm')}PDF</button>` : p.status === 'verified' ? '<span class="muted">—</span>' : `<button type="button" class="btn sm primary" data-act="pub-quick-upload" data-id="${esc(p.id)}" data-title="${esc(p.title)}">${icon('upload', 'sm')}Tải file</button>`}</td><td>${pubBadge(p)}</td></tr>`).join('')}
+      </tbody></table></div><div class="row between" style="margin-top:12px"><span class="caption">${list.length} / ${all.length} công bố</span>${needFile.length ? `<button type="button" class="btn primary" data-act="pub-quick-upload" data-id="${esc(needFile[0].id)}" data-title="${esc(needFile[0].title)}">${icon('upload')}Bổ sung minh chứng${needFile.length > 1 ? ' (' + needFile.length + ' bài)' : ''}</button>` : ''}</div>`
         : emptyState('file', all.length ? 'Không có công bố khớp bộ lọc.' : 'Chưa có công bố. Thêm thủ công, nhập từ CV hoặc dán danh sách trích dẫn.')}
       </div>${cvWait ? `<div class="callout" style="margin-top:20px">${icon('shield', 'sm')}<div>${cvWait} công bố nhập từ CV đang chờ file. Thêm file để hoàn thiện kho hồ sơ và gửi xác minh.</div></div>` : ''}`;
   },
@@ -3019,6 +3027,25 @@ VIEWS.expert.pubs = {
   }
 };
 ACT['form-pub-filter'] = f => go('pubs', formData(f));
+/* Tải minh chứng ngay từ danh sách: chọn file → xác nhận quyền lưu → tải lên. Xong bài này thì gợi ý bài tiếp theo còn thiếu file. */
+ACT['pub-quick-upload'] = el => {
+  if (S.busy > 0) { toast('Đang có tác vụ chạy. Chờ xong rồi tải file tiếp.', 'error'); return; }
+  const id = el.dataset.id, title = el.dataset.title || 'công bố';
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.pdf,.doc,.docx'; inp.style.display = 'none';
+  document.body.appendChild(inp);
+  inp.addEventListener('change', async () => {
+    const file = inp.files[0]; inp.remove(); if (!file) return;
+    const ok = await confirmBox('Tải minh chứng', `Tải <b>${esc(file.name)}</b> làm minh chứng cho bài <b>${esc(title)}</b>?<p class="caption" style="margin:8px 0 0">Bạn xác nhận có quyền lưu bản tài liệu này trong hồ sơ. PDF, DOC, DOCX · tối đa 20 MB.</p>`, 'Tải lên');
+    if (!ok) return;
+    const fd = await readFile(file, ['pdf', 'doc', 'docx']).catch(e => { toast(e.message, 'error'); });
+    if (!fd) return;
+    LOCK_MSG = 'Đang tải ' + file.name + '…';
+    try { await call(API.uploadFile(fd, 'pub:' + id)); } catch (e) { return; }
+    toast('Đã tải minh chứng cho "' + title + '".', 'ok');
+    await refresh();
+  }, { once: true });
+  inp.click();
+};
 
 /* ---------- Thêm / sửa công bố ---------- */
 VIEWS.expert.pub = {
