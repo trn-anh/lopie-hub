@@ -656,6 +656,8 @@ var SL = (function () {
       var em = text.match(/[\w.+-]+@[\w-]+\.[\w.]+/);
       if (em && !out.fields.contactEmail) set('contactEmail', em[0]);
     }
+    // Đã có năm tốt nghiệp thật → không phải sinh viên đang học
+    if (out.fields.ugYear && /^(19|20)\d{2}$/.test(out.fields.ugYear.value) && out.fields.ugStatus && out.fields.ugStatus.value === 'studying') delete out.fields.ugStatus;
     // Trùng với hồ sơ hiện tại
     out.pubs.concat(out.books).forEach(function (p) {
       var dup = findDup(p, ctx.existingPubs || []);
@@ -754,7 +756,7 @@ var SL = (function () {
       var major = cleanVal(str(program).replace(/^(cử nhân|kỹ sư|thạc sĩ|tiến sĩ|bachelor|master|phd|engineer)\s*(of|ngành|chuyên ngành)?\s*/i, ''));
       var done = period.to && period.to !== 'nay', y = done ? yearOf(period.to) : '';
       var ongoing = 'Đang học (' + (period.from || '?') + ' – nay): chưa có năm tốt nghiệp.';
-      if (lvl === 'ug') { setF('ugPlace', school, ''); setF('ugMajor', major, ''); if (done && y) setF('ugYear', y); if (!done) setF('ugStatus', 'studying'); if (/chinh quy/.test(p)) setF('ugSystem', 'Chính quy'); }
+      if (lvl === 'ug') { setF('ugPlace', school, ''); setF('ugMajor', major, ''); if (done && y) setF('ugYear', y); if (period.to === 'nay') setF('ugStatus', 'studying'); if (/chinh quy/.test(p)) setF('ugSystem', 'Chính quy'); }
       if (lvl === 'ms') { setF('msPlace', school); setF('msMajor', major); if (y) setF('msYear', y); }
       if (lvl === 'phd') { setF('phdPlace', school); setF('phdMajor', major); if (y) setF('phdYear', y); }
       if (major) setF('field', major, 'Suy ra từ ngành học · kiểm tra lại');
