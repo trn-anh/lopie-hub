@@ -1237,7 +1237,7 @@ const MockAPI = (function () {
     const brand = { APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME, CITY: st.CITY, FORM_CODE: st.FORM_CODE, PUB_CRITERIA: st.PUB_CRITERIA };
     const e = who();
     const accounts = db.Users.map(u => ({ email: u.email, name: u.name, unit: u.unit, roles: u.roles, status: u.status }));
-    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.60-demo' });
+    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.61-demo' });
     const u = db.Users.find(x => x.email === e);
     if (!u) {
       const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: 'expert' };
@@ -1248,7 +1248,7 @@ const MockAPI = (function () {
     if (u.status === 'rejected') return wait({ state: 'denied', rejected: true, note: u.reviewNote, email: e, settings: brand, accounts, contact: ADMIN });
     if (u.status !== 'active') return wait({ state: 'disabled', email: e, settings: brand, accounts, contact: ADMIN });
     const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs.indexOf('admin') >= 0 ? 'admin' : rs[0];
-    const base = { state: 'ok', demo: true, version: '1.60-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
+    const base = { state: 'ok', demo: true, version: '1.61-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
     if (w === 'admin') {
       const der = {}; db.Users.forEach(x => { der[x.email] = derived(x.email); });
       return wait(Object.assign(base, { users: db.Users, profiles: db.Profiles, derivedAll: der, credentials: db.Credentials, pubs: db.Publications, needsAll: db.Needs, work: db.Work, projects: db.Projects, awards: db.Awards, rounds: db.Rounds, matchesAll: db.Matches, files: db.Files, supportAll: db.Support }));
@@ -1545,7 +1545,7 @@ const API = IS_GAS ? ServerAPI : MockAPI;
 /* =====================================================================
    TRẠNG THÁI & ĐIỀU HƯỚNG
    ===================================================================== */
-const UI_VERSION = '1.60';
+const UI_VERSION = '1.61';
 { const bi = document.querySelector('.build-info'); if (bi) bi.textContent = 'Fluxience · v' + UI_VERSION; }
 const S = { data: null, ws: '', route: { page: '', q: {} }, busy: 0, ui: {}, drafts: {}, formDrafts: {}, structuredDirty: {} };
 let sessionRevision = 0, refreshRevision = 0;
@@ -1965,8 +1965,12 @@ function renderShell() {
   const cur = WS.active || wsRoot(S.route.page);
   const navHTML = NAV[S.ws].map(([id, ic, label]) => `<a href="#/${id}" ${cur === id ? 'aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${c[id] ? `<span class="count">${c[id]}</span>` : ''}</a>`).join('');
   if (S.navHTML !== navHTML) { $('#nav').innerHTML = navHTML; S.navHTML = navHTML; }
-  $('#meName').textContent = S.ws === 'admin' ? (d.me.unit || 'Ban quản trị') : (d.profile && d.profile.fullName ? [d.derived.degree === 'Tiến sĩ' ? 'TS.' : d.derived.degree === 'Thạc sĩ' ? 'ThS.' : '', d.profile.fullName].filter(Boolean).join(' ') : d.me.name);
-  $('#meUnit').textContent = S.ws === 'admin' ? (d.me.name + ' · ' + d.me.email) : (d.profile && d.profile.field) || d.me.unit || d.me.email;
+  // Thẻ tài khoản: tên lấy từ hồ sơ đã điền hoặc nhập từ CV (không dùng tên Google), kèm email và vai trò
+  const ownProfile = S.ws === 'admin' ? ((d.profiles || []).find(x => x.email === d.me.email) || {}) : (d.profile || {});
+  const ownName = SL.trim(ownProfile.fullName), roleLabel = S.ws === 'admin' ? 'Quản trị viên' : 'Chuyên gia';
+  $('#meName').textContent = ownName ? [S.ws === 'expert' ? honor(d.derived || {}) : '', ownName].filter(Boolean).join(' ') : d.me.email;
+  $('#meUnit').textContent = ownName ? d.me.email + ' · ' + roleLabel : roleLabel;
+  $('#meName').title = $('#meName').textContent; $('#meUnit').title = $('#meUnit').textContent;
   const wb = $('#wsBadge'), label = S.ws === 'admin' ? 'Quản trị viên' : 'Chuyên gia', other = S.ws === 'admin' ? 'chuyên gia' : 'quản trị';
   const multi = (d.roles || []).filter(r => r === 'admin' || r === 'expert').length > 1;
   // Chỉ là nút bấm khi tài khoản có cả hai vai trò; nếu không, hiển thị như nhãn vai trò.
@@ -2316,7 +2320,9 @@ function honor(d) { return [d.title === 'Giáo sư' ? 'GS.' : d.title === 'Phó 
 const CV = {
   F: "font-family:'Times New Roman',Times,serif;font-size:13pt;line-height:1.4;color:#000",
   dots: n => '.'.repeat(n || 40),
-  v(val, n) { return val ? `<b style="font-weight:normal">${esc(val)}</b>` : `<span style="color:#000">${CV.dots(n)}</span>`; },
+  /** Ô trống: chỉ mẫu trống (để điền tay) mới in dòng chấm; bản xuất thật để trống cho gọn. */
+  blank: false,
+  v(val, n) { return val ? `<b style="font-weight:normal">${esc(val)}</b>` : CV.blank ? `<span style="color:#000">${CV.dots(n)}</span>` : ''; },
   /**
    * Nhiều dòng "Nhãn: giá trị" trong MỘT bảng không viền, lưới 20 cột (mỗi cột 5%).
    * Word và Google Docs giữ đúng bố cục nhờ thuộc tính width/colspan (không dựa vào CSS).
@@ -2343,7 +2349,8 @@ const CV = {
   table(head, rows, widths, minRows) {
     const td = (c, i, th) => `<td valign="top" ${widths && widths[i] ? 'width="' + widths[i] + '"' : ''} style="${CV.F};font-size:12pt;border:1px solid #000;padding:3pt 5pt;vertical-align:top;${th ? 'font-weight:bold;text-align:center;' : ''}${widths && widths[i] ? 'width:' + widths[i] + ';' : ''}${c === 'TT' || /^\d+$/.test(c) ? 'white-space:nowrap;text-align:center;' : ''}">${c}</td>`;
     const body = rows.slice();
-    while (body.length < (minRows || 0)) body.push(head.map(() => '&nbsp;'));
+    const min = CV.blank ? (minRows || 0) : (rows.length ? 0 : 1);
+    while (body.length < min) body.push(head.map(() => '&nbsp;'));
     return `<table width="100%" border="1" style="width:100%;border-collapse:collapse;margin:4pt 0 8pt" cellpadding="0" cellspacing="0"><tr>${head.map((h, i) => td(esc(h), i, true)).join('')}</tr>${body.map(r => `<tr>${r.map((c, i) => td(c, i)).join('')}</tr>`).join('')}</table>`;
   },
   center(t, st) { return `<p style="${CV.F};text-align:center;margin:0;${st || ''}">${t}</p>`; },
@@ -2359,49 +2366,59 @@ function cvHeader(m, opts, st) {
     CV.center('CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', 'font-weight:bold') +
     CV.center('Độc lập – Tự do – Hạnh phúc', 'font-weight:bold;text-decoration:underline') +
     CV.center('LÝ LỊCH KHOA HỌC', 'font-weight:bold;font-size:15pt;margin-top:16pt') +
-    CV.center(opts.tpl === 'bgd' ? '(Theo mẫu tại Thông tư số 08/2011/TT-BGDĐT ngày 17/02/2011 của Bộ trưởng Bộ GDĐT – Phụ lục V)' : '(Mẫu đơn vị · bản minh họa v2 — thay bằng biểu mẫu chính thức của đơn vị khi áp dụng)', 'font-style:italic;font-size:11pt;margin:2pt 0 12pt');
+    CV.center(opts.tpl === 'bgd' ? '(Mẫu Phụ lục V, Thông tư số 08/2011/TT-BGDĐT ngày 17/02/2011 của Bộ trưởng Bộ GDĐT)' : '(Mẫu đơn vị · bản minh họa v2 — thay bằng biểu mẫu chính thức của đơn vị khi áp dụng)', 'font-style:italic;font-size:11pt;margin:2pt 0 12pt');
 }
 function cvSign(m, st) {
   const d = new Date();
-  return `<p style="${CV.F};text-align:right;font-style:italic;margin:18pt 0 6pt">${esc(st.CITY || '……………')}, ${st.BLANK ? 'ngày …… tháng …… năm ………' : `ngày ${SL.pad(d.getDate())} tháng ${SL.pad(d.getMonth() + 1)} năm ${d.getFullYear()}`}</p>
+  return `<p style="${CV.F};text-align:right;font-style:italic;margin:18pt 0 6pt">${esc(st.CITY || (st.BLANK ? '……………' : 'TP. Hồ Chí Minh'))}, ${st.BLANK ? 'ngày …… tháng …… năm ………' : `ngày ${SL.pad(d.getDate())} tháng ${SL.pad(d.getMonth() + 1)} năm ${d.getFullYear()}`}</p>
   <table width="100%" border="0" style="width:100%;border-collapse:collapse" cellpadding="0" cellspacing="0"><tr>
   <td width="50%" valign="top" align="center" style="${CV.F};width:50%;text-align:center;vertical-align:top;font-weight:bold">Xác nhận của cơ quan</td>
   <td width="50%" valign="top" align="center" style="${CV.F};width:50%;text-align:center;vertical-align:top"><b>Người khai ký tên</b><br><i>(Ghi rõ chức danh, học vị)</i><br><br><br><br><b>${esc([honor(m.d), m.p.fullName].filter(Boolean).join(' '))}</b></td></tr></table>`;
 }
-/** Mục I theo mẫu Bộ. Liên hệ chỉ hiện khi người dùng chọn "Kèm thông tin liên hệ". */
+/** Mục I theo mẫu Bộ. Bố cục cột cố định (2 cột 60/40, 3 cột 40/30/30) để chữ thẳng hàng.
+    Bản xuất thật: dòng không có dữ liệu được ẩn; liên hệ chỉ in khi chọn "Kèm thông tin liên hệ". Mẫu trống: in đủ mọi dòng. */
+const CV_W2 = [60, 40], CV_W3 = [40, 30, 30];
+function cvRows(rows) { return rows.filter(r => r.head || CV.blank || !r.opt || r.pairs.some(pr => SL.trim(pr[1]))); }
 function cvSecI(m, opts, title) {
-  const p = m.p, d = m.d, c = opts.contact;
-  const hid = v => c ? v : '';
+  const p = m.p, d = m.d, c = opts.contact || CV.blank;
   const year = s => SL.yearOf(s);
-  return CV.h(title) + CV.grid([
-    { pairs: [['Họ và tên', p.fullName, 50], ['Giới tính', p.gender, 12]], w: [68, 32] },
-    { pairs: [['Ngày, tháng, năm sinh', SL.fmtDate(p.dob), 22], ['Nơi sinh', p.birthPlace, 22]], w: [50, 50] },
-    { pairs: [['Quê quán', p.hometown, 40], ['Dân tộc', p.ethnicity, 14]], w: [68, 32] },
-    { pairs: [['Học vị cao nhất', d.degree, 24], ['Năm, nước nhận học vị', [year(d.degreeDate), m.degCountry].filter(Boolean).join(', '), 18]], w: [50, 50] },
-    { pairs: [['Chức danh khoa học cao nhất', d.title, 22], ['Năm bổ nhiệm', year(d.titleDate), 12]], w: [65, 35] },
-    { pairs: [['Chức vụ (hiện tại hoặc trước khi nghỉ hưu)', p.position || d.position, 40]], w: [100] },
-    { pairs: [['Đơn vị công tác (hiện tại hoặc trước khi nghỉ hưu)', p.unit, 30]], w: [100] },
-    { pairs: [['Chỗ ở riêng hoặc địa chỉ liên lạc', hid(contactAddress(p)), 50]], w: [100] },
-    { pairs: [['Điện thoại liên hệ: CQ', hid(p.phoneOffice), 10], ['NR', hid(p.phoneHome), 10], ['DĐ', hid(p.mobile), 12]], w: [46, 24, 30] },
-    { pairs: [['Fax', hid(p.fax), 18], ['E-mail', hid(p.contactEmail), 34]], w: [36, 64] },
-    { pairs: [['Số CMND/CCCD', hid(p.idNumber), 12], ['Ngày cấp', hid(SL.fmtDate(p.idDate)), 10], ['Nơi cấp', hid(p.idPlace), 12]], w: [38, 30, 32] },
-  ].concat(opts.tpl === 'v2' ? [{ pairs: [['Lĩnh vực chuyên môn', [p.field, p.keywords].filter(Boolean).join(' · '), 50]] }].concat(p.orcid ? [{ pairs: [['ORCID', p.orcid, 20]] }] : []) : []));
+  const rows = [
+    { pairs: [['Họ và tên', p.fullName, 40], ['Giới tính', p.gender, 12]], w: CV_W2 },
+    { pairs: [['Ngày, tháng, năm sinh', SL.fmtDate(p.dob), 18], ['Nơi sinh', p.birthPlace, 22]], w: CV_W2 },
+    { pairs: [['Quê quán', p.hometown, 36], ['Dân tộc', p.ethnicity, 14]], w: CV_W2 },
+    { pairs: [['Học vị cao nhất', d.degree, 24], ['Năm, nước nhận học vị', [year(d.degreeDate), m.degCountry].filter(Boolean).join(', '), 16]], w: CV_W2, opt: true },
+    { pairs: [['Chức danh khoa học cao nhất', d.title, 16], ['Năm bổ nhiệm', year(d.titleDate), 12]], w: CV_W2, opt: true },
+    { pairs: [['Chức vụ (hiện tại hoặc trước khi nghỉ hưu)', p.position || d.position, 40]], w: [100], opt: true },
+    { pairs: [['Đơn vị công tác (hiện tại hoặc trước khi nghỉ hưu)', p.unit, 30]], w: [100] }
+  ];
+  if (c) rows.push(
+    { pairs: [['Chỗ ở riêng hoặc địa chỉ liên lạc', contactAddress(p), 50]], w: [100], opt: true },
+    { pairs: [['Điện thoại liên hệ: CQ', p.phoneOffice, 10], ['NR', p.phoneHome, 12], ['DĐ', p.mobile, 14]], w: CV_W3, opt: true },
+    { pairs: [['Fax', p.fax, 18], ['E-mail', p.contactEmail, 26]], w: CV_W2, opt: true },
+    { pairs: [['Số CMND/CCCD', p.idNumber, 14], ['Ngày cấp', SL.fmtDate(p.idDate), 12], ['Nơi cấp', p.idPlace, 14]], w: CV_W3, opt: true });
+  if (opts.tpl === 'v2') rows.push({ pairs: [['Lĩnh vực chuyên môn', [p.field, p.keywords].filter(Boolean).join(' · '), 50]], w: [100], opt: true }, { pairs: [['ORCID', p.orcid, 20]], w: [100], opt: true });
+  return CV.h(title) + CV.grid(cvRows(rows));
 }
 function cvSecII(m, title) {
-  const p = m.p;
-  const langs = m.langs.length ? m.langs : [{}, {}, {}];
-  return CV.h(title) + CV.grid([{ head: '1. Đại học:' },
-    { pairs: [['Hệ đào tạo', p.ugSystem, 50]] }, { pairs: [['Nơi đào tạo', p.ugPlace, 50]] }, { pairs: [['Ngành học', p.ugMajor, 50]] },
-    { pairs: [['Nước đào tạo', p.ugCountry, 26], ['Năm tốt nghiệp', SL.ugState(p) === 'studying' ? 'Đang học' + (p.ugExpectedYear ? ' (dự kiến ' + p.ugExpectedYear + ')' : '') : p.ugYear, 12]], w: [62, 38] },
-    { pairs: [['Bằng đại học 2', p.ug2Major, 26], ['Năm tốt nghiệp', p.ug2Year, 12]], w: [62, 38] },
-    { head: '2. Sau đại học' },
-    { pairs: [['- Thạc sĩ chuyên ngành', p.msMajor, 26], ['Năm cấp bằng', p.msYear, 12]], w: [62, 38] },
-    { pairs: [['  Nơi đào tạo', p.msPlace, 50]], w: [100] },
-    { pairs: [['- Tiến sĩ chuyên ngành', p.phdMajor, 26], ['Năm cấp bằng', p.phdYear, 12]], w: [62, 38] },
-    { pairs: [['  Nơi đào tạo', p.phdPlace, 50]], w: [100] },
-    { pairs: [['- Tên luận án', p.thesis, 60]], w: [100] },
-    { head: '3. Ngoại ngữ:' }
-  ].concat(langs.slice(0, 5).map((l, i) => ({ pairs: [[(i + 1) + '. Ngoại ngữ', l.name, 22], ['Mức độ sử dụng', l.level, 20]], w: [55, 45] }))));
+  const p = m.p, has = (...k) => k.some(x => SL.trim(p[x]));
+  const ugYear = SL.ugState(p) === 'studying' ? 'Đang học' + (p.ugExpectedYear ? ' (dự kiến ' + p.ugExpectedYear + ')' : '') : p.ugYear;
+  const ms = CV.blank || has('msMajor', 'msYear', 'msPlace'), phd = CV.blank || has('phdMajor', 'phdYear', 'phdPlace', 'thesis');
+  const langs = m.langs.length ? m.langs : CV.blank ? [{}, {}, {}] : [];
+  let n = 1;
+  const rows = [{ head: (n++) + '. Đại học:' },
+    { pairs: [['Hệ đào tạo', p.ugSystem, 30]], w: [100], opt: true }, { pairs: [['Nơi đào tạo', p.ugPlace, 50]], w: [100] }, { pairs: [['Ngành học', p.ugMajor, 40]], w: [100] },
+    { pairs: [['Nước đào tạo', p.ugCountry, 22], ['Năm tốt nghiệp', ugYear, 12]], w: CV_W2 },
+    { pairs: [['Bằng đại học 2', p.ug2Major, 22], ['Năm tốt nghiệp', p.ug2Year, 12]], w: CV_W2, opt: true }];
+  if (ms || phd) {
+    rows.push({ head: (n++) + '. Sau đại học:' });
+    if (ms) rows.push({ pairs: [['- Thạc sĩ chuyên ngành', p.msMajor, 22], ['Năm cấp bằng', p.msYear, 12]], w: CV_W2 }, { pairs: [['   Nơi đào tạo', p.msPlace, 50]], w: [100] });
+    if (phd) rows.push({ pairs: [['- Tiến sĩ chuyên ngành', p.phdMajor, 22], ['Năm cấp bằng', p.phdYear, 12]], w: CV_W2 }, { pairs: [['   Nơi đào tạo', p.phdPlace, 50]], w: [100] }, { pairs: [['- Tên luận án', p.thesis, 60]], w: [100], opt: true });
+  }
+  if (langs.length) {
+    rows.push({ head: (n++) + '. Ngoại ngữ:' });
+    langs.slice(0, 5).forEach((l, i) => rows.push({ pairs: [[(i + 1) + '. Ngoại ngữ', l.name, 20], ['Mức độ sử dụng', l.level, 18]], w: CV_W2 }));
+  }
+  return CV.h(title) + CV.grid(cvRows(rows));
 }
 function cvSecIII(m, title) {
   return CV.h(title) + CV.table(['Thời gian', 'Nơi công tác', 'Công việc đảm nhiệm'],
@@ -2425,6 +2442,7 @@ function cvPubTable(list, label) {
 
 /** HTML phần thân của văn bản. */
 function cvBody(src, opts, st) {
+  CV.blank = !!(st && st.BLANK);
   const m = cvModel(src, opts), on = k => opts.sections[k] !== false, L = SECTION_LABELS[opts.tpl];
   if (opts.tpl === 'bgd' || opts.tpl === 'v2') {
     let h = cvHeader(m, opts, st);
