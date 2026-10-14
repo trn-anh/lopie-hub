@@ -463,6 +463,9 @@ var SL = (function () {
       var f = found[i], next = found[i + 1];
       var raw = text.slice(f.end, next ? next.start : Math.min(text.length, f.end + 300));
       if (!next) raw = raw.split('\n')[0];
+      // Giá trị đã có ngay trên dòng nhãn → chỉ lấy dòng đó (tránh nuốt các dòng "Nhãn lạ: …" phía sau)
+      var firstLine = raw.split('\n')[0];
+      if (cleanVal(firstLine) && /\n\s*[^\n:]{2,60}:/.test(raw)) raw = firstLine;
       raw = raw.replace(/\n[\s\S]*$/, function (rest) { return /^\n\s*[-–•]?\s*$/.test(rest) ? '' : rest; });
       var v = cleanVal(raw.replace(/\n+/g, ' '));
       if (f.key.charAt(0) !== '_' && v) set(f.key, v);
@@ -540,10 +543,16 @@ var SL = (function () {
           if (!cleanVal(c[1]) && !cleanVal(c[2])) return;
           out.work.push({ from: per.from, to: per.to, place: cleanVal(c[1]), role: cleanVal(c[2]), flag: per.from ? '' : 'Thiếu mốc thời gian.' });
         } else if (kind === 'projects') {
+          // Ưu tiên đọc cột theo tiêu đề (mẫu khác nhau xếp cột khác nhau); không nhận ra thì theo thứ tự mẫu Bộ
+          var H = (t[hi] || []).map(function (x) { return fold(x); });
+          var col = function (re) { for (var q = 0; q < H.length; q++) if (re.test(H[q])) return q; return -1; };
+          var pc = { name: col(/ten de tai|ten du an/), per: col(/thoi gian|nam bat dau/), lvl: col(/^cap|de tai cap|cap quan ly|\bcap\b/), role: col(/trach nhiem|vai tro/) };
+          var byHead = pc.name >= 0 && pc.per >= 0 && pc.lvl >= 0 && pc.role >= 0 && pc.lvl !== pc.name;
           var off = /^\d+\.?$/.test(c[0]) || !c[0] ? 1 : 0;
-          var yrs = splitPeriod(c[off + 1]);
-          if (!cleanVal(c[off])) return;
-          out.projects.push({ name: cleanVal(c[off]), from: yrs.from, to: yrs.to, level: cleanVal(c[off + 2]), role: cleanVal(c[off + 3]), flag: yrs.from ? '' : 'Thiếu năm bắt đầu/hoàn thành.' });
+          if (!byHead) pc = { name: off, per: off + 1, lvl: off + 2, role: off + 3 };
+          var yrs = splitPeriod(c[pc.per]);
+          if (!cleanVal(c[pc.name])) return;
+          out.projects.push({ name: cleanVal(c[pc.name]), from: yrs.from, to: yrs.to, level: cleanVal(c[pc.lvl]), role: cleanVal(c[pc.role]), flag: yrs.from ? '' : 'Thiếu năm bắt đầu/hoàn thành.' });
         } else if (kind === 'pubs' || kind === 'books') {
           var o2 = /^\d+\.?$/.test(c[0]) || !c[0] ? 1 : 0;
           var title = cleanVal(c[o2]);
@@ -578,6 +587,17 @@ var SL = (function () {
           if (r2.title) out.pubs.push({ title: r2.title, authors: r2.authors, year: r2.year, venue: r2.venue, doi: r2.doi, type: 'journal', flag: 'Tách từ đoạn văn, cần kiểm tra.' });
         }
       });
+    }
+    if (out.template) {
+      // Mẫu Bộ biến thể (nhãn khác như "Điện thoại", "Email", "Đơn vị công tác"): bộ tách tự do chỉ BỔ SUNG ô thông tin còn trống
+      var extra = { fields: {}, languages: [], work: [], projects: [], pubs: [], books: [], awards: [], credentials: [], notes: [] };
+      parseFreeCV(doc, extra, ctx);
+      Object.keys(extra.fields).forEach(function (k) {
+        var v = extra.fields[k] && extra.fields[k].value;
+        if (v && !out.fields[k] && !/[^:\n]{2,40}:/.test(v)) out.fields[k] = extra.fields[k];
+      });
+      var em0 = text.match(/[\w.+-]+@[\w-]+\.[\w.]+/);
+      if (em0 && !out.fields.contactEmail) set('contactEmail', em0[0]);
     }
     if (!out.template) {
       var nFree = parseFreeCV(doc, out, ctx);
@@ -1065,10 +1085,12 @@ function saveToken(t) { TOKEN = t || ''; try { t ? localStorage.setItem(TOKEN_KE
   if (boot) { saveToken(boot); try { localStorage.removeItem('sl-ws'); } catch (e) {} return; }
   try { TOKEN = localStorage.getItem(TOKEN_KEY) || ''; } catch (e) {}
 })();
+/* Thời gian chờ tối đa theo loại việc: đọc CV (kèm AI), dựng .docx/.pdf, kiểm tra minh chứng cần lâu hơn thao tác thường. */
+const GAS_WAIT = { api_parseCV: 330000, api_importCV: 180000, api_renderDoc: 180000, api_verifyEvidence: 300000 };
 function gas(fn, ...args) {
   return new Promise((res, rej) => {
     let done = false;
-    const timer = setTimeout(() => { if (!done) { done = true; rej(new Error('Máy chủ phản hồi quá lâu. Thử lại.')); } }, 90000);
+    const timer = setTimeout(() => { if (!done) { done = true; rej(new Error('Máy chủ phản hồi quá lâu. Thử lại.')); } }, GAS_WAIT[fn] || 90000);
     try {
       google.script.run
         .withSuccessHandler(d => { if (!done) { done = true; clearTimeout(timer); res(d); } })
@@ -1213,7 +1235,7 @@ const MockAPI = (function () {
     const brand = { APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME, CITY: st.CITY, FORM_CODE: st.FORM_CODE, PUB_CRITERIA: st.PUB_CRITERIA };
     const e = who();
     const accounts = db.Users.map(u => ({ email: u.email, name: u.name, unit: u.unit, roles: u.roles, status: u.status }));
-    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.53-demo' });
+    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.56-demo' });
     const u = db.Users.find(x => x.email === e);
     if (!u) {
       const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: 'expert' };
@@ -1224,7 +1246,7 @@ const MockAPI = (function () {
     if (u.status === 'rejected') return wait({ state: 'denied', rejected: true, note: u.reviewNote, email: e, settings: brand, accounts, contact: ADMIN });
     if (u.status !== 'active') return wait({ state: 'disabled', email: e, settings: brand, accounts, contact: ADMIN });
     const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs.indexOf('admin') >= 0 ? 'admin' : rs[0];
-    const base = { state: 'ok', demo: true, version: '1.53-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
+    const base = { state: 'ok', demo: true, version: '1.56-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
     if (w === 'admin') {
       const der = {}; db.Users.forEach(x => { der[x.email] = derived(x.email); });
       return wait(Object.assign(base, { users: db.Users, profiles: db.Profiles, derivedAll: der, credentials: db.Credentials, pubs: db.Publications, needsAll: db.Needs, work: db.Work, projects: db.Projects, awards: db.Awards, rounds: db.Rounds, matchesAll: db.Matches, files: db.Files, supportAll: db.Support }));
@@ -1520,7 +1542,7 @@ const API = IS_GAS ? ServerAPI : MockAPI;
 /* =====================================================================
    TRẠNG THÁI & ĐIỀU HƯỚNG
    ===================================================================== */
-const UI_VERSION = '1.53';
+const UI_VERSION = '1.56';
 { const bi = document.querySelector('.build-info'); if (bi) bi.textContent = 'Fluxience · v' + UI_VERSION; }
 const S = { data: null, ws: '', route: { page: '', q: {} }, busy: 0, ui: {}, drafts: {}, formDrafts: {}, structuredDirty: {} };
 let sessionRevision = 0, refreshRevision = 0;
@@ -2602,17 +2624,35 @@ function listEditor(kind) {
   if(kind==='projects') return projectEditor();
   const defs=kind==='work'?{title:'Quá trình công tác chuyên môn',cols:[['from','Từ năm'],['to','Đến năm / nay'],['place','Nơi công tác'],['role','Công việc đảm nhiệm']]}:{title:'Giải thưởng, khen thưởng',cols:[['name','Tên giải thưởng'],['year','Năm'],['org','Cơ quan trao tặng']]};
   const rows=S.drafts[kind] || S.data[kind].slice().sort((a,b)=>+a.order-+b.order);S.drafts[kind]=rows;
-  return `<div class="card"><div class="row between"><h3 class="h2">${defs.title}</h3><button type="button" class="btn sm" data-act="list-add" data-kind="${kind}">${icon('plus','sm')}Thêm dòng</button></div><form data-form="list" data-kind="${kind}">${listSortControl(kind)}<div class="tbl-wrap"><table class="tbl edit"><thead><tr><th>TT</th>${defs.cols.map(c=>`<th>${c[1]}</th>`).join('')}<th>Thứ tự</th></tr></thead><tbody>${rows.map((r,i)=>`<tr data-id="${esc(r.id || '')}"><td>${i+1}</td>${defs.cols.map(c=>`<td><input name="${c[0]}" value="${esc(r[c[0]] || '')}" aria-label="${c[1]}" ${c[0]===('work'===kind?'place':'name')?'required':''}></td>`).join('')}<td>${moveButtons(kind,i)}</td></tr>`).join('')}</tbody></table></div><div class="row between" style="margin-top:16px"><span class="caption">Có thể sắp xếp theo năm hoặc chỉnh thứ tự dòng.</span><button class="btn primary">Lưu danh sách</button></div></form></div>`;
+  return `<div class="collection-editor"><div class="collection-heading"><h3 class="h2">${defs.title} <span class="collection-count">${rows.length}</span></h3><button type="button" class="btn sm" data-act="list-add" data-kind="${kind}">${icon('plus','sm')}Thêm ${kind==='work'?'công tác':'giải thưởng'}</button></div><form data-form="list" data-kind="${kind}">${rows.length?listSortControl(kind):''}<div class="record-list ${kind}-records">${rows.map((r,i)=>`<article class="record-row" data-list-row data-row-index="${i}" data-id="${esc(r.id || '')}"><div class="record-order"><span class="record-number">${String(i+1).padStart(2,'0')}</span>${moveButtons(kind,i,rows.length)}</div><div class="record-fields ${kind}-fields">${defs.cols.map(([key,label])=>`<label class="field record-${key}"><span>${label}${key===(kind==='work'?'place':'name')?reqMark():''}</span>${['place','role','name','org'].includes(key)?`<x-ta name="${key}" rows="2" maxlength="400" ${key===(kind==='work'?'place':'name')?'required':''}>${esc(r[key] || '')}</x-ta>`:`<input name="${key}" value="${esc(r[key] || '')}" inputmode="numeric" maxlength="12" placeholder="${key==='to'?'Năm / nay':'yyyy'}">`}</label>`).join('')}</div></article>`).join('') || emptyState('list',kind==='work'?'Chưa có quá trình công tác.':'Chưa có giải thưởng.')}</div>${rows.length || S.structuredDirty[kind]?`<div class="collection-footer"><span class="caption">${rows.length} ${kind==='work'?'mục công tác':'giải thưởng'}</span><button class="btn primary">${icon('check','sm')}Lưu danh sách</button></div>`:''}</form></div>`;
 }
-function moveButtons(kind,i) { return `<div class="row"><button type="button" class="iconbtn" data-act="list-move" data-kind="${kind}" data-i="${i}" data-step="-1" aria-label="Đưa lên">↑</button><button type="button" class="iconbtn" data-act="list-move" data-kind="${kind}" data-i="${i}" data-step="1" aria-label="Đưa xuống">↓</button><button type="button" class="iconbtn" data-act="list-del" data-kind="${kind}" data-i="${i}" aria-label="Xóa dòng">${icon('trash','sm')}</button></div>`; }
-function listSortControl(kind) { return `<label class="field list-sort"><span>Sắp xếp danh sách</span><select data-list-sort="${kind}"><option value="manual">Theo thứ tự bạn chọn</option><option value="desc">Năm mới nhất trước</option><option value="asc">Năm cũ nhất trước</option></select></label>`; }
+function moveButtons(kind,i,total) { return `<div class="record-actions"><button type="button" class="iconbtn move-up" data-act="list-move" data-kind="${kind}" data-i="${i}" data-step="-1" aria-label="Đưa mục ${i+1} lên" title="Đưa lên" ${i===0?'disabled':''}>${icon('arrow','sm')}</button><button type="button" class="iconbtn move-down" data-act="list-move" data-kind="${kind}" data-i="${i}" data-step="1" aria-label="Đưa mục ${i+1} xuống" title="Đưa xuống" ${i===total-1?'disabled':''}>${icon('arrow','sm')}</button><button type="button" class="iconbtn record-delete" data-act="list-del" data-kind="${kind}" data-i="${i}" aria-label="Xóa mục ${i+1}" title="Xóa mục">${icon('trash','sm')}</button></div>`; }
+function listSortControl(kind) { return `<label class="field list-sort"><span>Sắp xếp</span><select data-list-sort="${kind}">${[['manual','Theo thứ tự bạn chọn'],['desc','Năm mới nhất trước'],['asc','Năm cũ nhất trước']].map(([value,label])=>`<option value="${value}" ${(S.ui.listSort || {})[kind]===value?'selected':''}>${label}</option>`).join('')}</select></label>`; }
 function projectEditor() {
   const rows=S.drafts.projects || S.data.projects.slice().sort((a,b)=>+a.order-+b.order);S.drafts.projects=rows;
   const ctl=(r,k,label,list,required)=>`<label class="field ${k==='name'?'c12':'c6'}"><span>${label}${required?reqMark():''}</span>${k==='name'?`<x-ta name="name" rows="2" required maxlength="400">${esc(r.name || '')}</x-ta>`:list?combo(k,r[k],list,{free:true,required}):`<input name="${k}" value="${esc(k==='acceptanceDate'?SL.fmtDate(r[k]):r[k] || '')}" ${required?'required':''} ${k==='acceptanceDate'?`placeholder="dd/mm/yyyy" inputmode="numeric"`:['from','to'].includes(k)?'inputmode="numeric" maxlength="4"':''}>`}</label>`;
-  return `<div class="card"><div class="row between"><h3 class="h2">Đề tài nghiên cứu đã và đang tham gia</h3><button type="button" class="btn sm" data-act="list-add" data-kind="projects">${icon('plus','sm')}Thêm đề tài</button></div><form data-form="list" data-kind="projects">${listSortControl('projects')}<div class="stack project-list">${rows.map((r,i)=>`<article class="project-row" data-list-row data-id="${esc(r.id || '')}"><div class="row between"><b>Đề tài ${i+1}</b>${moveButtons('projects',i)}</div><div class="fgrid">${ctl(r,'name','Tên đầy đủ của đề tài',null,true)}${ctl(r,'code','Mã đề tài (nếu có)')}${ctl(r,'from','Năm bắt đầu',null,true)}${ctl(r,'to','Năm hoàn thành')}${ctl(r,'level','Cấp đề tài',E.projectLevels(),true)}${ctl(r,'role','Trách nhiệm tham gia',SL.PROJECT_ROLES,true)}<label class="field c12"><span>Tình trạng thực hiện${reqMark()}</span><select name="acceptance" data-project-state required><option value="">— Chọn —</option>${[['unknown','Chưa có thông tin nghiệm thu'],['ongoing','Đang thực hiện'],['awaiting','Hoàn thành, chờ nghiệm thu'],['accepted','Đã có kết quả nghiệm thu']].map(x=>`<option value="${x[0]}" ${(r.acceptance || 'unknown')===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select></label><div class="c12 fgrid conditional" data-acceptance-body ${r.acceptance==='accepted'?'':'hidden'}>${ctl(r,'acceptanceDate','Ngày nghiệm thu',null,true)}<label class="field c6"><span>Quy chế xếp loại${reqMark()}</span><select name="acceptanceRule" data-project-rule required><option value="">— Chọn theo quy chế/biên bản —</option><option value="three_levels" ${r.acceptanceRule==='three_levels'?'selected':''}>Quy chế 3 mức: Xuất sắc / Đạt / Không đạt</option><option value="institution" ${r.acceptanceRule==='institution'?'selected':''}>Quy chế trường / đơn vị / cấp quản lý khác</option></select></label><label class="field c6"><span>Kết quả theo biên bản${reqMark()}</span><input name="acceptanceResult" value="${esc(r.acceptanceResult || '')}" list="fx-acceptance-results" required><span class="hint">Chọn gợi ý hoặc nhập đúng xếp loại trong biên bản.</span></label>${ctl(r,'acceptanceBasis','Số/tên quy chế hoặc biên bản',null,true)}</div>${ctl(r,'evidenceUrl','Link minh chứng (https://)')}<div class="field c6"><span>Biên bản / quyết định nghiệm thu</span>${r.fileId?`<button type="button" class="btn sm" data-act="open-file" data-id="${esc(r.fileId)}">Xem ${esc(r.fileName || 'minh chứng')}</button>`:''}<label class="btn sm">Tải minh chứng<input type="file" hidden accept=".pdf,.png,.jpg,.jpeg" data-project-file="${i}"></label><span class="hint">Lưu đề tài trước khi tải file. Quản trị viên xem được minh chứng.</span></div>${aiStatusHTML(r)}${r.fileId?`<div class="c12">${badge('Minh chứng: '+(r.evidenceStatus==='verified'?'đã xác minh':r.evidenceStatus==='needs_info'?'cần bổ sung':'đang xử lý'),r.evidenceStatus==='verified'?'success':'warning')}<button type="button" class="btn sm" data-act="ai-retry" data-kind="project" data-id="${esc(r.id)}">Đối chiếu AI</button></div>`:''}<input type="hidden" name="fileId" value="${esc(r.fileId || '')}"><input type="hidden" name="fileName" value="${esc(r.fileName || '')}"></div></article>`).join('') || emptyState('list','Chưa có đề tài. Thêm dòng hoặc nhập từ CV.')}</div><datalist id="fx-acceptance-results">${['Xuất sắc','Đạt','Không đạt','Tốt','Khá','Trung bình'].map(x=>`<option value="${x}">`).join('')}</datalist><p class="caption">Xếp loại theo quy chế của đề tài; “Không đạt” vẫn là một kết quả nghiệm thu. Danh mục cấp và trách nhiệm cho phép nhập bổ sung.</p><button class="btn primary">Lưu đề tài nghiên cứu</button></form></div>`;
+  return `<div class="collection-editor"><div class="collection-heading"><h3 class="h2">Đề tài nghiên cứu <span class="collection-count">${rows.length}</span></h3><button type="button" class="btn sm" data-act="list-add" data-kind="projects">${icon('plus','sm')}Thêm đề tài</button></div><form data-form="list" data-kind="projects">${rows.length?listSortControl('projects'):''}<div class="project-list">${rows.map((r,i)=>`<article class="project-row" data-list-row data-row-index="${i}" data-id="${esc(r.id || '')}"><div class="project-summary"><button type="button" class="project-toggle" data-act="project-toggle" data-i="${i}" aria-expanded="${S.ui.projectOpen===i}" aria-controls="project-fields-${i}"><span class="record-number">${String(i+1).padStart(2,'0')}</span><span class="project-summary-copy"><strong data-project-title>${esc(r.name || 'Đề tài mới')}</strong><span class="project-meta" data-project-meta>${projectMeta(r)}</span></span><span class="project-chevron">${icon('arrow','sm')}</span></button>${moveButtons('projects',i,rows.length)}</div><div id="project-fields-${i}" class="project-fields" ${S.ui.projectOpen===i?'':'hidden'}><div class="fgrid">${ctl(r,'name','Tên đầy đủ của đề tài',null,true)}${ctl(r,'code','Mã đề tài (nếu có)')}${ctl(r,'from','Năm bắt đầu',null,true)}${ctl(r,'to','Năm hoàn thành')}${ctl(r,'level','Cấp đề tài',E.projectLevels(),true)}${ctl(r,'role','Trách nhiệm tham gia',SL.PROJECT_ROLES,true)}<label class="field c12"><span>Tình trạng thực hiện${reqMark()}</span><select name="acceptance" data-project-state required><option value="">— Chọn —</option>${PROJECT_STATES.map(([value,label])=>`<option value="${value}" ${(r.acceptance || 'unknown')===value?'selected':''}>${label}</option>`).join('')}</select></label><div class="c12 fgrid conditional" data-acceptance-body ${r.acceptance==='accepted'?'':'hidden'}>${ctl(r,'acceptanceDate','Ngày nghiệm thu',null,true)}<label class="field c6"><span>Quy chế xếp loại${reqMark()}</span><select name="acceptanceRule" data-project-rule required><option value="">Chọn theo quy chế / biên bản</option><option value="three_levels" ${r.acceptanceRule==='three_levels'?'selected':''}>3 mức: Xuất sắc / Đạt / Không đạt</option><option value="institution" ${r.acceptanceRule==='institution'?'selected':''}>Quy chế trường / đơn vị / cấp quản lý khác</option></select></label><label class="field c6"><span>Kết quả theo biên bản${reqMark()}</span><input name="acceptanceResult" value="${esc(r.acceptanceResult || '')}" list="fx-acceptance-results" required></label>${ctl(r,'acceptanceBasis','Số/tên quy chế hoặc biên bản',null,true)}<p class="caption c12">Xếp loại theo quy chế của đề tài; “Không đạt” vẫn là một kết quả nghiệm thu.</p></div></div><details class="project-evidence" ${r.fileId || r.evidenceUrl?'open':''}><summary>${icon('file','sm')}Minh chứng ${r.fileId?badge('Đã đính kèm','success'):''}</summary><div class="fgrid">${ctl(r,'evidenceUrl','Link minh chứng (https://)')}<div class="field c6"><span>Biên bản / quyết định nghiệm thu</span><div class="evidence-actions">${r.fileId?`<button type="button" class="btn sm" data-act="open-file" data-id="${esc(r.fileId)}">${icon('eye','sm')}Xem minh chứng</button>`:''}<label class="btn sm ${r.id?'':'is-disabled'}">${icon('upload','sm')}Tải minh chứng<input type="file" hidden accept=".pdf,.png,.jpg,.jpeg" data-project-file="${i}" ${r.id?'':'disabled'}></label></div><span class="hint">${r.id?'Quản trị viên xem được minh chứng.':'Lưu đề tài trước khi tải file.'}</span>${r.fileName?`<span class="caption evidence-name">${esc(r.fileName)}</span>`:''}</div>${aiStatusHTML(r)}${r.fileId?`<div class="c12">${badge('Minh chứng: '+(r.evidenceStatus==='verified'?'đã xác minh':r.evidenceStatus==='needs_info'?'cần bổ sung':'đang xử lý'),r.evidenceStatus==='verified'?'success':'warning')}<button type="button" class="btn sm" data-act="ai-retry" data-kind="project" data-id="${esc(r.id)}">Đối chiếu AI</button></div>`:''}</div></details><input type="hidden" name="fileId" value="${esc(r.fileId || '')}"><input type="hidden" name="fileName" value="${esc(r.fileName || '')}"><div class="project-edit-footer"><button type="button" class="btn sm" data-act="project-toggle" data-i="${i}">${icon('check','sm')}Thu gọn</button></div></div></article>`).join('') || emptyState('list','Chưa có đề tài nghiên cứu.')}</div><datalist id="fx-acceptance-results">${['Xuất sắc','Đạt','Không đạt','Tốt','Khá','Trung bình'].map(x=>`<option value="${x}">`).join('')}</datalist>${rows.length || S.structuredDirty['projects']?`<div class="collection-footer"><span class="caption">${rows.length} đề tài đã và đang tham gia</span><button class="btn primary">${icon('check','sm')}Lưu đề tài nghiên cứu</button></div>`:''}</form></div>`;
 }
+const PROJECT_STATES=[['unknown','Chưa có thông tin nghiệm thu'],['ongoing','Đang thực hiện'],['awaiting','Hoàn thành, chờ nghiệm thu'],['accepted','Đã có kết quả nghiệm thu']];
+function projectMeta(r) {
+  const state=(PROJECT_STATES.find(([value])=>value===(r.acceptance || 'unknown')) || PROJECT_STATES[0])[1];
+  return [r.code,[r.from,r.to].filter(Boolean).join(' - '),r.level,r.role,state].filter(Boolean).map(x=>`<span>${esc(x)}</span>`).join('');
+}
+function setProjectOpen(index,focus) {
+  S.ui.projectOpen=index;
+  $$('.project-list > [data-list-row]').forEach((row,i)=>{
+    const open=i===index,button=$('.project-toggle',row),fields=$('.project-fields',row);
+    button.setAttribute('aria-expanded',String(open));fields.hidden=!open;
+    if(open && focus){const input=$('[name=name]',row);if(input)input.focus({preventScroll:true});row.scrollIntoView({block:'nearest',behavior:'auto'});}
+  });
+}
+ACT['project-toggle']=el=>{
+  S.drafts.projects=readListDom('projects');
+  const index=+el.dataset.i;setProjectOpen(S.ui.projectOpen===index?null:index,false);
+};
 function readListDom(kind) {
-  return $$(`form[data-kind="${kind}"] [data-list-row],form[data-kind="${kind}"] tbody tr[data-id]`).map(tr=>{const o={id:tr.dataset.id};$$('input,select,textarea',tr).forEach(el=>{if(el.name && el.type!=='file')o[el.name]=el.value;});return o;});
+  const previous=S.drafts[kind] || S.data[kind] || [];
+  return $$(`form[data-kind="${kind}"] [data-list-row],form[data-kind="${kind}"] tbody tr[data-id]`).map((tr,i)=>{const base=tr.dataset.id?previous.find(r=>r.id===tr.dataset.id):previous[i];const o=Object.assign({},base || {},{id:tr.dataset.id});$$('input,select,textarea',tr).forEach(el=>{if(el.name && el.type!=='file')o[el.name]=el.value;});return o;});
 }
 function academicSummary() {
   const d=S.data.derived || {}, verified=S.data.credentials.filter(x=>x.status==='verified'), y=v=>SL.yearOf(v) || '—';
@@ -2669,14 +2709,28 @@ ACT['form-profile'] = async (f, e) => {
 };
 ACT['lang-add'] = () => { S.structuredDirty.langs = true; S.drafts.langs = $$('[data-lang]').map(r => ({ name: $('[name=lang-name]', r).value, level: $('[name=lang-level]', r).value })).concat([{ name: '', level: '' }]); S.ui.keepScroll = true; route(); };
 ACT['lang-del'] = el => { S.structuredDirty.langs = true; S.drafts.langs = $$('[data-lang]').map(r => ({ name: $('[name=lang-name]', r).value, level: $('[name=lang-level]', r).value })).filter((x, i) => i !== +el.dataset.i); S.ui.keepScroll = true; route(); };
-ACT['list-add'] = el => { S.structuredDirty[el.dataset.kind] = true; const k = el.dataset.kind; S.drafts[k] = readListDom(k).concat([{ id: '' }]); S.ui.keepScroll = true; route(); };
-ACT['list-del'] = el => { S.structuredDirty[el.dataset.kind] = true; const k = el.dataset.kind; S.drafts[k] = readListDom(k).filter((x, i) => i !== +el.dataset.i); S.ui.keepScroll = true; route(); };
+ACT['list-add'] = el => {
+  const k=el.dataset.kind;S.structuredDirty[k]=true;
+  S.drafts[k]=readListDom(k).concat([{id:''}]);
+  (S.ui.listSort || (S.ui.listSort={}))[k]='manual';
+  if(k==='projects')S.ui.projectOpen=S.drafts[k].length-1;
+  S.ui.keepScroll=true;route();
+  const row=$$(`form[data-kind="${k}"] [data-list-row]`).at(-1);
+  if(row){row.scrollIntoView({block:'nearest',behavior:'auto'});const input=$('textarea,input:not([type=hidden])',row);if(input)input.focus({preventScroll:true});}
+};
+ACT['list-del'] = async el => {
+  const k=el.dataset.kind,i=+el.dataset.i,rows=readListDom(k),row=rows[i];if(!row)return;
+  if((row.id || row.name || row.place) && !await confirmBox('Xóa mục này?',row.name || row.place || 'Mục này sẽ bị xóa khi lưu danh sách.','Xóa',true))return;
+  S.drafts[k]=rows.filter((_,n)=>n!==i);S.structuredDirty[k]=true;
+  if(k==='projects')S.ui.projectOpen=S.ui.projectOpen===i?null:S.ui.projectOpen>i?S.ui.projectOpen-1:S.ui.projectOpen;
+  S.ui.keepScroll=true;route();
+};
 ACT['form-list'] = async f => {
   const k = f.dataset.kind, rows = readListDom(k);
   S.drafts[k] = rows;
   const submittedRows = JSON.stringify(rows);
   const r = await call(API.saveList(k, rows), f.querySelector('button.primary'));
-  if (JSON.stringify(S.drafts[k]) === submittedRows) { S.drafts[k] = null; delete S.structuredDirty[k]; }
+  if (JSON.stringify(S.drafts[k]) === submittedRows) { S.drafts[k] = null; delete S.structuredDirty[k]; if(k==='projects')S.ui.projectOpen=null; }
   toast('Đã lưu ' + r.rows.length + ' dòng.', 'ok');
   refresh();
 };
@@ -2777,8 +2831,9 @@ VIEWS.expert.import = {
       const f = await readFile(file, ['doc', 'docx', 'pdf']).catch(e => { im.error = e.message; route(); });
       if (!f) return;
       im.file = f;
+      const wait = API.demo ? null : (() => { const el = document.createElement('div'); el.className = 'toast'; el.innerHTML = icon('info', 'sm') + '<span>Đang đọc <b>' + esc(file.name) + '</b>… AI có thể cần 1–2 phút, giữ nguyên trang này.</span>'; $('#toasts').appendChild(el); return el; })();
       try {
-        const r = await call(API.parseCV(f));
+        const r = await call(API.parseCV(f)).finally(() => wait && wait.remove());
         Object.assign(im, { step: 2, draft: r.draft, source: r.source, fileRow: r.file, sel: null, pubAct: null, edits: {} });
         go('import');
       } catch (e) { im.error = e.message; route(); }
@@ -3047,10 +3102,10 @@ VIEWS.expert.matches = {
         <div class="caption" style="margin-top:12px">Đề xuất gửi ${esc(fmtDT(m.sentAt))} · cần trao đổi để xác nhận phạm vi và thời gian.</div></div>`;
     };
     return pageHead('Đề xuất kết nối', 'Kết quả riêng dành cho bạn, dựa trên nhu cầu và chuyên môn đã khai báo.', `<button type="button" class="btn" data-act="go" data-page="needs">${icon('gear')}Chỉnh nhu cầu</button>`) +
-      `<div class="tabs" role="tablist" style="margin-bottom:20px;max-width:620px">${[['new', 'Đề xuất mới (' + d.matches.filter(m => m.status === 'sent' || m.status === 'seen').length + ')'], ['liked', 'Đã quan tâm'], ['all', 'Thông báo']].map(t => `<a role="tab" href="#/matches?tab=${t[0]}" aria-selected="${tab === t[0]}">${t[1]}</a>`).join('')}</div>
-      <div class="grid2"><div class="stack">${list.length ? list.map(card).join('') : `<div class="card">${emptyState('spark', tab === 'new' ? 'Chưa có đề xuất mới. Bật nhu cầu hợp tác để nhận đề xuất phù hợp.' : 'Chưa có mục nào.')}</div>`}</div>
-      <div class="stack"><div class="card">${icon('spark', 'lg')}<div class="h2" style="margin:8px 0 12px">Vì sao có đề xuất này?</div><ol style="margin:0;padding-left:20px;line-height:26px"><li>Nhu cầu đang bật</li><li>Hướng nghiên cứu tương đồng</li><li>Năng lực bổ sung cho nhóm</li><li>Thời gian / khu vực phù hợp</li></ol><hr class="div"><p class="muted" style="margin:0">Hệ thống lọc điều kiện trước rồi chấm điểm theo từ khóa trong hồ sơ và công bố; quản trị viên xem xét trước khi gửi. Phản hồi của bạn giúp lần ghép nối sau chính xác hơn.</p></div>
-      <div class="card"><div class="h3">Thông báo riêng</div><p class="muted" style="margin:8px 0 0">Chỉ bạn thấy đề xuất này. Quản trị viên nhận trạng thái phản hồi (đã xem, quan tâm, từ chối); danh sách gửi đối tác không kèm liên hệ của bạn.</p></div></div></div>`;
+      `<nav class="tabs match-tabs" aria-label="Nhóm đề xuất">${[['new', 'Đề xuất mới', d.matches.filter(m => m.status === 'sent' || m.status === 'seen').length], ['liked', 'Đã quan tâm', d.matches.filter(m=>m.status==='interested').length], ['all', 'Tất cả', d.matches.length]].map(([value,label,count])=>`<a href="#/matches?tab=${value}" ${tab===value?'aria-current="page"':''}>${label}<span class="tab-n">${count}</span></a>`).join('')}</nav>
+      <div class="match-results">${list.length?`<div class="stack">${list.map(card).join('')}</div>`:`<div class="match-empty"><span class="match-empty-icon">${icon('spark','lg')}</span><h3 class="h3">${tab==='new'?'Chưa có đề xuất mới':tab==='liked'?'Chưa có đề xuất đã quan tâm':'Chưa có đề xuất kết nối'}</h3><p class="muted">${tab==='liked'?'Các đề xuất bạn quan tâm sẽ được lưu tại đây.':'Đề xuất sẽ xuất hiện khi quản trị viên gửi cơ hội phù hợp với nhu cầu và chuyên môn của bạn.'}</p><button type="button" class="btn ${tab==='liked'?'':'primary'}" data-act="go" data-page="${tab==='liked'?'matches':'needs'}">${icon(tab==='liked'?'arrow':'gear','sm')}${tab==='liked'?'Xem đề xuất':'Cập nhật nhu cầu hợp tác'}</button></div>`}</div>
+      <details class="match-explainer"><summary>${icon('spark','sm')}Cách đề xuất được lựa chọn</summary><div class="match-explainer-body"><ol><li>Nhu cầu đang bật</li><li>Hướng nghiên cứu tương đồng</li><li>Năng lực bổ sung cho nhóm</li><li>Thời gian / khu vực phù hợp</li></ol><p class="caption">Hệ thống lọc điều kiện và chấm điểm theo từ khóa trong hồ sơ, công bố. Quản trị viên xem xét trước khi gửi; phản hồi của bạn giúp cải thiện lần ghép nối sau.</p></div></details>
+      <div class="match-privacy">${icon('lock','sm')}<p class="caption">Chỉ bạn và quản trị viên xem được đề xuất, trạng thái phản hồi. Danh sách gửi đối tác không kèm thông tin liên hệ của bạn.</p></div>`;
   },
   mount() { S.data.matches.filter(m => m.status === 'sent').forEach(m => { API.respondMatch(m.id, 'seen').then(() => { m.status = 'seen'; }).catch(() => {}); }); }
 };
@@ -3832,7 +3887,8 @@ ACT['sup-close'] = async el => { const s = S.data.supportAll.find(x => x.id === 
 /* Explicit loading plus FontFace status prevents mistaking a fallback for QDP. */
 async function inspectQdpFonts(fonts, timeoutMs = 5000) {
   const specs = [
-    ['Fluxience Inter', '400'], ['Fluxience Inter', '500'], ['Fluxience Inter', '600'], ['Fluxience Inter', '700']
+    ['Fluxience Inter', '400'], ['Fluxience Inter', '500'], ['Fluxience Inter', '600'], ['Fluxience Inter', '700'],
+    ['Fluxience QDP Sans', '400'], ['Fluxience QDP Sans', '500'], ['Fluxience QDP Display', '400'], ['Fluxience QDP Display', '500']
   ];
   if (!fonts || typeof fonts.load !== 'function') return specs.map(([family, weight]) => ({ family, weight, loaded: false, reason: 'unsupported' }));
   let timer;
@@ -3857,7 +3913,7 @@ ACT['build-info'] = async () => {
   const server = installedServerVersion(S.data && S.data.version);
   const fonts = await inspectQdpFonts(document.fonts);
   if (!$('#dlg').open || $('#dlgTitle').textContent !== 'Về Fluxience') return;
-  $('#dlgBody').innerHTML = `<dl class="kv"><dt>Giao diện</dt><dd>${esc(UI_VERSION)}</dd><dt>Máy chủ</dt><dd>${esc(server || 'Chưa xác định')}</dd>${S.data && S.data.system ? `<dt>Link đăng nhập</dt><dd>${S.data.system.canonicalVersion === UI_VERSION ? 'Đồng bộ · ' + esc(UI_VERSION) : 'Đang chạy ' + esc(S.data.system.canonicalVersion || 'phiên bản chưa rõ') + ' — cập nhật bản triển khai của WEBAPP_URL'}</dd>` : ''}<dt>Bộ chữ Inter</dt><dd>${fonts.every(f => f.loaded) ? 'Đã tải đủ 4 kiểu chữ' : 'Chưa tải đủ; đang có thể dùng chữ dự phòng'}</dd></dl>
+  $('#dlgBody').innerHTML = `<dl class="kv"><dt>Giao diện</dt><dd>${esc(UI_VERSION)}</dd><dt>Máy chủ</dt><dd>${esc(server || 'Chưa xác định')}</dd>${S.data && S.data.system ? `<dt>Link đăng nhập</dt><dd>${S.data.system.canonicalVersion === UI_VERSION ? 'Đồng bộ · ' + esc(UI_VERSION) : 'Đang chạy ' + esc(S.data.system.canonicalVersion || 'phiên bản chưa rõ') + ' — cập nhật bản triển khai của WEBAPP_URL'}</dd>` : ''}<dt>Bộ chữ Inter + QDP</dt><dd>${fonts.every(f => f.loaded) ? 'Đã tải đủ 8 kiểu chữ' : 'Chưa tải đủ; đang có thể dùng chữ dự phòng'}</dd></dl>
     ${server && server !== UI_VERSION ? '<div class="callout warn" style="margin-top:16px">Giao diện và máy chủ khác phiên bản. Kiểm tra các file và deployment đang mở.</div>' : ''}
     <div class="tbl-wrap" style="margin-top:16px"><table class="tbl"><thead><tr><th>Kiểu chữ</th><th>Trạng thái</th></tr></thead><tbody>${fonts.map(f => `<tr><td>${esc(f.family.replace('Fluxience ', ''))} ${({ 400: 'Regular', 500: 'Medium', 600: 'SemiBold', 700: 'Bold' })[f.weight]}</td><td>${f.loaded ? 'Đã tải' : f.reason === 'timeout' ? 'Quá thời gian chờ' : f.reason === 'unsupported' ? 'Trình duyệt chưa hỗ trợ kiểm tra' : 'Chưa tải'}</td></tr>`).join('')}</tbody></table></div>
     <p class="caption" style="margin-top:16px">Nếu font chưa tải, kiểm tra Styles.html có đủ font nhúng và mở lại đúng link triển khai sau khi cập nhật.</p>`;
@@ -3895,7 +3951,10 @@ ACT['cred-edit']=el=>{
 ACT['list-move']=el=>{
   const kind=el.dataset.kind,rows=readListDom(kind),i=+el.dataset.i,n=i+ +el.dataset.step;
   if(n<0||n>=rows.length)return;
-  [rows[i],rows[n]]=[rows[n],rows[i]];S.drafts[kind]=rows;S.structuredDirty[kind]=true;S.ui.keepScroll=true;route();
+  [rows[i],rows[n]]=[rows[n],rows[i]];
+  (S.ui.listSort || (S.ui.listSort={}))[kind]='manual';
+  if(kind==='projects')S.ui.projectOpen=S.ui.projectOpen===i?n:S.ui.projectOpen===n?i:S.ui.projectOpen;
+  S.drafts[kind]=rows;S.structuredDirty[kind]=true;S.ui.keepScroll=true;route();
 };
 function setConditional(box,on) {
   if(!box)return;box.hidden=!on;
@@ -3940,9 +3999,13 @@ function suggestIdAuthority(form) {
 }
 VIEWS.expert.profile.mount=function(q) {
   mountProfileScroll(q);syncProfileConditions();mountMap();
+  const projectForm=$('form[data-kind="projects"]');if(projectForm)projectForm.noValidate=true;
   $$('[data-list-sort]').forEach(el=>el.addEventListener('change',()=>{
     const k=el.dataset.listSort,rows=readListDom(k),sign=el.value==='asc'?1:-1;
+    const active=k==='projects'?rows[S.ui.projectOpen]:null;
     if(el.value!=='manual')rows.sort((a,b)=>sign*((+(a.year || a.from) || 0)-(+(b.year || b.from) || 0)));
+    if(k==='projects')S.ui.projectOpen=active?rows.indexOf(active):null;
+    (S.ui.listSort || (S.ui.listSort={}))[k]=el.value;
     S.drafts[k]=rows;S.structuredDirty[k]=true;S.ui.keepScroll=true;route();
   }));
   const kind=$('#credentialForm [name=kind]');
@@ -3974,7 +4037,20 @@ document.addEventListener('input',e=>{
   if(e.target.setCustomValidity)e.target.setCustomValidity('');
   if(e.target.matches('#basicProfileForm [name=idNumber]')){syncProfileConditions();suggestIdAuthority(e.target.form);}
 });
-document.addEventListener('invalid',e=>{const details=e.target.closest('details');if(details)details.open=true;},true);
+document.addEventListener('invalid',e=>{
+  const row=e.target.closest('.project-row');if(row)setProjectOpen(+row.dataset.rowIndex,false);
+  const details=e.target.closest('details');if(details)details.open=true;
+},true);
+document.addEventListener('input',e=>{
+  const row=e.target.closest('.project-row');if(!row)return;
+  const r=readListDom('projects')[+row.dataset.rowIndex];
+  $('[data-project-title]',row).textContent=r.name || 'Đề tài mới';
+  $('[data-project-meta]',row).innerHTML=projectMeta(r);
+});
+document.addEventListener('change',e=>{
+  const row=e.target.closest('.project-row');if(!row)return;
+  $('[data-project-meta]',row).innerHTML=projectMeta(readListDom('projects')[+row.dataset.rowIndex]);
+});
 document.addEventListener('focusout',e=>{
   const w=e.target.closest && e.target.closest('[data-combo]');
   if(w && w.dataset.free==='0' && e.target.tagName==='INPUT') {
@@ -3988,7 +4064,17 @@ ACT['form-profile']=async(f,e)=>{
 };
 const originalListSave=ACT['form-list'];
 ACT['form-list']=async f=>{
-  try {if(f.dataset.kind==='projects')readListDom('projects').forEach(r=>FXRules.project(r,todayISO()));await originalListSave(f);}catch(err){toast(err.message,'error');throw err;}
+  try {
+    if(f.dataset.kind==='projects'){
+      const rows=readListDom('projects'),nodes=$$('[data-list-row]',f);
+      for(let i=0;i<rows.length;i++){
+        const invalid=$$('input,select,textarea',nodes[i]).find(input=>!input.disabled && !input.checkValidity());
+        if(invalid){setProjectOpen(i,false);const details=invalid.closest('details');if(details)details.open=true;invalid.reportValidity();invalid.focus();return;}
+        try {FXRules.project(rows[i],todayISO());}catch(err){setProjectOpen(i,true);throw new Error('Đề tài '+(i+1)+': '+err.message);}
+      }
+    }
+    await originalListSave(f);
+  }catch(err){toast(err.message,'error');throw err;}
 };
 ACT['form-cred']=async f=>{
   try {

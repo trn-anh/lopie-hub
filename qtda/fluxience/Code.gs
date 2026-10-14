@@ -27,7 +27,7 @@
 /* =====================================================================
    0. CẤU HÌNH
    ===================================================================== */
-const APP_VERSION = '1.53';
+const APP_VERSION = '1.56';
 const TZ = 'Asia/Ho_Chi_Minh';
 const SESSION_HOURS = 12;
 const MAX_UPLOAD_MB = 20;
@@ -514,6 +514,9 @@ var SL = (function () {
       var f = found[i], next = found[i + 1];
       var raw = text.slice(f.end, next ? next.start : Math.min(text.length, f.end + 300));
       if (!next) raw = raw.split('\n')[0];
+      // Giá trị đã có ngay trên dòng nhãn → chỉ lấy dòng đó (tránh nuốt các dòng "Nhãn lạ: …" phía sau)
+      var firstLine = raw.split('\n')[0];
+      if (cleanVal(firstLine) && /\n\s*[^\n:]{2,60}:/.test(raw)) raw = firstLine;
       raw = raw.replace(/\n[\s\S]*$/, function (rest) { return /^\n\s*[-–•]?\s*$/.test(rest) ? '' : rest; });
       var v = cleanVal(raw.replace(/\n+/g, ' '));
       if (f.key.charAt(0) !== '_' && v) set(f.key, v);
@@ -591,10 +594,16 @@ var SL = (function () {
           if (!cleanVal(c[1]) && !cleanVal(c[2])) return;
           out.work.push({ from: per.from, to: per.to, place: cleanVal(c[1]), role: cleanVal(c[2]), flag: per.from ? '' : 'Thiếu mốc thời gian.' });
         } else if (kind === 'projects') {
+          // Ưu tiên đọc cột theo tiêu đề (mẫu khác nhau xếp cột khác nhau); không nhận ra thì theo thứ tự mẫu Bộ
+          var H = (t[hi] || []).map(function (x) { return fold(x); });
+          var col = function (re) { for (var q = 0; q < H.length; q++) if (re.test(H[q])) return q; return -1; };
+          var pc = { name: col(/ten de tai|ten du an/), per: col(/thoi gian|nam bat dau/), lvl: col(/^cap|de tai cap|cap quan ly|\bcap\b/), role: col(/trach nhiem|vai tro/) };
+          var byHead = pc.name >= 0 && pc.per >= 0 && pc.lvl >= 0 && pc.role >= 0 && pc.lvl !== pc.name;
           var off = /^\d+\.?$/.test(c[0]) || !c[0] ? 1 : 0;
-          var yrs = splitPeriod(c[off + 1]);
-          if (!cleanVal(c[off])) return;
-          out.projects.push({ name: cleanVal(c[off]), from: yrs.from, to: yrs.to, level: cleanVal(c[off + 2]), role: cleanVal(c[off + 3]), flag: yrs.from ? '' : 'Thiếu năm bắt đầu/hoàn thành.' });
+          if (!byHead) pc = { name: off, per: off + 1, lvl: off + 2, role: off + 3 };
+          var yrs = splitPeriod(c[pc.per]);
+          if (!cleanVal(c[pc.name])) return;
+          out.projects.push({ name: cleanVal(c[pc.name]), from: yrs.from, to: yrs.to, level: cleanVal(c[pc.lvl]), role: cleanVal(c[pc.role]), flag: yrs.from ? '' : 'Thiếu năm bắt đầu/hoàn thành.' });
         } else if (kind === 'pubs' || kind === 'books') {
           var o2 = /^\d+\.?$/.test(c[0]) || !c[0] ? 1 : 0;
           var title = cleanVal(c[o2]);
@@ -629,6 +638,17 @@ var SL = (function () {
           if (r2.title) out.pubs.push({ title: r2.title, authors: r2.authors, year: r2.year, venue: r2.venue, doi: r2.doi, type: 'journal', flag: 'Tách từ đoạn văn, cần kiểm tra.' });
         }
       });
+    }
+    if (out.template) {
+      // Mẫu Bộ biến thể (nhãn khác như "Điện thoại", "Email", "Đơn vị công tác"): bộ tách tự do chỉ BỔ SUNG ô thông tin còn trống
+      var extra = { fields: {}, languages: [], work: [], projects: [], pubs: [], books: [], awards: [], credentials: [], notes: [] };
+      parseFreeCV(doc, extra, ctx);
+      Object.keys(extra.fields).forEach(function (k) {
+        var v = extra.fields[k] && extra.fields[k].value;
+        if (v && !out.fields[k] && !/[^:\n]{2,40}:/.test(v)) out.fields[k] = extra.fields[k];
+      });
+      var em0 = text.match(/[\w.+-]+@[\w-]+\.[\w.]+/);
+      if (em0 && !out.fields.contactEmail) set('contactEmail', em0[0]);
     }
     if (!out.template) {
       var nFree = parseFreeCV(doc, out, ctx);
@@ -1829,7 +1849,7 @@ function docViaDrive_(blob, mime) {
 }
 /** Bước 1–2 nhập CV: lưu file gốc, tách dữ liệu thành BẢN NHÁP. Không ghi gì vào hồ sơ. */
 function api_parseCV(token, f) {
-  const c = expert_(token);
+  const c = expert_(token), started = Date.now();
   const up = api_uploadFile(token, f, 'cv').file;
   const blob = DriveApp.getFileById(up.id).getBlob();
   const mime = up.mime;
@@ -1840,7 +1860,7 @@ function api_parseCV(token, f) {
   const prof = T_('Profiles').find(r => r.email === c.email) || {};
   const draft = SL.parseLLKH(doc, { ownerName: prof.fullName || c.user.name, existingPubs: T_('Publications').filter(r => r.email === c.email) });
   const source = (doc.paras || []).join('\n') + '\n' + (doc.tables || []).map(t => t.map(r => r.join(' | ')).join('\n')).join('\n\n');
-  const ai = aiExtractCV_(source);
+  const ai = aiExtractCV_(source, started + 150000);   // AI tối đa ~2,5 phút; tổng vẫn dưới giới hạn 6 phút của Apps Script
   if (LAST_CV_AI_) draft.notes.push(LAST_CV_AI_);
   if (ai) mergeAI_(draft, ai, T_('Publications').filter(r => r.email === c.email));
   log_(c.email, 'cv_parse', up.id, up.name + ' · ' + draft.summary.total + ' mục, ' + draft.summary.flagged + ' cần kiểm tra');
@@ -1853,14 +1873,18 @@ const AI_FIELDS = ['fullName', 'gender', 'dob', 'birthPlace', 'hometown', 'ethni
   'ugSystem', 'ugPlace', 'ugMajor', 'ugCountry', 'ugYear', 'msMajor', 'msYear', 'msPlace', 'phdMajor', 'phdYear', 'phdPlace', 'thesis', 'field', 'keywords'];
 /** Gọi Gemini; tự thử model kế tiếp khi model bị ngừng (404). Model chạy được được nhớ lại. */
 const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-flash-lite-latest'];
-function geminiCall_(text, json, mediaParts) {
+/** deadline (mốc ms, tùy chọn): hết giờ thì dừng thử lại, trả mã 408 để nơi gọi dùng kết quả không có AI. */
+function geminiCall_(text, json, mediaParts, deadline) {
   const key = prop_('GEMINI_API_KEY');
   if (!key) return { code: 0, body: 'Chưa có GEMINI_API_KEY' };
   const list = [prop_('GEMINI_MODEL'), prop_('GEMINI_MODEL_OK')].concat(GEMINI_MODELS).filter((m, i, a) => m && a.indexOf(m) === i);
   let last = { code: 0, body: '' }, busy = null;
+  const late = ms => deadline && Date.now() + (ms || 0) > deadline;
   for (const model of list) {
+    if (late(15000)) return busy || { code: 408, body: 'Hết thời gian dành cho AI', model: model };
     let res;
     for (let attempt = 0; attempt < 3; attempt++) {   // quá tải tạm thời: chờ 2s, 4s rồi thử lại cùng model
+      if (attempt && late(15000 + 2000 * attempt)) break;
       res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
       method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': key },
         payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: text }].concat(mediaParts || []) }], generationConfig: json ? { temperature: 0, responseMimeType: 'application/json' } : { temperature: 0 } })
@@ -1881,7 +1905,7 @@ function geminiText_(r) {
   return parts.map(x => x.text || '').join('');
 }
 let LAST_CV_AI_ = '';
-function aiExtractCV_(source) {
+function aiExtractCV_(source, deadline) {
   const key = prop_('GEMINI_API_KEY');
   LAST_CV_AI_='';
   if (!key || !SL.trim(source)) { LAST_CV_AI_=!key?'Chưa có GEMINI_API_KEY; chỉ dùng bộ tách theo mẫu, không có kết quả AI.':'AI không có văn bản đọc được; kiểm tra file quét.'; return null; }
@@ -1900,7 +1924,8 @@ function aiExtractCV_(source) {
     '--- VĂN BẢN CV ---'
   ].join('\n');
   try {
-    const r = geminiCall_(prompt + '\n' + source.slice(0, 60000), true);
+    const r = geminiCall_(prompt + '\n' + source.slice(0, 60000), true, null, deadline);
+    if (r.code === 408) { LAST_CV_AI_='AI đang quá tải nên chưa bổ sung kịp; bản nháp dưới đây lấy từ bộ tách theo mẫu. Có thể tải lại file sau ít phút để AI điền thêm.'; return null; }
     if (r.code !== 200) { LAST_CV_AI_='Gemini HTTP '+r.code+': không có thông tin AI được thêm vào bản nháp. Kiểm tra khóa/hạn mức hoặc thử lại.'; log_('system', 'ai_error', r.model || '', 'Gemini ' + r.code + ': ' + String(r.body).slice(0, 300)); return null; }
     return JSON.parse(geminiText_(r).replace(/^```(?:json)?\s*|```\s*$/g, ''));
   } catch (e) { LAST_CV_AI_='AI đọc CV lỗi: '+String(e.message || e).slice(0,200)+'. Không có thông tin AI được thêm.'; log_('system','ai_error','',String(e.message || e));return null; }
@@ -2533,8 +2558,8 @@ function kiemTraGoiCaiDat_() {
   const indexVersion = (String(sources.Index || '').match(/name="fluxience-build" content="([^"]+)"/) || [])[1] || '';
   const scriptVersion = (String(sources.Scripts || '').match(/const UI_VERSION = '([^']+)'/) || [])[1] || '';
   result.dongBoPhienBan = { Index: indexVersion, Scripts: scriptVersion, Styles: String(sources.Styles || '').includes('Fluxience build ' + APP_VERSION), dat: indexVersion === APP_VERSION && scriptVersion === APP_VERSION && String(sources.Styles || '').includes('Fluxience build ' + APP_VERSION) };
-  result.fontQDP = { soFontNhung: (String(sources.Styles || '').match(/data:font\/woff2;base64,/g) || []).length, coSans: String(sources.Styles || '').includes('--font:"Fluxience QDP Sans"'), coDisplay: String(sources.Styles || '').includes('--font-display:"Fluxience QDP Display"') };
-  result.fontQDP.dat = result.fontQDP.soFontNhung === 5 && result.fontQDP.coSans && result.fontQDP.coDisplay;
+  result.fontQDP = { soFontNhung: (String(sources.Styles || '').match(/data:font\/woff2;base64,/g) || []).length, coInter: String(sources.Styles || '').includes('--font:"Fluxience Inter"'), coSans: String(sources.Styles || '').includes('--font-accent:"Fluxience QDP Sans"'), coDisplay: String(sources.Styles || '').includes('--font-display:"Fluxience QDP Display"') };
+  result.fontQDP.dat = result.fontQDP.soFontNhung === 8 && result.fontQDP.coInter && result.fontQDP.coSans && result.fontQDP.coDisplay;
   let serviceUrl = ''; try { serviceUrl = String(ScriptApp.getService().getUrl() || ''); } catch (e) {}
   result.lienKet = { WEBAPP_URL: AUTH.webAppUrl(), urlDichVu: serviceUrl, khop: !!serviceUrl && AUTH.webAppUrl() === serviceUrl, ghiChu: 'Đối chiếu WEBAPP_URL với chính link /exec đang mở và redirect URI OAuth. Dự án có nhiều deployment cần kiểm tra từng deployment.' };
   if (result.giaoDien.every(x => x.ok)) {
