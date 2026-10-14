@@ -1087,7 +1087,9 @@ function saveToken(t) { TOKEN = t || ''; try { t ? localStorage.setItem(TOKEN_KE
 })();
 /* Thời gian chờ tối đa theo loại việc: đọc CV (kèm AI), dựng .docx/.pdf, kiểm tra minh chứng cần lâu hơn thao tác thường. */
 const GAS_WAIT = { api_parseCV: 330000, api_importCV: 180000, api_renderDoc: 180000, api_verifyEvidence: 300000 };
+const GAS_MSG = { api_parseCV: 'Đang đọc CV…', api_importCV: 'Đang lưu dữ liệu từ CV vào hồ sơ…', api_renderDoc: 'Đang tạo file Word / PDF…', api_verifyEvidence: 'AI đang đối chiếu minh chứng…', api_uploadFile: 'Đang tải file lên…' };
 function gas(fn, ...args) {
+  if (GAS_MSG[fn] && !LOCK_MSG) LOCK_MSG = GAS_MSG[fn];
   return new Promise((res, rej) => {
     let done = false;
     const timer = setTimeout(() => { if (!done) { done = true; rej(new Error('Máy chủ phản hồi quá lâu. Thử lại.')); } }, GAS_WAIT[fn] || 90000);
@@ -1235,7 +1237,7 @@ const MockAPI = (function () {
     const brand = { APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME, CITY: st.CITY, FORM_CODE: st.FORM_CODE, PUB_CRITERIA: st.PUB_CRITERIA };
     const e = who();
     const accounts = db.Users.map(u => ({ email: u.email, name: u.name, unit: u.unit, roles: u.roles, status: u.status }));
-    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.57-demo' });
+    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.58-demo' });
     const u = db.Users.find(x => x.email === e);
     if (!u) {
       const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: 'expert' };
@@ -1246,7 +1248,7 @@ const MockAPI = (function () {
     if (u.status === 'rejected') return wait({ state: 'denied', rejected: true, note: u.reviewNote, email: e, settings: brand, accounts, contact: ADMIN });
     if (u.status !== 'active') return wait({ state: 'disabled', email: e, settings: brand, accounts, contact: ADMIN });
     const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs.indexOf('admin') >= 0 ? 'admin' : rs[0];
-    const base = { state: 'ok', demo: true, version: '1.57-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
+    const base = { state: 'ok', demo: true, version: '1.58-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
     if (w === 'admin') {
       const der = {}; db.Users.forEach(x => { der[x.email] = derived(x.email); });
       return wait(Object.assign(base, { users: db.Users, profiles: db.Profiles, derivedAll: der, credentials: db.Credentials, pubs: db.Publications, needsAll: db.Needs, work: db.Work, projects: db.Projects, awards: db.Awards, rounds: db.Rounds, matchesAll: db.Matches, files: db.Files, supportAll: db.Support }));
@@ -1542,7 +1544,7 @@ const API = IS_GAS ? ServerAPI : MockAPI;
 /* =====================================================================
    TRẠNG THÁI & ĐIỀU HƯỚNG
    ===================================================================== */
-const UI_VERSION = '1.57';
+const UI_VERSION = '1.58';
 { const bi = document.querySelector('.build-info'); if (bi) bi.textContent = 'Fluxience · v' + UI_VERSION; }
 const S = { data: null, ws: '', route: { page: '', q: {} }, busy: 0, ui: {}, drafts: {}, formDrafts: {}, structuredDirty: {} };
 let sessionRevision = 0, refreshRevision = 0;
@@ -1678,7 +1680,22 @@ function toast(msg, type, ms) {
   $('#toasts').appendChild(el);
   setTimeout(() => el.remove(), ms || (type === 'error' ? 9000 : 4200));
 }
-function busy(on) { S.busy += on ? 1 : -1; $('#progress').hidden = S.busy <= 0; }
+function busy(on) { S.busy += on ? 1 : -1; if (S.busy < 0) S.busy = 0; $('#progress').hidden = S.busy <= 0; workLock(S.busy > 0); }
+/* v1.58: khi đang có tác vụ chạy, khóa toàn bộ thao tác (không bấm, không tải thêm file) để tránh chồng chéo.
+   Lớp khóa chặn chuột ngay; sau 0,35 giây mới hiện thẻ "Đang xử lý" để thao tác nhanh không bị nháy. */
+let LOCK_MSG = '';
+function workLock(on) {
+  let el = document.getElementById('workLock');
+  if (!el) { el = document.createElement('div'); el.id = 'workLock'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite'); el.innerHTML = '<div class="wl-card"><span class="wl-spin" aria-hidden="true"></span><div><b>Đang xử lý…</b><span class="wl-msg"></span></div></div>'; document.body.appendChild(el); }
+  clearTimeout(workLock.t);
+  if (on) {
+    el.classList.add('on');
+    if (document.activeElement && document.activeElement.blur && !document.activeElement.closest('dialog')) document.activeElement.blur();
+    el.querySelector('.wl-msg').textContent = LOCK_MSG || 'Vui lòng chờ tác vụ hiện tại hoàn tất.';
+    workLock.t = setTimeout(() => { if (S.busy > 0) el.classList.add('show'); }, 350);
+  } else { el.classList.remove('on', 'show'); LOCK_MSG = ''; }
+}
+document.addEventListener('keydown', e => { if (S.busy > 0 && !e.target.closest('dialog') && ['Enter', ' '].includes(e.key)) { e.preventDefault(); e.stopPropagation(); } }, true);
 async function call(promise, btn) {
   const session = sessionRevision;
   busy(true);
@@ -1788,7 +1805,7 @@ function bindDrop(el, cb) {
   el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inp.click(); } });
   el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('over'); });
   el.addEventListener('dragleave', () => el.classList.remove('over'));
-  el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('over'); if (e.dataTransfer.files[0]) cb(e.dataTransfer.files[0]); });
+  el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('over'); if (S.busy > 0) { toast('Đang có tác vụ chạy. Chờ xong rồi tải file tiếp.', 'error'); return; } if (e.dataTransfer.files[0]) cb(e.dataTransfer.files[0]); });
   inp.addEventListener('change', () => { if (inp.files[0]) cb(inp.files[0]); inp.value = ''; });
 }
 
@@ -2068,14 +2085,16 @@ function wsJump(root, q, behavior) {
   WS.lock = Date.now() + 900;
   wsActivate(root, true);
   const smooth = behavior || (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
-  if (root === 'profile' && q && q.tab && q.tab !== 'basic' && $('#profile-' + q.tab)) setTimeout(() => scrollProfileSection(q.tab, smooth), 0);
-  else box.scrollIntoView({ block: 'start', behavior: smooth });
+  if (root === 'profile' && q && q.tab && $('#profile-' + q.tab)) setTimeout(() => scrollProfileSection(q.tab, 'auto'), 0);
+  else window.scrollTo(0, 0);
   box.focus({ preventScroll: true });
 }
 /** Đánh dấu mục đang xem: sidebar, breadcrumb, địa chỉ trang. */
 function wsActivate(root, force) {
   if (!root || (!force && WS.active === root)) return;
   WS.active = root;
+  // v1.58: mỗi mục trên thanh bên là một trang riêng → chỉ hiện mục đang chọn
+  $$('#main > .ws-section').forEach(sec => { sec.hidden = sec.dataset.wsRoot !== root; });
   $$('#nav a').forEach(a => { if (a.getAttribute('href') === '#/' + root) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   const c = WS.cur[root] || { page: root, q: {} }, v = VIEWS[S.ws][c.page] || VIEWS[S.ws][root];
   const base = S.ws === 'admin' ? 'Quản trị' : 'Chuyên gia', label = (NAV[S.ws].find(n => n[0] === root) || [])[2] || '';
@@ -2088,6 +2107,7 @@ function wsActivate(root, force) {
   }
 }
 function wsMountSpy() {
+  WS.spy = () => {}; return;   // v1.58: không còn cuộn liên tục giữa các mục
   let pending = false, stopped = false;
   const update = () => {
     pending = false;
@@ -2569,6 +2589,7 @@ VIEWS.expert.overview = {
 function activateProfileSection(key) {
   const navKey=key==='cred'?'edu':key;
   S.ui.profileActive=key;
+  $$('[data-profile-section]').forEach(sec=>{sec.hidden=sec.dataset.profileSection!==navKey;});
   $$('.profile-tabs [data-profile-jump]').forEach(a=>{if(a.dataset.profileJump===navKey)a.setAttribute('aria-current','location');else a.removeAttribute('aria-current');});
   const save=$('[data-act="profile-save"]');if(save)save.textContent=key==='cred'?'Gửi xác minh':'Lưu mục đang xem';
   if(WS.cur.profile){WS.cur.profile.q=Object.assign({},WS.cur.profile.q,{tab:key});}
@@ -2578,10 +2599,12 @@ function activateProfileSection(key) {
 function scrollProfileSection(key,behavior) {
   const section=$('#profile-'+key);if(!section)return;
   activateProfileSection(key);
-  section.scrollIntoView({block:'start',behavior:behavior||(matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth')});
+  if(key==='cred')section.scrollIntoView({block:'start',behavior:'auto'});else window.scrollTo(0,0);
   section.focus({preventScroll:true});
 }
 function mountProfileScroll(q) {
+  // v1.58: các thẻ trong hồ sơ là phần tách biệt, không theo dõi cuộn
+  const k=(q && q.tab) || S.ui.profileActive || 'basic';activateProfileSection(PROFILE_TABS.some(t=>t[0]===k) || k==='cred'?k:'basic');return;
   const sections=$$('[data-profile-section],[data-profile-anchor]');if(!sections.length)return;
   let pending=false,disposed=false;
   const update=()=>{
@@ -2683,9 +2706,10 @@ VIEWS.expert.profile = {
   crumb: () => 'Không gian chuyên gia / Hồ sơ của tôi',
   render(q) {
     const intro={basic:'Thông tin cá nhân và liên hệ',edu:'Đào tạo, ngoại ngữ và học vị',work:'Quá trình công tác chuyên môn',projects:'Hoạt động nghiên cứu',awards:'Giải thưởng và khen thưởng'};
-    const sections=PROFILE_TABS.map(([key,label],i)=>`<section class="profile-section" id="profile-${key}" data-profile-section="${key}" tabindex="-1"><div class="profile-section-heading"><span>0${i+1}</span><div><h2>${label}</h2><p>${intro[key]}</p></div></div>${renderProfileSection(key)}${key==='edu'?`<div id="profile-cred" class="profile-credentials" data-profile-anchor="cred" tabindex="-1"><h3 class="h2">Học vị & chức danh đã xác minh</h3>${renderProfileSection('cred')}</div>`:''}</section>`).join('');
-    const active=PROFILE_TABS.some(t=>t[0]===q.tab)?q.tab:q.tab==='cred'?'edu':'basic';
-    return (pageHead('Hồ sơ của tôi','Cuộn để xem toàn bộ hồ sơ. Chọn một mục để chuyển nhanh.',`<button type="button" class="btn" data-act="go" data-page="import">${icon('upload')}Nhập từ CV</button><button type="button" class="btn primary" data-act="profile-save">Lưu mục đang xem</button>`)+`<nav class="tabs fit profile-tabs" aria-label="Điều hướng trong hồ sơ">${PROFILE_TABS.map(([key,label])=>`<a href="#/profile?tab=${key}" data-profile-jump="${key}" ${key===active?'aria-current="location"':''}>${label}</a>`).join('')}</nav><div id="draftNote" class="caption draft-note" role="status" hidden>Có thay đổi chưa lưu · Nội dung được giữ khi chuyển mục trong phiên này.</div><div class="profile-continuous">${sections}</div>`).replace(/href="#\/profile\?tab=(basic|edu|cred|work|projects|awards)"(?! data-profile-jump)/g,(_,key)=>`href="#/profile?tab=${key}" data-profile-jump="${key}"`);
+    const shownTab=PROFILE_TABS.some(t=>t[0]===(q.tab || S.ui.profileActive))?(q.tab || S.ui.profileActive):(q.tab || S.ui.profileActive)==='cred'?'edu':'basic';
+    const sections=PROFILE_TABS.map(([key,label],i)=>`<section class="profile-section" id="profile-${key}" data-profile-section="${key}" tabindex="-1" ${key===shownTab?'':'hidden'}><div class="profile-section-heading"><span>0${i+1}</span><div><h2>${label}</h2><p>${intro[key]}</p></div></div>${renderProfileSection(key)}${key==='edu'?`<div id="profile-cred" class="profile-credentials" data-profile-anchor="cred" tabindex="-1"><h3 class="h2">Học vị & chức danh đã xác minh</h3>${renderProfileSection('cred')}</div>`:''}</section>`).join('');
+    const active=shownTab;
+    return (pageHead('Hồ sơ của tôi','Chọn từng thẻ để xem và chỉnh sửa; mỗi thẻ lưu riêng.',`<button type="button" class="btn" data-act="go" data-page="import">${icon('upload')}Nhập từ CV</button><button type="button" class="btn primary" data-act="profile-save">Lưu mục đang xem</button>`)+`<nav class="tabs fit profile-tabs" aria-label="Điều hướng trong hồ sơ">${PROFILE_TABS.map(([key,label])=>`<a href="#/profile?tab=${key}" data-profile-jump="${key}" ${key===active?'aria-current="location"':''}>${label}</a>`).join('')}</nav><div id="draftNote" class="caption draft-note" role="status" hidden>Có thay đổi chưa lưu · Nội dung được giữ khi chuyển mục trong phiên này.</div><div class="profile-continuous">${sections}</div>`).replace(/href="#\/profile\?tab=(basic|edu|cred|work|projects|awards)"(?! data-profile-jump)/g,(_,key)=>`href="#/profile?tab=${key}" data-profile-jump="${key}"`);
   },
   mount(q) {
     mountProfileScroll(q);
@@ -2840,9 +2864,9 @@ VIEWS.expert.import = {
       const f = await readFile(file, ['doc', 'docx', 'pdf']).catch(e => { im.error = e.message; route(); });
       if (!f) return;
       im.file = f;
-      const wait = API.demo ? null : (() => { const el = document.createElement('div'); el.className = 'toast'; el.innerHTML = icon('info', 'sm') + '<span>Đang đọc <b>' + esc(file.name) + '</b>… AI có thể cần 1–2 phút, giữ nguyên trang này.</span>'; $('#toasts').appendChild(el); return el; })();
+      LOCK_MSG = 'Đang đọc ' + file.name + '. AI có thể cần 1–2 phút, giữ nguyên trang này.';
       try {
-        const r = await call(API.parseCV(f)).finally(() => wait && wait.remove());
+        const r = await call(API.parseCV(f));
         Object.assign(im, { step: 2, draft: r.draft, source: r.source, fileRow: r.file, sel: null, pubAct: null, edits: {} });
         go('import');
       } catch (e) { im.error = e.message; route(); }
@@ -2912,21 +2936,23 @@ VIEWS.expert.pubs = {
     const uniq = SL.dedupe(all.filter(p => p.status !== 'rejected'));
     const needFile = all.filter(SL.pubNeedsFile);
     const years = [...new Set(all.map(p => p.year).filter(Boolean))].sort().reverse();
-    const fq = SL.fold(q.q || ''), fs = q.s || '', fy = q.y || '';
-    const list = all.filter(p => (!fq || SL.fold(p.title + ' ' + p.authors + ' ' + p.doi + ' ' + p.venue).includes(fq)) && (!fy || p.year === fy) &&
+    const fq = SL.fold(q.q || ''), fs = q.s || '', fy = q.y || '', ft = q.t || '';
+    const typeOf = p => ['book', 'textbook', 'chapter'].includes(p.type) ? 'book' : p.type === 'conference' ? 'conference' : 'journal';
+    const TYPE_TABS = [['', 'Tất cả'], ['journal', 'Bài báo khoa học'], ['conference', 'Hội thảo, seminar'], ['book', 'Sách, giáo trình']];
+    const list = all.filter(p => (!ft || typeOf(p) === ft) && (!fq || SL.fold(p.title + ' ' + p.authors + ' ' + p.doi + ' ' + p.venue).includes(fq)) && (!fy || p.year === fy) &&
       (!fs || (fs === 'needs_file' ? SL.pubNeedsFile(p) : fs === 'cv' ? p.source === 'cv' : p.status === fs))).sort(FXRules.sortPubs);
     const cvWait = all.filter(p => p.source === 'cv' && SL.pubNeedsFile(p)).length;
     return pageHead('Công bố khoa học', 'Theo dõi công bố, minh chứng và kết quả đối chiếu metadata.',
       `<button type="button" class="btn" data-act="go" data-page="help" data-q='{"tab":"quick"}'>${icon('list')}Nhập nhanh</button><button type="button" class="btn primary" data-act="go" data-page="pub">${icon('plus')}Thêm công bố</button>`) +
       `<div class="kpis">${kpi('Tổng công bố', uniq.length, 'Không tính bản ghi trùng')}${kpi('Đã xác minh', all.filter(p => p.status === 'verified').length, 'Đủ metadata và minh chứng')}
       ${kpi('Cần bổ sung file', needFile.length, needFile.filter(p => p.source === 'cv').length + ' bài được nhập từ CV', needFile.length ? 'warn-t' : 'ok-t')}${kpi('Công bố năm nay', uniq.filter(p => p.year === year).length, 'Theo năm xuất bản')}</div>
-      <div class="card"><form class="fgrid" data-form="pub-filter" style="margin-bottom:16px">
+      <div class="card"><div class="tabs pub-type-tabs" role="tablist" style="margin-bottom:16px">${TYPE_TABS.map(([k, l]) => `<button type="button" role="tab" aria-selected="${ft === k}" data-act="go" data-page="pubs" data-q='${esc(JSON.stringify(Object.assign({}, q, { t: k })))}'>${l} <span class="caption">${k ? all.filter(p => typeOf(p) === k).length : all.length}</span></button>`).join('')}</div><form class="fgrid" data-form="pub-filter" style="margin-bottom:16px"><input type="hidden" name="t" value="${esc(ft)}">
         <label class="field c6"><span>Tìm công bố</span><input name="q" value="${esc(q.q || '')}" placeholder="Tên bài, DOI, tác giả…"></label>
         <label class="field c3"><span>Trạng thái</span><select name="s"><option value="">Tất cả</option>${[['needs_file', 'Cần bổ sung file'], ['draft', 'Nháp'], ['pending', 'Chờ duyệt'], ['needs_info', 'Cần bổ sung (quản trị yêu cầu)'], ['verified', 'Đã xác minh'], ['rejected', 'Không đạt'], ['cv', 'Nhập từ CV']].map(o => `<option value="${o[0]}" ${fs === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></label>
         <label class="field c3"><span>Năm xuất bản</span><select name="y"><option value="">Tất cả</option>${years.map(y => `<option ${fy === y ? 'selected' : ''}>${y}</option>`).join('')}</select></label>
       </form>
-      ${list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Tên công bố / tác giả</th><th>Năm</th><th>Minh chứng</th><th>Trạng thái</th></tr></thead><tbody>
-        ${list.map(p => `<tr class="click" data-act="go" data-page="pub" data-q='${esc(JSON.stringify({ id: p.id }))}'><td>${esc(p.title)}<span class="sub">${esc(p.authors || '—')} · ${esc(pubType(p.type))}${p.source === 'cv' ? ' · nhập từ CV' : ''}</span></td><td class="num">${esc(p.year)}</td><td>${p.fileName ? esc(p.fileName) : '<span class="muted">Chưa có file</span>'}</td><td>${pubBadge(p)}</td></tr>`).join('')}
+      ${list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="w-xs">TT</th><th>Tên công bố / tác giả</th><th>${ft === 'book' ? 'Nhà xuất bản' : ft === 'conference' ? 'Hội thảo' : 'Tạp chí / nơi đăng'}</th><th>Năm</th><th>Minh chứng</th><th>Trạng thái</th></tr></thead><tbody>
+        ${list.map((p, i) => `<tr class="click" data-act="go" data-page="pub" data-q='${esc(JSON.stringify({ id: p.id }))}'><td class="num">${i + 1}</td><td>${esc(p.title)}<span class="sub">${esc(p.authors || '—')} · ${esc(pubType(p.type))}${p.source === 'cv' ? ' · nhập từ CV' : ''}</span></td><td>${esc(p.venue || '—')}${p.issn ? `<span class="sub">ISSN ${esc(p.issn)}</span>` : ''}</td><td class="num">${esc([p.month, p.year].filter(Boolean).join('/'))}</td><td>${p.fileId ? `<button type="button" class="btn sm" data-act="open-file" data-id="${esc(p.fileId)}" title="${esc(p.fileName || '')}">${icon('file', 'sm')}PDF</button>` : '<span class="muted">Chưa có file</span>'}</td><td>${pubBadge(p)}</td></tr>`).join('')}
       </tbody></table></div><div class="row between" style="margin-top:12px"><span class="caption">${list.length} / ${all.length} công bố</span>${needFile.length ? `<button type="button" class="btn" data-act="go" data-page="pubs" data-q='{"s":"needs_file"}'>${icon('upload')}Bổ sung minh chứng</button>` : ''}</div>`
         : emptyState('file', all.length ? 'Không có công bố khớp bộ lọc.' : 'Chưa có công bố. Thêm thủ công, nhập từ CV hoặc dán danh sách trích dẫn.')}
       </div>${cvWait ? `<div class="callout" style="margin-top:20px">${icon('shield', 'sm')}<div>${cvWait} công bố nhập từ CV đang chờ file. Thêm file để hoàn thiện kho hồ sơ và gửi xác minh.</div></div>` : ''}`;
@@ -3242,7 +3268,7 @@ const exportView = {
         <div class="fgrid"><label class="field c12"><span>Mẫu xuất</span><select data-exp="tpl">${CV_TEMPLATES.filter(t => t.group === st.tab).map(t => `<option value="${t.code}" ${t.code === st.tpl ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select></label></div>
         <div class="h3" style="margin:20px 0 4px">Các mục trong bản xuất</div>
         ${tpl.sections.map(s => `<label class="check"><input type="checkbox" data-exp-sec="${s}" ${st.sections[s] !== false ? 'checked' : ''}> <span>${esc(labels[s])}</span></label>`).join('')}
-        ${st.tpl === 'bgd' ? `<div class="scope-now"><div><span class="label">Phạm vi nội dung</span><div>${esc((EXP_SCOPES.find(x => x[0] === expScopeKey(st.extra)) || EXP_SCOPES[0])[1])}${st.extra ? '' : ' <span class="caption">(sẽ hỏi khi xem trước)</span>'}</div></div><button type="button" class="btn sm" data-act="exp-scope">Đổi</button></div>` : ''}
+        ${st.tpl === 'bgd' ? (() => { const ex = st.extra || {}, nb = m.books.length, na = m.awards.length; return `<label class="check"><input type="checkbox" data-exp-extra="books" ${ex.books ? 'checked' : ''}> <span>V. Sách, giáo trình <span class="caption">(${nb} mục)</span></span></label><label class="check"><input type="checkbox" data-exp-extra="awards" ${ex.awards ? 'checked' : ''}> <span>${ex.books ? 'VI' : 'V'}. Giải thưởng, khen thưởng <span class="caption">(${na} mục)</span></span></label><p class="caption" style="margin:6px 0 0">Mục I–IV đúng Thông tư 08/2011. Tích thêm mục V–VI nếu muốn kèm sách, giáo trình và giải thưởng.</p>`; })() : ''}
         <div class="scope-now"><div><span class="label">Học hàm · học vị cao nhất (tự chọn)</span><div>${esc([src.derived.title && src.derived.title + (src.derived.titleDate ? ' (' + SL.yearOf(src.derived.titleDate) + ')' : ''), src.derived.degree && src.derived.degree + (src.derived.degreeDate ? ' (' + SL.yearOf(src.derived.degreeDate) + ')' : '')].filter(Boolean).join(' · ') || 'Chưa có mục đã xác minh')}</div></div></div>
         <hr class="div"><label class="check"><input type="checkbox" data-exp="contact" ${st.contact && st.tpl !== 'intro' ? 'checked' : ''} ${st.tpl === 'intro' ? 'disabled' : ''}> <span>Kèm thông tin liên hệ & số định danh${st.tpl === 'intro' ? ' (hồ sơ giới thiệu luôn ẩn)' : ''}</span></label>
         <label class="field" style="margin-top:12px"><span>Công bố đưa vào bản xuất</span><select data-exp="pubFilter">${PUB_FILTERS.map(f => `<option value="${f[0]}" ${f[0] === st.pubFilter ? 'selected' : ''}>${f[1]}</option>`).join('')}</select></label>
@@ -3251,7 +3277,7 @@ const exportView = {
       <div class="stack"><div class="card"><div class="h2">2. Kiểm tra trước khi xuất</div>
         ${ok ? badge('Đã xem trước · ' + st.confirmedAt, 'success block') : badge('Chưa xem trước bản xuất', 'warning block')}
         <div class="mini-doc" style="margin-top:16px"><div class="t">${st.tpl === 'cv' ? 'CV HỌC THUẬT' : st.tpl === 'intro' ? 'HỒ SƠ GIỚI THIỆU' : 'LÝ LỊCH KHOA HỌC'}</div>
-          <div>${esc([honor(src.derived), src.profile.fullName].filter(Boolean).join(' ') || '—')}</div><br>${tpl.sections.filter(s => st.sections[s] !== false).map(s => `<div>${esc(labels[s])}</div>`).join('')}</div>
+          <div>${esc([honor(src.derived), src.profile.fullName].filter(Boolean).join(' ') || '—')}</div><br>${tpl.sections.filter(s => st.sections[s] !== false).map(s => `<div>${esc(labels[s])}</div>`).join('')}${st.tpl === 'bgd' ? [(st.extra || {}).books && 'Sách, giáo trình', (st.extra || {}).awards && 'Giải thưởng, khen thưởng'].filter(Boolean).map((t, i) => `<div>${['V', 'VI'][i]}. ${t}</div>`).join('') : ''}</div>
         <hr class="div"><div class="caption">Liên hệ: ${st.contact && st.tpl !== 'intro' ? 'đang kèm' : 'đang ẩn'}<br>Mẫu: ${esc(tpl.label)}<br>Dữ liệu: ${m.allPubs.length} công bố, ${m.projects.length} đề tài theo bộ lọc · hồ sơ hoàn thiện ${comp.pct}%</div>
         ${comp.missing.filter(x => x.sec === 'I' || x.sec === 'II').length ? `<div class="callout warn" style="margin-top:12px">${icon('alert', 'sm')}<div>Còn trống: ${esc(comp.missing.filter(x => x.sec === 'I' || x.sec === 'II').map(x => x.label).join(', '))}. Ô trống in thành dòng chấm để điền tay.</div></div>` : ''}
         <button type="button" class="btn primary block" style="margin-top:16px" data-act="exp-preview">${icon('download')}Xem trước & tải</button>
@@ -3265,6 +3291,7 @@ const exportView = {
       st[k] = el.type === 'checkbox' ? el.checked : el.value;
       S.ui.keepScroll = true; route();
     }));
+    $$('[data-exp-extra]').forEach(el => el.addEventListener('change', () => { const st = expState(); st.extra = Object.assign({}, st.extra || {}, { [el.dataset.expExtra]: el.checked }); S.ui.keepScroll = true; route(); }));
     $$('[data-exp-sec]').forEach(el => el.addEventListener('change', () => { expState().sections[el.dataset.expSec] = el.checked; S.ui.keepScroll = true; route(); }));
   }
 };
@@ -3275,7 +3302,7 @@ ACT['exp-tab'] = el => { const st = expState(); st.tab = el.dataset.v; st.tpl = 
 function expBody(q) { const st = expState(); return cvBody(expSrc(q.e), expOpts(st), S.data.settings || {}); }
 ACT['exp-preview'] = async el => {
   const q = S.route.q, st = expState();
-  if (st.tpl === 'bgd' && (!st.extra || !(el && el.dataset.keep))) { if (!await expAskScope(q)) return; }
+  if (!st.extra) st.extra = {};
   const src = expSrc(q.e), sig = expSig(src, st), fs = expFormats();
   const r = await openDialog({
     title: 'Xem trước bản xuất', wide: true,
@@ -3707,6 +3734,19 @@ ACT['acc-do'] = async el => {
 };
 
 /* ---------- Thống kê công bố ---------- */
+/** v1.58 · Tổng quan dữ liệu cho quản trị: chỉ số chính + xếp hạng dạng thanh ngang gọn (không dùng nhiều biểu đồ cột). */
+function adminSummaryHTML() {
+  const d = S.data, ex = experts(), pubs = SL.dedupe((d.pubs || []).filter(p => p.status !== 'rejected'));
+  const typeOf = p => ['book', 'textbook', 'chapter'].includes(p.type) ? 'book' : p.type === 'conference' ? 'conference' : 'journal';
+  const withPub = new Set(pubs.map(p => p.email)), filled = ex.filter(x => x.comp.pct >= 50).length;
+  const tile = (ic, val, label, sub) => `<div class="sum-tile"><span class="sum-ic">${icon(ic, 'sm')}</span><div><b>${val}</b><span>${esc(label)}</span>${sub ? `<small>${esc(sub)}</small>` : ''}</div></div>`;
+  const rank = (title, rows, empty) => { const max = Math.max(1, ...rows.map(r => r[1])); return `<div class="card sum-rank"><div class="h3">${esc(title)}</div>${rows.length ? rows.map(([k, v]) => `<div class="sum-row"><span title="${esc(k)}">${esc(k)}</span><i><em style="width:${Math.round(v / max * 100)}%"></em></i><b>${v}</b></div>`).join('') : `<p class="caption">${esc(empty)}</p>`}</div>`; };
+  const count = (arr, key) => Object.entries(arr.reduce((o, x) => { const k = key(x); if (k) o[k] = (o[k] || 0) + 1; return o; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const degs = ['Tiến sĩ khoa học', 'Tiến sĩ', 'Thạc sĩ', 'Kỹ sư', 'Cử nhân'].map(g => [g, ex.filter(x => x.der.degree === g).length]).filter(r => r[1]).concat([['Chưa xác minh học vị', ex.filter(x => !x.der.degree).length]]);
+  return `<div class="sum-grid">${tile('users', ex.length, 'Chuyên gia', (d.users || []).length + ' tài khoản')}${tile('user', filled, 'Đã điền hồ sơ', 'hoàn thiện từ 50%')}${tile('file', pubs.filter(p => typeOf(p) === 'journal').length, 'Bài báo', 'không trùng · ' + (d.pubs || []).length + ' lượt nhập')}${tile('alert', ex.filter(x => !withPub.has(x.email)).length, 'Chưa có công bố', 'cần nhắc bổ sung')}
+    ${tile('brief', (d.projects || []).length, 'Đề tài', '')}${tile('spark', (d.awards || []).length, 'Giải thưởng', '')}${tile('chat', pubs.filter(p => typeOf(p) === 'conference').length, 'Bài hội thảo', '')}${tile('list', pubs.filter(p => typeOf(p) === 'book').length, 'Sách, giáo trình', '')}</div>
+    <div class="sum-ranks">${rank('Chuyên gia theo học vị', degs, 'Chưa có dữ liệu.')}${rank('Nhiều công bố nhất', count(pubs, p => nameOf(p.email)), 'Chưa có công bố.')}${rank('Tạp chí / nơi đăng nhiều nhất', count(pubs, p => p.venue), 'Chưa có công bố.')}</div>`;
+}
 VIEWS.admin.stats = {
   crumb: () => 'Quản trị / Kết nối chuyên gia',
   render() {
@@ -3720,7 +3760,7 @@ VIEWS.admin.stats = {
     const shown = inP.filter(p => !f.status || (f.status === 'pending' ? (p.status === 'pending' || p.status === 'needs_info') : p.status === f.status));
     const idx = periods.indexOf(f.period), last3 = periods.slice(idx, idx + 3).reverse();
     const counts = last3.map(k => base.filter(p => keyOf(p) === k).length), max = Math.max(1, ...counts);
-    return pageHead('Thống kê công bố khoa học', `Xem ai đã tải bài gì theo tháng / quý; tách ngày tải lên khỏi ngày xuất bản.${API.demo ? ' · Dữ liệu minh họa' : ''}`, `<button type="button" class="btn" data-act="stat-csv">${icon('download')}Xuất báo cáo</button>`) +
+    return pageHead('Thống kê công bố khoa học', `Xem ai đã tải bài gì theo tháng / quý; tách ngày tải lên khỏi ngày xuất bản.${API.demo ? ' · Dữ liệu minh họa' : ''}`, `<button type="button" class="btn" data-act="stat-csv">${icon('download')}Xuất báo cáo</button>`) + adminSummaryHTML() +
       `<div class="card" style="margin-bottom:20px"><div class="fgrid">
         <label class="field c4"><span>Thời gian thống kê theo</span><select data-stat="basis"><option value="upload" ${f.basis === 'upload' ? 'selected' : ''}>Ngày tải lên lần đầu</option><option value="publish" ${f.basis === 'publish' ? 'selected' : ''}>Ngày xuất bản</option></select></label>
         <label class="field c4"><span>Chuyên gia / đơn vị</span><select data-stat="email"><option value="">Tất cả chuyên gia</option>${experts().map(x => `<option value="${esc(x.email)}" ${f.email === x.email ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
@@ -4262,4 +4302,34 @@ boot();
 .collection-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;padding-top:14px;border-top:1px solid var(--sl-border-default)}
 @media (max-width:900px){.work-fields{grid-template-columns:1fr 1fr}.work-fields .record-place,.work-fields .record-role{grid-column:1/-1}.awards-fields{grid-template-columns:1fr 110px}.awards-fields .record-org{grid-column:1/-1}}
 @media (max-width:560px){.collection-editor{padding:16px}.record-row{grid-template-columns:1fr}.record-order{flex-direction:row;justify-content:space-between}.record-actions{flex-direction:row}}
+/* v1.58 · một mục một trang; khóa thao tác khi đang xử lý; tổng quan quản trị */
+.ws-section[hidden],[data-profile-section][hidden]{display:none!important}
+#main > .ws-section{border:0!important;margin:0!important;padding-top:0!important}
+#workLock{position:fixed;inset:0;z-index:300;display:none;cursor:progress}
+#workLock.on{display:block}
+#workLock.show{display:grid;place-items:center;background:rgba(15,23,42,.32);backdrop-filter:blur(1px)}
+#workLock .wl-card{display:none;align-items:center;gap:14px;max-width:min(440px,calc(100vw - 32px));padding:18px 22px;border-radius:12px;background:var(--sl-bg-surface);color:var(--sl-text-primary);box-shadow:var(--sl-shadow)}
+#workLock.show .wl-card{display:flex}
+#workLock .wl-card b{display:block;font-size:15px}
+#workLock .wl-msg{display:block;font-size:13.5px;color:var(--sl-text-secondary);margin-top:2px}
+.wl-spin{flex:none;width:26px;height:26px;border-radius:50%;border:3px solid var(--sl-brand-subtle);border-top-color:var(--sl-brand-default);animation:wlspin .8s linear infinite}
+@keyframes wlspin{to{transform:rotate(360deg)}}
+.sum-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.sum-tile{display:flex;align-items:flex-start;gap:12px;padding:16px;border:1px solid var(--sl-border-default);border-radius:12px;background:var(--sl-bg-surface);box-shadow:var(--sl-shadow-sm)}
+.sum-ic{display:grid;place-items:center;flex:none;width:38px;height:38px;border-radius:10px;background:var(--sl-brand-default);color:#fff}
+.sum-ic .ico{color:#fff;width:20px;height:20px}
+.sum-ic img{filter:brightness(0) invert(1);width:20px;height:20px}
+.sum-ic svg{stroke:#fff}
+.sum-tile b{display:block;font-size:24px;line-height:28px}
+.sum-tile span{display:block;font-size:13.5px;color:var(--sl-text-primary)}
+.sum-tile small{display:block;font-size:12px;color:var(--sl-text-secondary)}
+.sum-ranks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:20px}
+.sum-rank .h3{margin-bottom:10px}
+.sum-row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 28px;align-items:center;gap:10px;padding:5px 0;font-size:13.5px}
+.sum-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sum-row i{height:8px;border-radius:999px;background:var(--sl-bg-subtle);overflow:hidden}
+.sum-row em{display:block;height:100%;border-radius:999px;background:var(--sl-brand-default)}
+.sum-row b{text-align:right}
+.pub-type-tabs{flex-wrap:wrap}
+@media (max-width:1000px){.sum-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sum-ranks{grid-template-columns:1fr}}
 </style>
