@@ -1239,7 +1239,7 @@ const MockAPI = (function () {
     const brand = { APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME, CITY: st.CITY, FORM_CODE: st.FORM_CODE, PUB_CRITERIA: st.PUB_CRITERIA };
     const e = who();
     const accounts = db.Users.map(u => ({ email: u.email, name: u.name, unit: u.unit, roles: u.roles, status: u.status }));
-    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.62-demo' });
+    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.63-demo' });
     const u = db.Users.find(x => x.email === e);
     if (!u) {
       const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: 'expert' };
@@ -1250,7 +1250,7 @@ const MockAPI = (function () {
     if (u.status === 'rejected') return wait({ state: 'denied', rejected: true, note: u.reviewNote, email: e, settings: brand, accounts, contact: ADMIN });
     if (u.status !== 'active') return wait({ state: 'disabled', email: e, settings: brand, accounts, contact: ADMIN });
     const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs.indexOf('admin') >= 0 ? 'admin' : rs[0];
-    const base = { state: 'ok', demo: true, version: '1.62-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
+    const base = { state: 'ok', demo: true, version: '1.63-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
     if (w === 'admin') {
       const der = {}; db.Users.forEach(x => { der[x.email] = derived(x.email); });
       return wait(Object.assign(base, { users: db.Users, profiles: db.Profiles, derivedAll: der, credentials: db.Credentials, pubs: db.Publications, needsAll: db.Needs, work: db.Work, projects: db.Projects, awards: db.Awards, rounds: db.Rounds, matchesAll: db.Matches, files: db.Files, supportAll: db.Support }));
@@ -1547,7 +1547,7 @@ const API = IS_GAS ? ServerAPI : MockAPI;
 /* =====================================================================
    TRẠNG THÁI & ĐIỀU HƯỚNG
    ===================================================================== */
-const UI_VERSION = '1.62';
+const UI_VERSION = '1.63';
 { const bi = document.querySelector('.build-info'); if (bi) bi.textContent = 'Fluxience · v' + UI_VERSION; }
 const S = { data: null, ws: '', route: { page: '', q: {} }, busy: 0, ui: {}, drafts: {}, formDrafts: {}, structuredDirty: {} };
 let sessionRevision = 0, refreshRevision = 0;
@@ -1971,7 +1971,7 @@ function renderShell() {
   const ownProfile = S.ws === 'admin' ? ((d.profiles || []).find(x => x.email === d.me.email) || {}) : (d.profile || {});
   const ownName = SL.trim(ownProfile.fullName), roleLabel = S.ws === 'admin' ? 'Quản trị viên' : 'Chuyên gia';
   $('#meName').textContent = ownName ? [S.ws === 'expert' ? honor(d.derived || {}) : '', ownName].filter(Boolean).join(' ') : d.me.email;
-  $('#meUnit').textContent = ownName ? d.me.email + ' · ' + roleLabel : roleLabel;
+  $('#meUnit').innerHTML = (ownName ? `<span class="acct-mail">${esc(d.me.email)}</span>` : '') + `<span class="acct-role">${esc(roleLabel)}</span>`;
   $('#meName').title = $('#meName').textContent; $('#meUnit').title = $('#meUnit').textContent;
   const wb = $('#wsBadge'), label = S.ws === 'admin' ? 'Quản trị viên' : 'Chuyên gia', other = S.ws === 'admin' ? 'chuyên gia' : 'quản trị';
   const multi = (d.roles || []).filter(r => r === 'admin' || r === 'expert').length > 1;
@@ -3361,10 +3361,9 @@ const exportView = {
           <div>${esc([honor(src.derived), src.profile.fullName].filter(Boolean).join(' ') || '—')}</div><br>${tpl.sections.filter(s => st.sections[s] !== false).map(s => `<div>${esc(labels[s])}</div>`).join('')}${st.tpl === 'bgd' ? [(st.extra || {}).books && 'Sách, giáo trình', (st.extra || {}).awards && 'Giải thưởng, khen thưởng'].filter(Boolean).map((t, i) => `<div>${['V', 'VI'][i]}. ${t}</div>`).join('') : ''}</div>
         <hr class="div"><div class="caption">Liên hệ: ${st.contact && st.tpl !== 'intro' ? 'đang kèm' : 'đang ẩn'}<br>Mẫu: ${esc(tpl.label)}<br>Dữ liệu: ${m.allPubs.length} công bố, ${m.projects.length} đề tài theo bộ lọc · hồ sơ hoàn thiện ${comp.pct}%</div>
         ${comp.missing.filter(x => x.sec === 'I' || x.sec === 'II').length ? `<div class="callout warn" style="margin-top:12px">${icon('alert', 'sm')}<div>Còn trống: ${esc(comp.missing.filter(x => x.sec === 'I' || x.sec === 'II').map(x => x.label).join(', '))}. Ô trống in thành dòng chấm để điền tay.</div></div>` : ''}
-        <button type="button" class="btn primary block" style="margin-top:16px" data-act="exp-preview">${icon('download')}Xem trước & tải</button>
-        ${ok ? `<div class="row" style="margin-top:12px">${expFormats().map(f => `<button type="button" class="btn sm" data-act="exp-download" data-f="${f[0]}">${icon(f[0] === 'print' ? 'print' : 'download', 'sm')}${esc(f[2])}</button>`).join('')}</div>` : ''}
+        ${ok ? `<div class="caption" style="margin-top:14px">Tải lại nhanh bản vừa xem:</div><div class="row" style="margin-top:8px">${expFormats().map(f => `<button type="button" class="btn sm" data-act="exp-download" data-f="${f[0]}">${icon(f[0] === 'print' ? 'print' : 'download', 'sm')}${esc(f[2])}</button>`).join('')}</div>` : ''}
       </div>
-      <div class="callout">${icon('info', 'sm')}<div>Mẫu Bộ GD&ĐT theo Thông tư 08/2011/TT-BGDĐT, Phụ lục V.${S.ws === 'expert' ? ` Muốn điền tay? <button type="button" class="linkbtn" data-act="exp-blank">Tải mẫu trống</button>, điền trong Word rồi tải lên ở <button type="button" class="linkbtn" data-act="go" data-page="import">Nhập từ CV</button>.` : ''}</div></div></div></div>`;
+      <div class="callout">${icon('info', 'sm')}<div>Mẫu Bộ GD&ĐT theo Thông tư 08/2011/TT-BGDĐT, Phụ lục V.${S.ws === 'expert' ? ` Muốn điền tay? Dùng nút <b>Tải mẫu trống</b> ở trên, điền trong Word rồi tải lên ở <button type="button" class="linkbtn" data-act="go" data-page="import">Nhập từ CV</button>.` : ''}</div></div></div></div>`;
   },
   mount() {
     $$('[data-exp]').forEach(el => el.addEventListener('change', () => {
@@ -4412,6 +4411,11 @@ boot();
 .sum-row em{display:block;height:100%;border-radius:999px;background:var(--sl-brand-default)}
 .sum-row b{text-align:right}
 .pub-type-tabs{flex-wrap:wrap}
+/* Thẻ tài khoản: hiện đủ email (xuống dòng khi dài), vai trò ở dòng riêng */
+#meUnit{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;margin-top:6px!important}
+#meUnit .acct-mail{display:block;margin:0;overflow-wrap:anywhere;word-break:break-all;white-space:normal}
+#meUnit .acct-role{display:inline-block;margin:6px 0 0;padding:1px 8px;border-radius:999px;background:var(--sl-brand-subtle);color:var(--sl-brand-ink);font-size:12px;font-weight:600;white-space:nowrap}
+#meName{white-space:normal!important;overflow-wrap:anywhere}
 .quick-field.is-off input{background:var(--sl-bg-subtle);cursor:not-allowed}
 .quick-field.is-off>span{color:var(--sl-text-secondary)}
 .cv-files .li{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--sl-border-default)}
