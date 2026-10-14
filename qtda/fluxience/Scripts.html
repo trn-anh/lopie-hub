@@ -45,7 +45,7 @@ var SL = (function () {
   var PUB_STATUS = {
     draft: { label: 'Nháp', tone: 'neutral' },
     needs_file: { label: 'Cần bổ sung', tone: 'warning' },
-    pending: { label: 'Chờ duyệt', tone: 'info' },
+    pending: { label: 'Đang xử lý', tone: 'info' },
     needs_info: { label: 'Cần bổ sung', tone: 'warning' },
     verified: { label: 'Đã xác minh', tone: 'success' },
     rejected: { label: 'Không đạt', tone: 'danger' }
@@ -60,6 +60,16 @@ var SL = (function () {
 
   /* Mục I–II của mẫu LLKH (TT 08/2011/TT-BGDĐT, Phụ lục V). key = cột trong sheet Profiles */
   var PROFILE_FIELDS = [
+    { key: 'idType', label: 'Loại giấy tờ', sec: 'X', sensitive: true },
+    { key: 'mapLat', label: 'Vĩ độ', sec: 'X', contact: true },
+    { key: 'mapLng', label: 'Kinh độ', sec: 'X', contact: true },
+    { key: 'mapPlaceId', label: 'Mã địa điểm', sec: 'X', contact: true },
+    { key: 'mapConfirmed', label: 'Đã xác nhận ghim', sec: 'X', contact: true },
+    { key: 'ugStatus', label: 'Trạng thái đào tạo', sec: 'X' },
+    { key: 'ugExpectedYear', label: 'Năm dự kiến tốt nghiệp', sec: 'X' },
+    { key: 'hasUg2', label: 'Có bằng đại học thứ hai', sec: 'X' },
+    { key: 'hasMaster', label: 'Có bằng thạc sĩ', sec: 'X' },
+    { key: 'hasPhd', label: 'Có bằng tiến sĩ', sec: 'X' },
     { key: 'fullName', label: 'Họ và tên', sec: 'I', req: true },
     { key: 'gender', label: 'Giới tính', sec: 'I', req: true },
     { key: 'dob', label: 'Ngày, tháng, năm sinh', sec: 'I', req: true, type: 'date' },
@@ -78,7 +88,7 @@ var SL = (function () {
     { key: 'mobile', label: 'Di động', sec: 'I', contact: true },
     { key: 'fax', label: 'Fax', sec: 'I', contact: true },
     { key: 'contactEmail', label: 'E-mail', sec: 'I', contact: true },
-    { key: 'idNumber', label: 'Số CMND/CCCD', sec: 'I', contact: true, sensitive: true },
+    { key: 'idNumber', label: 'Số căn cước / CMND lịch sử', sec: 'I', contact: true, sensitive: true },
     { key: 'idDate', label: 'Ngày cấp', sec: 'I', contact: true, sensitive: true, type: 'date' },
     { key: 'idPlace', label: 'Nơi cấp', sec: 'I', contact: true, sensitive: true },
     { key: 'field', label: 'Lĩnh vực chuyên môn', sec: 'X', req: true },
@@ -196,7 +206,7 @@ var SL = (function () {
   function eligible(degree, levelCode, rules, list) {
     var lv = null;
     (rules || LEVELS).forEach(function (l) { if (l.code === levelCode) lv = l; });
-    if (!lv) return { ok: true, reason: '' };
+    if (!lv) return { ok: !levelCode, reason: levelCode ? 'Bậc đào tạo chưa có trong quy chế đơn vị.' : '' };
     var have = rankOf(list || DEGREES, degree), need = rankOf(list || DEGREES, lv.minDegree);
     if (!degree) return { ok: false, reason: 'Chưa có học vị đã xác minh. Cần tối thiểu ' + lv.minDegree + ' cho bậc ' + lv.label + '.' };
     if (have < need) return { ok: false, reason: 'Bậc ' + lv.label + ' cần tối thiểu ' + lv.minDegree + '; học vị đã xác minh: ' + degree + '.' };
@@ -204,13 +214,23 @@ var SL = (function () {
   }
 
   /* ---------- Mức hoàn thiện hồ sơ ---------- */
+  /** Trạng thái đại học: 'studying' (sinh viên chưa tốt nghiệp) | 'graduated' | '' (chưa khai). Hiểu cả chữ nhập tay như "Chưa", "Đang học". */
+  function ugState(p) {
+    p = p || {};
+    var s = fold(p.ugStatus || ''), y = fold(p.ugYear || '');
+    if (s === 'studying' || /dang hoc|chua tot nghiep|sinh vien/.test(s)) return 'studying';
+    if (s === 'graduated' || /da tot nghiep/.test(s)) return 'graduated';
+    if (/^(19|20)\d{2}$/.test(trim(p.ugYear))) return 'graduated';
+    if (/chua|dang hoc|du kien|sinh vien|hien nay/.test(y)) return 'studying';
+    return '';
+  }
   function completeness(p, d) {
     p = p || {}; d = d || {};
     var missing = [], total = 0, have = 0;
     PROFILE_FIELDS.forEach(function (f) {
       if (!f.req) return;
       total++;
-      if (trim(p[f.key])) have++; else missing.push({ key: f.key, label: f.label, sec: f.sec });
+      if (trim(p[f.key]) || (f.key === 'ugYear' && ugState(p) === 'studying')) have++; else missing.push({ key: f.key, label: f.label, sec: f.sec });
     });
     var extra = [
       { ok: !!d.degree, label: 'Học vị đã xác minh', sec: 'cred' },
@@ -464,6 +484,13 @@ var SL = (function () {
       var d2 = parseDate(out.fields[k].value);
       if (d2.ok) out.fields[k].value = d2.iso; else flag(k, 'Ngày cấp chưa đúng định dạng dd/mm/yyyy.');
     });
+    // "Năm tốt nghiệp: Chưa / Đang học (dự kiến 2029)" → sinh viên chưa tốt nghiệp, không hiểu nhầm năm dự kiến thành năm tốt nghiệp
+    if (out.fields.ugYear && ugState({ ugYear: out.fields.ugYear.value }) === 'studying') {
+      var ey = yearOf(out.fields.ugYear.value);
+      delete out.fields.ugYear;
+      set('ugStatus', 'studying');
+      if (ey) set('ugExpectedYear', ey);
+    }
     ['ugYear', 'ug2Year', 'msYear', 'phdYear'].forEach(function (k) {
       if (out.fields[k] && !/^(19|20)\d{2}$/.test(out.fields[k].value)) {
         var y = yearOf(out.fields[k].value);
@@ -799,12 +826,139 @@ var SL = (function () {
     CRED_KINDS: CRED_KINDS, PROJECT_LEVELS: PROJECT_LEVELS, PROJECT_ROLES: PROJECT_ROLES, PROFILE_FIELDS: PROFILE_FIELDS,
     str: str, trim: trim, fold: fold, normTitle: normTitle, normDoi: normDoi, isDoi: isDoi, words: words, pad: pad,
     parseDate: parseDate, fmtDate: fmtDate, yearOf: yearOf, rankOf: rankOf, normDegree: normDegree, normTitleRank: normTitleRank,
-    highest: highest, eligible: eligible, completeness: completeness, sameWork: sameWork, findDup: findDup, dedupe: dedupe,
+    highest: highest, eligible: eligible, completeness: completeness, ugState: ugState, sameWork: sameWork, findDup: findDup, dedupe: dedupe,
     pubNeedsFile: pubNeedsFile, needOn: needOn, matchScore: matchScore, labelOf: labelOf, periodKey: periodKey,
     periodLabel: periodLabel, statDate: statDate, docxToDoc: docxToDoc, parseLLKH: parseLLKH, parseRef: parseRef,
     splitPeriod: splitPeriod
   };
 })();
+
+/* Shared validation runs in the browser, demo and Apps Script. */
+var FXRules = (function () {
+  function date(v, label, today, full) {
+    var d = SL.parseDate(v);
+    if (!d.ok || (full && d.partial)) throw new Error(label + ': nhập ngày đầy đủ, hợp lệ (dd/mm/yyyy).');
+    if (d.iso > today) throw new Error(label + ': không được ở tương lai.');
+    return d.iso;
+  }
+  function year(v, label, today) {
+    if (!/^(19|20)\d{2}$/.test(String(v)) || +v > +today.slice(0, 4)) throw new Error(label + ': nhập năm 4 chữ số, không vượt năm hiện tại.');
+  }
+  function phone(v, mobile) {
+    var n = SL.trim(v).replace(/[\s().-]/g, '').replace(/^\+84/, '0');
+    if (!n) return '';
+    if (!(mobile ? /^0[35789]\d{8}$/ : /^(0[35789]\d{8}|02\d{9})$/).test(n)) throw new Error(mobile ? 'Di động Việt Nam: 10 chữ số, đầu 03/05/07/08/09; chấp nhận +84 thay số 0.' : 'Điện thoại/Fax Việt Nam: di động 10 số hoặc cố định 11 số (gồm mã vùng 02).');
+    return n;
+  }
+  function profile(p, current, today) {
+    p = Object.assign({}, p);
+    // Sinh viên chưa tốt nghiệp: chấp nhận chữ "Chưa", "Đang học" ở ô năm (giao diện cũ) và chuẩn hóa về trạng thái
+    if ('ugStatus' in p || 'ugYear' in p) {
+      var st = SL.ugState({ ugStatus: p.ugStatus, ugYear: p.ugYear });
+      if ('ugStatus' in p || st === 'studying') p.ugStatus = st;
+      if (st === 'studying') {
+        if (!p.ugExpectedYear && /(19|20)\d{2}/.test(SL.trim(p.ugYear)) && !/^(19|20)\d{2}$/.test(SL.trim(p.ugYear))) p.ugExpectedYear = SL.yearOf(p.ugYear);
+        p.ugYear = '';
+      }
+    }
+    var row = Object.assign({}, current || {}, p), out = Object.assign({}, p);
+    SL.PROFILE_FIELDS.forEach(function (f) {
+      if (!(f.key in p)) return;
+      if (f.req && !SL.trim(p[f.key]) && f.key !== 'ugYear') throw new Error(f.label + ': bắt buộc nhập.');
+      if (f.type === 'date' && p[f.key]) { out[f.key] = date(p[f.key], f.label, today, true); row[f.key] = out[f.key]; }
+      if (/Year$/.test(f.key) && f.key !== 'ugExpectedYear' && p[f.key]) year(p[f.key], f.label, today);
+    });
+    ['mobile', 'phoneOffice', 'phoneHome', 'fax'].forEach(function (k) { if (k in p) out[k] = phone(p[k], k === 'mobile'); });
+    if (row.idNumber) {
+      var type = row.idType || (/^\d{9}$/.test(row.idNumber) ? 'legacy' : 'cccd');
+      if (type === 'legacy') {
+        if (!/^(\d{9}|\d{12})$/.test(row.idNumber)) throw new Error('CMND lưu lịch sử gồm 9 hoặc 12 chữ số; CMND hết giá trị sử dụng sau 31/12/2024.');
+      } else if (['cccd', 'identity'].indexOf(type) < 0 || !/^\d{12}$/.test(row.idNumber)) throw new Error('CCCD/căn cước phải gồm đúng 12 chữ số, giữ cả số 0 đầu.');
+      if (row.idDate) {
+        if (row.dob && row.idDate < SL.parseDate(row.dob).iso) throw new Error('Ngày cấp căn cước không được trước ngày sinh.');
+        if (type === 'identity' && row.idDate < '2024-07-01') throw new Error('Thẻ căn cước theo mẫu 2024 được cấp từ 01/07/2024.');
+        if (type === 'cccd' && row.idDate < '2016-01-01') throw new Error('Kiểm tra lại loại giấy tờ: CCCD bắt đầu cấp từ năm 2016.');
+      }
+      if ('idNumber' in p && (!row.idDate || !row.idPlace)) throw new Error('Có số giấy tờ thì cần ngày cấp và cơ quan cấp theo giấy tờ.');
+      out.idType = type;
+    } else if ('idNumber' in p) { out.idDate = ''; out.idPlace = ''; }
+    var groups = [['hasUg2', ['ug2Major', 'ug2Year']], ['hasMaster', ['msMajor', 'msYear', 'msPlace']], ['hasPhd', ['phdMajor', 'phdYear', 'phdPlace', 'thesis']]];
+    groups.forEach(function (g) {
+      if (!(g[0] in p)) return;
+      var on = p[g[0]] === true || String(p[g[0]]) === 'true';
+      out[g[0]] = String(on);
+      g[1].forEach(function (k) { if (!on) out[k] = ''; else if (!SL.trim(row[k])) throw new Error((SL.PROFILE_FIELDS.find(function(f){return f.key===k;}) || {}).label + ': bắt buộc khi đã có bằng.'); });
+    });
+    if ('ugStatus' in p && ['studying', 'graduated'].indexOf(p.ugStatus) < 0) throw new Error('Chọn trạng thái đào tạo đại học: Đang học hoặc Đã tốt nghiệp.');
+    if (row.ugStatus === 'graduated' && 'ugStatus' in p && !row.ugYear) throw new Error('Đã tốt nghiệp: cần năm tốt nghiệp đại học.');
+    if (row.ugStatus === 'studying') { out.ugYear = ''; row.ugYear = ''; }
+    else if ('ugStatus' in p) out.ugExpectedYear = '';
+    if (row.ugStatus === 'studying' && row.ugExpectedYear) {
+      if (!/^(19|20)\d{2}$/.test(String(row.ugExpectedYear))) throw new Error('Năm dự kiến tốt nghiệp: nhập năm 4 chữ số.');
+      if (+row.ugExpectedYear < +today.slice(0, 4) - 1 || +row.ugExpectedYear > +today.slice(0, 4) + 8) throw new Error('Năm dự kiến tốt nghiệp nằm trong khoảng ' + (+today.slice(0, 4) - 1) + '–' + (+today.slice(0, 4) + 8) + '.');
+    }
+    ['ugYear', 'ug2Year', 'msYear', 'phdYear'].forEach(function(k) {
+      if (row[k] && row.dob && +row[k] < +SL.parseDate(row.dob).iso.slice(0,4)) throw new Error('Năm đào tạo không được trước năm sinh.');
+    });
+    if (row.ugYear && row.msYear && +row.msYear < +row.ugYear) throw new Error('Năm cấp bằng thạc sĩ không được trước năm tốt nghiệp đại học.');
+    if (row.ugYear && row.phdYear && +row.phdYear < +row.ugYear) throw new Error('Năm cấp bằng tiến sĩ không được trước năm tốt nghiệp đại học.');
+    // Direct bachelor-to-doctorate routes exist: a master's degree is not mandatory.
+    if ('mapLat' in p || 'mapLng' in p) {
+      if (!!row.mapLat !== !!row.mapLng) throw new Error('Cần đủ cả vĩ độ và kinh độ.');
+      if (row.mapLat && (!Number.isFinite(+row.mapLat) || Math.abs(+row.mapLat) > 90 || !Number.isFinite(+row.mapLng) || Math.abs(+row.mapLng) > 180)) throw new Error('Tọa độ bản đồ không hợp lệ.');
+    }
+    return out;
+  }
+  var results = ['Xuất sắc', 'Đạt', 'Không đạt'];
+  function project(r, today) {
+    var x = Object.assign({}, r);
+    if (!SL.trim(x.name)) throw new Error('Đề tài: cần tên đề tài (không dùng mã số thay tên).');
+    ['from', 'level', 'role'].forEach(function(k){ if(!SL.trim(x[k])) throw new Error('Đề tài: cần năm bắt đầu, cấp đề tài và trách nhiệm.'); });
+    year(x.from, 'Năm bắt đầu', today);
+    if (x.to) { year(x.to, 'Năm hoàn thành', today); if (+x.to < +x.from) throw new Error('Năm hoàn thành không được trước năm bắt đầu.'); }
+    if (['unknown', 'ongoing', 'awaiting', 'accepted'].indexOf(x.acceptance || '') < 0) throw new Error('Chọn tình trạng thực hiện/nghiệm thu.');
+    if (x.acceptance === 'accepted') {
+      x.acceptanceDate = date(x.acceptanceDate, 'Ngày nghiệm thu', today, true);
+      if (!x.to || +x.acceptanceDate.slice(0,4) < +x.from || +x.acceptanceDate.slice(0,4) < +x.to) throw new Error('Đã nghiệm thu: cần năm hoàn thành và ngày nghiệm thu từ năm hoàn thành trở đi.');
+      if (!x.acceptanceRule || !SL.trim(x.acceptanceResult)) throw new Error('Đã nghiệm thu: chọn quy chế và nhập kết quả theo biên bản.');
+      if (x.acceptanceRule === 'three_levels' && results.indexOf(x.acceptanceResult) < 0) throw new Error('Quy chế 3 mức: Xuất sắc / Đạt / Không đạt.');
+      if (['three_levels', 'institution'].indexOf(x.acceptanceRule) < 0) throw new Error('Quy chế nghiệm thu không hợp lệ.');
+      if (!SL.trim(x.acceptanceBasis)) throw new Error('Cần số/tên quy chế hoặc biên bản làm căn cứ xếp loại.');
+    } else { ['acceptanceDate','acceptanceRule','acceptanceResult','acceptanceBasis'].forEach(function(k){x[k]='';}); }
+    if (x.evidenceUrl && !/^https:\/\/[^\s]+$/.test(x.evidenceUrl)) throw new Error('Link minh chứng đề tài cần bắt đầu bằng https://.');
+    return x;
+  }
+  function credential(x, today, degrees, titles) {
+    if (['degree','title','position'].indexOf(x.kind) < 0) throw new Error('Loại học thuật không hợp lệ.');
+    var list = x.kind === 'degree' ? degrees : x.kind === 'title' ? titles : null;
+    if (!SL.trim(x.value) || (list && list.indexOf(x.value) < 0)) throw new Error('Chọn học vị/chức danh trong danh mục; chức vụ được nhập tự do.');
+    date(x.date, 'Ngày cấp bằng / bổ nhiệm', today, true);
+    if (x.recognitionDate) { var r=date(x.recognitionDate,'Ngày công nhận đạt tiêu chuẩn',today,true); if(r > SL.parseDate(x.date).iso) throw new Error('Ngày công nhận đạt tiêu chuẩn không được sau ngày bổ nhiệm.'); }
+    if (x.source !== 'cv' && (!SL.trim(x.country) || !SL.trim(x.issuer))) throw new Error('Cần nước nhận học vị và cơ quan cấp bằng/quyết định.');
+    if (x.source !== 'cv' && x.kind === 'title' && !SL.trim(x.decisionNo)) throw new Error('Chức danh GS/PGS cần số quyết định bổ nhiệm.');
+  }
+  function sortPubs(a,b) { return (+b.year || 0) - (+a.year || 0) || (+b.month || 0) - (+a.month || 0) || String(a.title || '').localeCompare(String(b.title || ''),'vi') || String(a.id || '').localeCompare(String(b.id || '')); }
+  function evidenceDecision(ai, kind, expected, today) {
+    if (!ai || !['match','mismatch','uncertain'].includes(ai.verdict) || !ai.extracted || typeof ai.extracted !== 'object' || !Number.isFinite(ai.confidence) || ai.confidence < 0 || ai.confidence > 1 || !Array.isArray(ai.quotes) || typeof ai.reason !== 'string') throw new Error('Gemini trả cấu trúc không hợp lệ.');
+    var z = ai.extracted, same = function(a,b){return SL.normTitle(a) && SL.normTitle(a) === SL.normTitle(b);};
+    var ok = ai.verdict === 'match' && ai.confidence >= .95 && ai.quotes.some(function(q){return typeof q==='string' && q.trim().length>=12;}) && z.issuer && z.documentType;
+    if (kind === 'cred') {
+      var dn = SL.parseDate(z.date);
+      ok = ok && same(z.personName, expected.personName) && same(z.value,expected.value) && z.kind === expected.kind && dn.ok && !dn.partial && dn.iso === expected.date && same(z.issuer,expected.issuer);
+      if (expected.kind === 'title') ok = ok && same(z.decisionNo,expected.decisionNo);
+    } else if (kind === 'project') {
+      ok = ok && same(z.title,expected.title) && same(z.personName,expected.personName) && same(z.level,expected.level) && same(z.role,expected.role);
+      if (expected.code) ok = ok && same(z.code,expected.code);
+      if (expected.acceptance === 'accepted') { var ad=SL.parseDate(z.acceptanceDate); ok=ok && ad.ok && !ad.partial && ad.iso===expected.acceptanceDate && same(z.acceptanceResult,expected.acceptanceResult); }
+    } else {
+      ok = ok && same(z.title,expected.title) && String(z.year) === String(expected.year) && same(z.venue,expected.venue) && same(z.authors,expected.authors);
+      if (expected.doi) ok = ok && SL.normDoi(z.doi) === SL.normDoi(expected.doi);
+    }
+    return { status: ok ? 'verified' : ai.verdict === 'mismatch' ? 'needs_info' : 'pending', aiStatus: ok ? 'matched' : ai.verdict === 'mismatch' ? 'mismatch' : 'uncertain', note: SL.trim(ai.reason).slice(0,700) || (ok ? 'AI đối chiếu nội dung minh chứng khớp hồ sơ.' : 'Cần quản trị viên đối chiếu minh chứng.') };
+  }
+  return { date:date, year:year, phone:phone, profile:profile, project:project, credential:credential, sortPubs:sortPubs, results:results, evidenceDecision:evidenceDecision };
+})();
+
 /* ==== SL-SHARED END ==== */
 </script>
 <script>
@@ -834,7 +988,7 @@ function pubBadge(p) {
   const s = SL.PUB_STATUS[p.status] || SL.PUB_STATUS.draft;
   return badge(s.label, s.tone);
 }
-const CRED_STATUS = { pending: ['Chờ xác minh', 'warning'], verified: ['Đã xác minh', 'success'], needs_info: ['Cần bổ sung', 'warning'], rejected: ['Không ghi nhận', 'danger'] };
+const CRED_STATUS = { needs_file: ['Cần minh chứng', 'warning'], pending: ['Đang xử lý', 'warning'], verified: ['Đã xác minh', 'success'], needs_info: ['Cần bổ sung', 'warning'], rejected: ['Không ghi nhận', 'danger'] };
 const credBadge = c => badge(...(CRED_STATUS[c.status] || ['—', '']));
 const MATCH_STATUS = { draft: ['Chờ gửi', ''], sent: ['Đã gửi', 'info'], seen: ['Đã xem', 'info'], interested: ['Quan tâm', 'success'], declined: ['Từ chối', 'danger'] };
 const pubType = c => SL.labelOf(SL.PUB_TYPES, c);
@@ -880,7 +1034,7 @@ const COUNTRIES = ['Việt Nam', 'Hoa Kỳ', 'Anh', 'Úc', 'Pháp', 'Đức', 'N
       const pick = document.createElement('input'); pick.type = 'date'; pick.className = 'date-native'; pick.title = 'Chọn ngày trên lịch'; pick.setAttribute('aria-label', 'Chọn ngày trên lịch');
       const today = new Date().toISOString().slice(0, 10);
       if (inp.name === 'until') pick.min = today;
-      if (inp.name === 'dob' || inp.name === 'date' || inp.name === 'idDate') pick.max = today;
+      if (inp.name === 'dob' || inp.name === 'date' || inp.name === 'idDate' || inp.name === 'recognitionDate' || inp.name === 'acceptanceDate') pick.max = today;
       if (inp.disabled || inp.readOnly) pick.disabled = true;
       wrap.append(ic, pick);
     });
@@ -1059,7 +1213,7 @@ const MockAPI = (function () {
     const brand = { APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME, CITY: st.CITY, FORM_CODE: st.FORM_CODE, PUB_CRITERIA: st.PUB_CRITERIA };
     const e = who();
     const accounts = db.Users.map(u => ({ email: u.email, name: u.name, unit: u.unit, roles: u.roles, status: u.status }));
-    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.21-demo' });
+    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.23-demo' });
     const u = db.Users.find(x => x.email === e);
     if (!u) {
       const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: 'expert' };
@@ -1070,7 +1224,7 @@ const MockAPI = (function () {
     if (u.status === 'rejected') return wait({ state: 'denied', rejected: true, note: u.reviewNote, email: e, settings: brand, accounts, contact: ADMIN });
     if (u.status !== 'active') return wait({ state: 'disabled', email: e, settings: brand, accounts, contact: ADMIN });
     const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs.indexOf('admin') >= 0 ? 'admin' : rs[0];
-    const base = { state: 'ok', demo: true, version: '1.21-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
+    const base = { state: 'ok', demo: true, version: '1.23-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
     if (w === 'admin') {
       const der = {}; db.Users.forEach(x => { der[x.email] = derived(x.email); });
       return wait(Object.assign(base, { users: db.Users, profiles: db.Profiles, derivedAll: der, credentials: db.Credentials, pubs: db.Publications, needsAll: db.Needs, work: db.Work, projects: db.Projects, awards: db.Awards, rounds: db.Rounds, matchesAll: db.Matches, files: db.Files, supportAll: db.Support }));
@@ -1085,7 +1239,7 @@ const MockAPI = (function () {
   }
   const clip = (v, n) => SL.trim(v).slice(0, n || 500);
   function cleanPub(p, email) {
-    return { type: SL.PUB_TYPES.some(t => t.code === p.type) ? p.type : 'journal', title: clip(p.title, 400), authors: clip(p.authors), year: SL.yearOf(p.year), month: /^(0?[1-9]|1[0-2])$/.test(String(p.month || '')) ? String(Number(p.month)) : '', venue: clip(p.venue, 300), issn: clip(p.issn, 30), volume: clip(p.volume, 30), pages: clip(p.pages, 30), doi: SL.normDoi(p.doi), keywords: clip(p.keywords, 300), email };
+    return { type: SL.PUB_TYPES.some(t => t.code === p.type) ? p.type : 'journal', title: clip(p.title, 400), authors: clip(p.authors), year: SL.yearOf(p.year), month: /^(0?[1-9]|1[0-2])$/.test(String(p.month || '')) ? String(Number(p.month)) : '', venue: clip(p.venue, 300), issn: clip(p.issn, 30), volume: clip(p.volume, 30), pages: clip(p.pages, 30), doi: SL.normDoi(p.doi), keywords: clip(p.keywords, 300), sourceUrl:clip(p.sourceUrl,500), email };
   }
   /** Đọc .docx ngay trên trình duyệt: tìm word/document.xml trong file zip rồi giải nén deflate. */
   async function readDocx(file) {
@@ -1119,6 +1273,7 @@ const MockAPI = (function () {
     reset: () => { db = seed(); save(); },
     bootstrap: ws => boot(ws),
     saveProfile: guard((u, p) => {
+      p=FXRules.profile(p, db.Profiles.find(x=>x.email===u.email) || {}, todayISO());
       const out = {}, errs = [];
       SL.PROFILE_FIELDS.forEach(f => {
         if (!(f.key in p)) return;
@@ -1135,17 +1290,19 @@ const MockAPI = (function () {
       return { ok: true, profile: row };
     }, 'expert'),
     saveList: guard((u, kind, rows) => {
-      const defs = { work: ['Work', ['from', 'to', 'place', 'role'], 'place'], projects: ['Projects', ['name', 'from', 'to', 'level', 'role'], 'name'], awards: ['Awards', ['name', 'year', 'org', 'note'], 'name'] };
+      const defs = { work: ['Work', ['from', 'to', 'place', 'role'], 'place'], projects: ['Projects', ['name','from','to','level','role','code','acceptance','acceptanceDate','acceptanceRule','acceptanceResult','acceptanceBasis','evidenceUrl','fileId','fileName'], 'name'], awards: ['Awards', ['name', 'year', 'org', 'note'], 'name'] };
       const d = defs[kind]; if (!d) throw new Error('Danh sách không hợp lệ.');
       const clean = (rows || []).map((r, i) => { const x = { id: r.id || uid(kind[0].toUpperCase()), email: u.email, order: String(i) }; d[1].forEach(k => { x[k] = clip(r[k], 400); }); return x; }).filter(x => x[d[2]]);
+      if(kind==='projects')clean.forEach(x=>Object.assign(x,FXRules.project(x,todayISO())));
       db[d[0]] = db[d[0]].filter(r => r.email !== u.email).concat(clean);
       log(u.email, 'list_save', kind, clean.length + ' dòng');
       return { ok: true, rows: clean };
     }, 'expert'),
     addCredential: guard((u, x) => {
+      FXRules.credential(x,todayISO(),SL.DEGREES.map(x=>x.label),SL.TITLES.map(x=>x.label));
       if (!clip(x.value)) throw new Error('Nhập giá trị (ví dụ: Tiến sĩ).');
       const d = SL.parseDate(x.date); if (!d.ok) throw new Error('Nhập ngày đạt / ngày bổ nhiệm (dd/mm/yyyy).');
-      const row = { id: uid('C'), email: u.email, kind: x.kind, value: clip(x.value, 120), date: d.iso, country: clip(x.country, 60), fileId: x.fileId || '', fileName: x.fileName || '', status: 'pending', source: x.source === 'cv' ? 'cv' : 'manual', note: clip(x.note), reviewNote: '', prevHighest: '', reviewedBy: '', reviewedAt: '', createdAt: nowStr() };
+      const row = { id: uid('C'), email: u.email, kind: x.kind, value: clip(x.value, 120), date: d.iso, country: clip(x.country, 60), issuer:x.issuer || '',decisionNo:x.decisionNo || '',recognitionDate:x.recognitionDate || '', fileId: x.fileId || '', fileName: x.fileName || '', status: 'pending', source: x.source === 'cv' ? 'cv' : 'manual', note: clip(x.note), reviewNote: '', prevHighest: '', reviewedBy: '', reviewedAt: '', createdAt: nowStr() };
       db.Credentials.push(row); log(u.email, 'credential_add', row.id, row.kind + ': ' + row.value);
       return { ok: true, credential: row };
     }, 'expert'),
@@ -1183,6 +1340,7 @@ const MockAPI = (function () {
     }),
     savePublication: guard((u, p, action) => {
       const x = cleanPub(p, u.email), e = [];
+      if(!x.authors)e.push('Nhập tác giả công bố.');
       if (!x.title) e.push('Nhập tên bài báo / công trình.'); if (!x.year) e.push('Nhập năm xuất bản.');
       if (!x.venue) e.push(x.type === 'book' || x.type === 'textbook' ? 'Nhập nhà xuất bản.' : 'Nhập tên tạp chí / hội nghị.');
       if (x.doi && !SL.isDoi(x.doi)) e.push('DOI có dạng 10.xxxx/....');
@@ -1231,6 +1389,7 @@ const MockAPI = (function () {
       if (/^pub:/.test(link)) { const p = db.Publications.find(r => 'pub:' + r.id === link && r.email === u.email); if (!p) throw new Error('Công bố không thuộc hồ sơ của bạn.'); p.fileId = row.id; p.fileName = row.name; if (p.status === 'needs_info') p.status = 'pending'; }
       if (/^cred:/.test(link)) { const c = db.Credentials.find(r => 'cred:' + r.id === link && r.email === u.email); if (c) { c.fileId = row.id; c.fileName = row.name; if (c.status === 'needs_info') c.status = 'pending'; } }
       log(u.email, 'file_upload', row.id, row.name + ' · v' + row.version);
+      if(/^project:/.test(link)){const p=db.Projects.find(x=>'project:'+x.id===link && x.email===u.email);if(!p)throw new Error('Đề tài không thuộc hồ sơ.');p.fileId=row.id;p.fileName=row.name;}
       return { ok: true, file: row };
     }),
     getFile: guard((u, id) => {
@@ -1255,6 +1414,7 @@ const MockAPI = (function () {
     importCV: async plan => {
       load(); const u = me(); let added = 0, merged = 0;
       if (plan.fields && Object.keys(plan.fields).length || plan.languages) await api.saveProfile(Object.assign({}, plan.fields, plan.languages ? { languages: plan.languages } : {}));
+      if(plan.projects && plan.projects.rows)plan.projects.rows=plan.projects.rows.map(r=>Object.assign({acceptance:'unknown'},r));
       for (const k of ['work', 'projects', 'awards']) {
         const part = plan[k]; if (!part || !part.rows || !part.rows.length) continue;
         const sheet = { work: 'Work', projects: 'Projects', awards: 'Awards' }[k];
@@ -1360,7 +1520,8 @@ const API = IS_GAS ? ServerAPI : MockAPI;
 /* =====================================================================
    TRẠNG THÁI & ĐIỀU HƯỚNG
    ===================================================================== */
-const UI_VERSION = '1.21';
+const UI_VERSION = '1.23';
+{ const bi = document.querySelector('.build-info'); if (bi) bi.textContent = 'Fluxience · v' + UI_VERSION; }
 const S = { data: null, ws: '', route: { page: '', q: {} }, busy: 0, ui: {}, drafts: {}, formDrafts: {}, structuredDirty: {} };
 let sessionRevision = 0, refreshRevision = 0;
 const WS_KEY = 'sl-ws';
@@ -1624,7 +1785,7 @@ function comboOpen(wrap) {
   let list = wrap.querySelector('.combo-list');
   if (!list) { list = document.createElement('div'); list.className = 'combo-list'; list.setAttribute('role', 'listbox'); wrap.appendChild(list); }
   list.innerHTML = hits.length ? hits.map((o, i) => `<button type="button" role="option" data-pick="${esc(o)}" class="${i === 0 ? 'on' : ''}">${esc(o)}</button>`).join('')
-    : `<div class="none">Không có kết quả${wrap.dataset.free ? ' — giữ nội dung bạn gõ' : ''}.</div>`;
+    : `<div class="none">Không có kết quả${wrap.dataset.free === '1' ? ' — giữ nội dung bạn gõ' : ''}.</div>`;
   inp.setAttribute('aria-expanded', 'true');
 }
 function comboClose(wrap) { const l = wrap.querySelector('.combo-list'); if (l) l.remove(); const i = wrap.querySelector('input'); if (i) i.setAttribute('aria-expanded', 'false'); }
@@ -1695,6 +1856,7 @@ async function boot(ws) {
     // Không tiết lộ khu vực quản trị: tài khoản không có quyền chỉ thấy thông báo chung.
     if (!(d.roles || []).includes('admin')) return gate(`<div class="auth-eyebrow">QUYỀN TRUY CẬP</div><h1 class="h1">Không thể truy cập</h1><p>Tài khoản <b>${esc(d.me.email)}</b> không có quyền vào khu vực này.</p><button type="button" class="btn primary block" data-act="reload">Tiếp tục vào Fluxience</button><button type="button" class="btn block auth-back" data-act="logout">${icon('swap', 'sm')}Dùng tài khoản khác</button>`);
   }
+  if (d.state === 'ok' && !API.demo && d.version && String(d.version) !== UI_VERSION && (d.roles || []).includes('admin')) toast('Máy chủ v' + d.version + ' khác giao diện v' + UI_VERSION + ': dán lại đủ 4 file rồi Deploy → Manage deployments → ✏️ → New version.', 'error', 15000);
   if (d.state === 'ok') { S.ws = d.ws;if(!Object.prototype.hasOwnProperty.call(VIEWS[S.ws],parseHash().page))location.hash='#/overview'; try { localStorage.setItem(WS_KEY, d.ws); } catch (e) {} $('#gate').hidden = true; $('#app').hidden = false; route(); return; }
   if (d.state === 'login') return showLogin(d);
   if (d.state === 'requested') return showRequested(d);
@@ -1849,7 +2011,7 @@ function wsRenderSection(root, page, q) {
     if (!html || !html.trim()) throw new Error('Mục chưa có nội dung.');
     if (root !== WS.first) html = html.replace('<h1 class="h1">', '<h2 class="h1">').replace('</h1>', '</h2>');
     body.innerHTML = html;
-    restoreFormDrafts(box);
+    restoreFormDrafts(box);styleRequiredMarks(box);
     const rev = routeRevision;
     if (v.mount) Promise.resolve(v.mount(S.route.q)).catch(e => { if (rev === routeRevision) wsError(body, root, e); });
   } catch (e) { wsError(body, root, e); }
@@ -1974,7 +2136,7 @@ function emptyState(ic, text, action) { return `<div class="empty">${icon(ic)}<d
 function formData(form) {
   const o = {};
   $$('input,select,textarea', form).forEach(el => {
-    if (!el.name || el.type === 'file') return;
+    if (!el.name || el.type === 'file' || el.disabled) return;
     if (el.type === 'checkbox') o[el.name] = el.checked;
     else if (el.type === 'radio') { if (el.checked) o[el.name] = el.value; }
     else o[el.name] = el.value;
@@ -2090,7 +2252,7 @@ function cvModel(src, opts) {
   let langs = [];
   try { langs = JSON.parse(p.languages || '[]'); } catch (e) {}
   const okPub = x => opts.pubFilter === 'verified' ? x.status === 'verified' : opts.pubFilter === 'pending' ? (x.status === 'verified' || x.status === 'pending') : x.status !== 'rejected';
-  const pubs = SL.dedupe((src.pubs || []).filter(okPub)).sort((a, b) => String(b.year).localeCompare(String(a.year)) || String(b.month).localeCompare(String(a.month)));
+  const pubs = SL.dedupe((src.pubs || []).filter(okPub)).sort(FXRules.sortPubs);
   const degCred = (src.credentials || []).filter(c => c.kind === 'degree' && c.status === 'verified' && c.value === (src.derived || {}).degree).sort((a, b) => b.date.localeCompare(a.date))[0] || {};
   return {
     p, d: src.derived || {}, degCountry: degCred.country || '', langs,
@@ -2176,7 +2338,7 @@ function cvSecI(m, opts, title) {
     { pairs: [['Chức danh khoa học cao nhất', d.title, 22], ['Năm bổ nhiệm', year(d.titleDate), 12]], w: [65, 35] },
     { pairs: [['Chức vụ (hiện tại hoặc trước khi nghỉ hưu)', p.position || d.position, 40]], w: [100] },
     { pairs: [['Đơn vị công tác (hiện tại hoặc trước khi nghỉ hưu)', p.unit, 30]], w: [100] },
-    { pairs: [['Chỗ ở riêng hoặc địa chỉ liên lạc', hid([p.address, p.province].filter(Boolean).join(', ')), 50]], w: [100] },
+    { pairs: [['Chỗ ở riêng hoặc địa chỉ liên lạc', hid(contactAddress(p)), 50]], w: [100] },
     { pairs: [['Điện thoại liên hệ: CQ', hid(p.phoneOffice), 10], ['NR', hid(p.phoneHome), 10], ['DĐ', hid(p.mobile), 12]], w: [46, 24, 30] },
     { pairs: [['Fax', hid(p.fax), 18], ['E-mail', hid(p.contactEmail), 34]], w: [36, 64] },
     { pairs: [['Số CMND/CCCD', hid(p.idNumber), 12], ['Ngày cấp', hid(SL.fmtDate(p.idDate)), 10], ['Nơi cấp', hid(p.idPlace), 12]], w: [38, 30, 32] },
@@ -2187,7 +2349,7 @@ function cvSecII(m, title) {
   const langs = m.langs.length ? m.langs : [{}, {}, {}];
   return CV.h(title) + CV.grid([{ head: '1. Đại học:' },
     { pairs: [['Hệ đào tạo', p.ugSystem, 50]] }, { pairs: [['Nơi đào tạo', p.ugPlace, 50]] }, { pairs: [['Ngành học', p.ugMajor, 50]] },
-    { pairs: [['Nước đào tạo', p.ugCountry, 26], ['Năm tốt nghiệp', p.ugYear, 12]], w: [62, 38] },
+    { pairs: [['Nước đào tạo', p.ugCountry, 26], ['Năm tốt nghiệp', SL.ugState(p) === 'studying' ? 'Đang học' + (p.ugExpectedYear ? ' (dự kiến ' + p.ugExpectedYear + ')' : '') : p.ugYear, 12]], w: [62, 38] },
     { pairs: [['Bằng đại học 2', p.ug2Major, 26], ['Năm tốt nghiệp', p.ug2Year, 12]], w: [62, 38] },
     { head: '2. Sau đại học' },
     { pairs: [['- Thạc sĩ chuyên ngành', p.msMajor, 26], ['Năm cấp bằng', p.msYear, 12]], w: [62, 38] },
@@ -2260,7 +2422,7 @@ function cvBody(src, opts, st) {
   if (on('I')) h += H(L.I) + CV.p(esc([p.field, p.keywords].filter(Boolean).join(' — ') || '—')) + (p.bio ? CV.p(esc(p.bio)) : '');
   if (on('II')) {
     h += H(L.II);
-    [[p.phdYear, 'Tiến sĩ ' + (p.phdMajor || ''), p.phdPlace], [p.msYear, 'Thạc sĩ ' + (p.msMajor || ''), p.msPlace], [p.ugYear, (p.ugSystem ? 'Đại học (' + p.ugSystem + ') ' : 'Đại học ') + (p.ugMajor || ''), p.ugPlace]]
+    [[p.phdYear, 'Tiến sĩ ' + (p.phdMajor || ''), p.phdPlace], [p.msYear, 'Thạc sĩ ' + (p.msMajor || ''), p.msPlace], [SL.ugState(p) === 'studying' ? 'Đang học' + (p.ugExpectedYear ? ' (dự kiến ' + p.ugExpectedYear + ')' : '') : p.ugYear, (p.ugSystem ? 'Đại học (' + p.ugSystem + ') ' : 'Đại học ') + (p.ugMajor || ''), p.ugPlace]]
       .filter(r => r[0] || r[2]).forEach(r => { h += li(`<b>${esc(r[0] || '')}</b> — ${esc(SL.trim(r[1]))}${r[2] ? ', ' + esc(r[2]) : ''}`); });
     if (p.thesis) h += li('<i>Luận án:</i> ' + esc(p.thesis));
     if (m.langs.length) h += li('<i>Ngoại ngữ:</i> ' + esc(m.langs.map(l => l.name + (l.level ? ' (' + l.level + ')' : '')).join('; ')));
@@ -2369,7 +2531,7 @@ VIEWS.expert.overview = {
           <div class="list">${todo.length ? todo.map(t => `<div class="li"><div class="grow">${esc(t[0])}</div><button type="button" class="btn sm" data-act="go" data-page="${t[1]}" ${t[2] ? `data-q='${esc(JSON.stringify(t[2]))}'` : ''}>${esc(t[3])}${icon('arrow', 'sm')}</button></div>`).join('') : emptyState('check', 'Hồ sơ đã đầy đủ. Bạn có thể xuất lý lịch khoa học.')}</div>
         </div>
         <div class="card"><div class="h2">Công bố gần đây</div>
-          ${d.pubs.length ? `<div class="tbl-wrap"><table class="tbl"><tbody>${d.pubs.slice().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 4).map(p => `<tr class="click" data-act="go" data-page="pub" data-q='${esc(JSON.stringify({ id: p.id }))}'><td>${esc(p.title)}<span class="sub">${esc(pubType(p.type))} · ${esc(p.year)}</span></td><td style="text-align:right">${pubBadge(p)}</td></tr>`).join('')}</tbody></table></div>` : emptyState('file', 'Chưa có công bố.', `<button type="button" class="btn sm primary" data-act="go" data-page="pub">${icon('plus', 'sm')}Thêm công bố</button>`)}
+          ${d.pubs.length ? `<div class="tbl-wrap"><table class="tbl"><tbody>${d.pubs.slice().sort(FXRules.sortPubs).slice(0, 4).map(p => `<tr class="click" data-act="go" data-page="pub" data-q='${esc(JSON.stringify({ id: p.id }))}'><td>${esc(p.title)}<span class="sub">${esc(pubType(p.type))} · ${esc(p.year)}</span></td><td style="text-align:right">${pubBadge(p)}</td></tr>`).join('')}</tbody></table></div>` : emptyState('file', 'Chưa có công bố.', `<button type="button" class="btn sm primary" data-act="go" data-page="pub">${icon('plus', 'sm')}Thêm công bố</button>`)}
         </div>
       </div><div class="stack">
         <div class="card"><div class="h3">Học vị & chức danh</div>
@@ -2417,109 +2579,57 @@ function mountProfileScroll(q) {
 /* ---------- Hồ sơ của tôi ---------- */
 const PROFILE_TABS = [['basic', 'Thông tin cơ bản'], ['edu', 'Học thuật'], ['work', 'Công tác'], ['projects', 'Đề tài'], ['awards', 'Giải thưởng']];
 function profileMapURL(form) { const p = E.profile(); const parts = ['address','ward','province','addressCountry'].map(k => { const el = form && form.elements && form.elements.namedItem(k); return el ? el.value : p[k]; }); return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(parts.filter(Boolean).join(', ') || 'Việt Nam'); }
+function reqMark() { return '<span class="req" aria-label="bắt buộc"> *</span>'; }
 function fieldInput(key, opts) {
-  opts = opts || {};
-  const f = SL.PROFILE_FIELDS.find(x => x.key === key) || { label: key };
-  const p = E.profile();
-  let v = p[key] || '';
-  if (f.type === 'date') v = SL.fmtDate(v);
-  const label = opts.label || f.label;
+  opts=opts || {};
+  const f=SL.PROFILE_FIELDS.find(x=>x.key===key) || {label:key}, p=E.profile(), v=p[key] || '', required=opts.required===undefined?!!f.req:!!opts.required;
   let ctl;
-  if (opts.list) ctl = combo(key, v, opts.list, { free: opts.free, placeholder: opts.placeholder });
-  else if (opts.select) ctl = `<select name="${key}"><option value="">— Chọn —</option>${opts.select.map(o => `<option ${o === v ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
-  else if (opts.area) ctl = `<x-ta name="${key}" rows="3" maxlength="1500">${esc(v)}</x-ta>`;
-  else ctl = `<input name="${key}" value="${esc(v)}" ${f.type === 'date' ? 'placeholder="dd/mm/yyyy" inputmode="numeric"' : ''} ${/Year$/.test(key) ? 'inputmode="numeric" maxlength="4" placeholder="yyyy"' : ''} ${opts.placeholder ? `placeholder="${esc(opts.placeholder)}"` : ''}>`;
-  return `<label class="field ${opts.c || 'c6'}"><span>${esc(label)}${f.req ? ' *' : ''}</span>${ctl}${opts.hint ? `<span class="hint">${esc(opts.hint)}</span>` : ''}</label>`;
+  if(opts.list) ctl=combo(key,v,opts.list,{free:opts.free,placeholder:opts.placeholder,required});
+  else if(opts.select) ctl=`<select name="${key}" ${required?'required':''}><option value="">— Chọn —</option>${opts.select.map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`).join('')}${v && !opts.select.includes(v)?`<option selected>${esc(v)}</option>`:''}</select>`;
+  else if(opts.area) ctl=`<x-ta name="${key}" rows="3" maxlength="1500">${esc(v)}</x-ta>`;
+  else ctl=`<input name="${key}" value="${esc(f.type==='date'&&v?SL.fmtDate(v):v)}" ${f.type==='date'?`placeholder="dd/mm/yyyy" inputmode="numeric"`:key==='contactEmail'?'type="email"':/mobile|phone|fax/i.test(key)?'type="tel" inputmode="tel" maxlength="20"':key==='idNumber'?'inputmode="numeric" maxlength="12" autocomplete="off"':/Year$/.test(key)?`inputmode="numeric" maxlength="4" placeholder="yyyy" min="1900" max="${todayISO().slice(0,4)}"`:''} ${required?'required':''} ${opts.placeholder?`placeholder="${esc(opts.placeholder)}"`:''}>`;
+  return `<label class="field ${opts.c || 'c6'}"><span>${esc(opts.label || f.label)}${required?reqMark():''}</span>${ctl}${opts.hint?`<span class="hint">${esc(opts.hint)}</span>`:''}</label>`;
+}
+function toggleBlock(key,label,fields) {
+  const p=E.profile(), on=p[key]===undefined?fields.some(k=>p[k]):String(p[key])==='true';
+  return `<div class="edu-gate"><label class="check"><input type="checkbox" name="${key}" data-gate="${key}" ${on?'checked':''}><span>${esc(label)}</span></label><div class="fgrid conditional" data-gate-body="${key}" ${on?'':'hidden'}>${fields.map(k=>fieldInput(k,{c:/Year$/.test(k)?'c3':'c9',required:true})).join('')}</div></div>`;
+}
+function mapCard() {
+  const p=E.profile();
+  return `<div class="map-editor"><label class="field"><span>Tìm địa điểm</span><input id="placeSearch" placeholder="Gõ tên đường, trường hoặc địa điểm…" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="placeResults"><span class="hint">Gợi ý địa điểm từ Google Maps. Chọn kết quả rồi xác nhận ghim.</span></label><div id="placeResults" role="listbox" class="place-results" hidden></div><div id="mapStatus" class="caption" role="status">${p.mapConfirmed==='true'?'Đã xác nhận ghim đã lưu.':'Bạn có thể nhập địa chỉ hoặc chọn địa điểm trên bản đồ.'}</div><div id="profileLiveMap" class="live-map" aria-label="Bản đồ chọn địa chỉ"></div><div class="row" style="margin-top:10px"><button type="button" class="btn sm" data-act="map-locate">${icon('map','sm')}Dùng vị trí hiện tại</button><button type="button" class="btn sm primary" data-act="map-confirm">Xác nhận ghim</button><a class="btn sm" data-profile-map href="${esc(profileMapURL())}" target="_blank" rel="noopener noreferrer">Mở Google Maps</a></div><div class="fgrid" style="margin-top:12px">${fieldInput('mapLat',{c:'c6',label:'Vĩ độ',required:false})}${fieldInput('mapLng',{c:'c6',label:'Kinh độ',required:false})}</div><input type="hidden" name="mapPlaceId" value="${esc(p.mapPlaceId || '')}"><input type="hidden" name="mapConfirmed" value="${esc(p.mapConfirmed || 'false')}"><p class="caption">Chỉ lấy vị trí khi bạn bấm nút và cấp quyền. Ghim cần được bạn kiểm tra trước khi lưu.</p></div>`;
 }
 function listEditor(kind) {
-  const d = S.data;
-  const defs = {
-    work: { title: 'Quá trình công tác chuyên môn', cols: [['from', 'Từ năm', 'w-s'], ['to', 'Đến (năm / "nay")', 'w-s'], ['place', 'Nơi công tác'], ['role', 'Công việc đảm nhiệm']] },
-    projects: { title: 'Đề tài nghiên cứu đã và đang tham gia', cols: [['name', 'Tên đề tài'], ['from', 'Năm bắt đầu', 'w-s'], ['to', 'Năm hoàn thành', 'w-s'], ['level', 'Cấp đề tài', 'w-m', E.projectLevels()], ['role', 'Trách nhiệm', 'w-m', SL.PROJECT_ROLES]] },
-    awards: { title: 'Giải thưởng, khen thưởng', cols: [['name', 'Tên giải thưởng'], ['year', 'Năm', 'w-s'], ['org', 'Cơ quan trao tặng']] }
-  }[kind];
-  const rows = S.drafts[kind] || d[kind].slice().sort((a, b) => Number(a.order) - Number(b.order));
-  S.drafts[kind] = rows;
-  return `<div class="card"><div class="row between" style="margin-bottom:16px"><div class="h2">${defs.title}</div><button type="button" class="btn sm" data-act="list-add" data-kind="${kind}">${icon('plus', 'sm')}Thêm dòng</button></div>
-    <form data-form="list" data-kind="${kind}"><div class="tbl-wrap"><table class="tbl edit"><thead><tr><th class="w-xs">TT</th>${defs.cols.map(c => `<th class="${c[2] || ''}">${esc(c[1])}</th>`).join('')}<th class="w-xs"></th></tr></thead><tbody>
-    ${rows.length ? rows.map((r, i) => `<tr data-id="${esc(r.id || '')}"><td class="num">${i + 1}</td>${defs.cols.map(c => `<td>${c[3] ? `<select name="${c[0]}" aria-label="${esc(c[1])}"><option value=""></option>${c[3].map(o => `<option ${o === r[c[0]] ? 'selected' : ''}>${esc(o)}</option>`).join('')}${r[c[0]] && c[3].indexOf(r[c[0]]) < 0 ? `<option selected>${esc(r[c[0]])}</option>` : ''}</select>` : `<input name="${c[0]}" value="${esc(r[c[0]] || '')}" aria-label="${esc(c[1])}">`}</td>`).join('')}
-      <td><button type="button" class="iconbtn" data-act="list-del" data-kind="${kind}" data-i="${i}" aria-label="Xóa dòng">${icon('trash', 'sm')}</button></td></tr>`).join('') : `<tr><td colspan="${defs.cols.length + 2}">${emptyState('list', 'Chưa có dòng nào. Bấm "Thêm dòng" hoặc nhập từ CV.')}</td></tr>`}
-    </tbody></table></div>
-    <div class="row between" style="margin-top:16px"><span class="caption">Thứ tự dòng là thứ tự trong bản xuất.</span><button class="btn primary">${icon('check')}Lưu ${defs.title.toLowerCase()}</button></div></form></div>`;
+  if(kind==='projects') return projectEditor();
+  const defs=kind==='work'?{title:'Quá trình công tác chuyên môn',cols:[['from','Từ năm'],['to','Đến năm / nay'],['place','Nơi công tác'],['role','Công việc đảm nhiệm']]}:{title:'Giải thưởng, khen thưởng',cols:[['name','Tên giải thưởng'],['year','Năm'],['org','Cơ quan trao tặng']]};
+  const rows=S.drafts[kind] || S.data[kind].slice().sort((a,b)=>+a.order-+b.order);S.drafts[kind]=rows;
+  return `<div class="card"><div class="row between"><h3 class="h2">${defs.title}</h3><button type="button" class="btn sm" data-act="list-add" data-kind="${kind}">${icon('plus','sm')}Thêm dòng</button></div><form data-form="list" data-kind="${kind}">${listSortControl(kind)}<div class="tbl-wrap"><table class="tbl edit"><thead><tr><th>TT</th>${defs.cols.map(c=>`<th>${c[1]}</th>`).join('')}<th>Thứ tự</th></tr></thead><tbody>${rows.map((r,i)=>`<tr data-id="${esc(r.id || '')}"><td>${i+1}</td>${defs.cols.map(c=>`<td><input name="${c[0]}" value="${esc(r[c[0]] || '')}" aria-label="${c[1]}" ${c[0]===('work'===kind?'place':'name')?'required':''}></td>`).join('')}<td>${moveButtons(kind,i)}</td></tr>`).join('')}</tbody></table></div><div class="row between" style="margin-top:16px"><span class="caption">Có thể sắp xếp theo năm hoặc chỉnh thứ tự dòng.</span><button class="btn primary">Lưu danh sách</button></div></form></div>`;
+}
+function moveButtons(kind,i) { return `<div class="row"><button type="button" class="iconbtn" data-act="list-move" data-kind="${kind}" data-i="${i}" data-step="-1" aria-label="Đưa lên">↑</button><button type="button" class="iconbtn" data-act="list-move" data-kind="${kind}" data-i="${i}" data-step="1" aria-label="Đưa xuống">↓</button><button type="button" class="iconbtn" data-act="list-del" data-kind="${kind}" data-i="${i}" aria-label="Xóa dòng">${icon('trash','sm')}</button></div>`; }
+function listSortControl(kind) { return `<label class="field list-sort"><span>Sắp xếp danh sách</span><select data-list-sort="${kind}"><option value="manual">Theo thứ tự bạn chọn</option><option value="desc">Năm mới nhất trước</option><option value="asc">Năm cũ nhất trước</option></select></label>`; }
+function projectEditor() {
+  const rows=S.drafts.projects || S.data.projects.slice().sort((a,b)=>+a.order-+b.order);S.drafts.projects=rows;
+  const ctl=(r,k,label,list,required)=>`<label class="field ${k==='name'?'c12':'c6'}"><span>${label}${required?reqMark():''}</span>${k==='name'?`<x-ta name="name" rows="2" required maxlength="400">${esc(r.name || '')}</x-ta>`:list?combo(k,r[k],list,{free:true,required}):`<input name="${k}" value="${esc(k==='acceptanceDate'?SL.fmtDate(r[k]):r[k] || '')}" ${required?'required':''} ${k==='acceptanceDate'?`placeholder="dd/mm/yyyy" inputmode="numeric"`:['from','to'].includes(k)?'inputmode="numeric" maxlength="4"':''}>`}</label>`;
+  return `<div class="card"><div class="row between"><h3 class="h2">Đề tài nghiên cứu đã và đang tham gia</h3><button type="button" class="btn sm" data-act="list-add" data-kind="projects">${icon('plus','sm')}Thêm đề tài</button></div><form data-form="list" data-kind="projects">${listSortControl('projects')}<div class="stack project-list">${rows.map((r,i)=>`<article class="project-row" data-list-row data-id="${esc(r.id || '')}"><div class="row between"><b>Đề tài ${i+1}</b>${moveButtons('projects',i)}</div><div class="fgrid">${ctl(r,'name','Tên đầy đủ của đề tài',null,true)}${ctl(r,'code','Mã đề tài (nếu có)')}${ctl(r,'from','Năm bắt đầu',null,true)}${ctl(r,'to','Năm hoàn thành')}${ctl(r,'level','Cấp đề tài',E.projectLevels(),true)}${ctl(r,'role','Trách nhiệm tham gia',SL.PROJECT_ROLES,true)}<label class="field c12"><span>Tình trạng thực hiện${reqMark()}</span><select name="acceptance" data-project-state required><option value="">— Chọn —</option>${[['unknown','Chưa có thông tin nghiệm thu'],['ongoing','Đang thực hiện'],['awaiting','Hoàn thành, chờ nghiệm thu'],['accepted','Đã có kết quả nghiệm thu']].map(x=>`<option value="${x[0]}" ${(r.acceptance || 'unknown')===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select></label><div class="c12 fgrid conditional" data-acceptance-body ${r.acceptance==='accepted'?'':'hidden'}>${ctl(r,'acceptanceDate','Ngày nghiệm thu',null,true)}<label class="field c6"><span>Quy chế xếp loại${reqMark()}</span><select name="acceptanceRule" data-project-rule required><option value="">— Chọn theo quy chế/biên bản —</option><option value="three_levels" ${r.acceptanceRule==='three_levels'?'selected':''}>Quy chế 3 mức: Xuất sắc / Đạt / Không đạt</option><option value="institution" ${r.acceptanceRule==='institution'?'selected':''}>Quy chế trường / đơn vị / cấp quản lý khác</option></select></label><label class="field c6"><span>Kết quả theo biên bản${reqMark()}</span><input name="acceptanceResult" value="${esc(r.acceptanceResult || '')}" list="fx-acceptance-results" required><span class="hint">Chọn gợi ý hoặc nhập đúng xếp loại trong biên bản.</span></label>${ctl(r,'acceptanceBasis','Số/tên quy chế hoặc biên bản',null,true)}</div>${ctl(r,'evidenceUrl','Link minh chứng (https://)')}<div class="field c6"><span>Biên bản / quyết định nghiệm thu</span>${r.fileId?`<button type="button" class="btn sm" data-act="open-file" data-id="${esc(r.fileId)}">Xem ${esc(r.fileName || 'minh chứng')}</button>`:''}<label class="btn sm">Tải minh chứng<input type="file" hidden accept=".pdf,.png,.jpg,.jpeg" data-project-file="${i}"></label><span class="hint">Lưu đề tài trước khi tải file. Quản trị viên xem được minh chứng.</span></div>${aiStatusHTML(r)}${r.fileId?`<div class="c12">${badge('Minh chứng: '+(r.evidenceStatus==='verified'?'đã xác minh':r.evidenceStatus==='needs_info'?'cần bổ sung':'đang xử lý'),r.evidenceStatus==='verified'?'success':'warning')}<button type="button" class="btn sm" data-act="ai-retry" data-kind="project" data-id="${esc(r.id)}">Đối chiếu AI</button></div>`:''}<input type="hidden" name="fileId" value="${esc(r.fileId || '')}"><input type="hidden" name="fileName" value="${esc(r.fileName || '')}"></div></article>`).join('') || emptyState('list','Chưa có đề tài. Thêm dòng hoặc nhập từ CV.')}</div><datalist id="fx-acceptance-results">${['Xuất sắc','Đạt','Không đạt','Tốt','Khá','Trung bình'].map(x=>`<option value="${x}">`).join('')}</datalist><p class="caption">Xếp loại theo quy chế của đề tài; “Không đạt” vẫn là một kết quả nghiệm thu. Danh mục cấp và trách nhiệm cho phép nhập bổ sung.</p><button class="btn primary">Lưu đề tài nghiên cứu</button></form></div>`;
 }
 function readListDom(kind) {
-  return $$(`form[data-kind="${kind}"] tbody tr[data-id]`).map(tr => { const o = { id: tr.dataset.id }; $$('input,select', tr).forEach(el => { o[el.name] = el.value; }); return o; });
+  return $$(`form[data-kind="${kind}"] [data-list-row],form[data-kind="${kind}"] tbody tr[data-id]`).map(tr=>{const o={id:tr.dataset.id};$$('input,select,textarea',tr).forEach(el=>{if(el.name && el.type!=='file')o[el.name]=el.value;});return o;});
+}
+function academicSummary() {
+  const d=S.data.derived || {}, verified=S.data.credentials.filter(x=>x.status==='verified'), y=v=>SL.yearOf(v) || '—';
+  const latest=value=>verified.filter(x=>x.kind==='title' && x.value===value).sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0];
+  return `<div class="card"><div class="row between"><h3 class="h2">Học vị và chức danh khoa học đã xác minh</h3><a class="btn sm" href="#/profile?tab=cred">Thêm / xem lịch sử</a></div><div class="academic-summary"><div><span>Chức danh khoa học cao nhất</span><b>${esc(d.title || 'Chưa có')}</b></div>${['Phó Giáo sư','Giáo sư'].map(t=>{const c=latest(t);return c?`<div><span>Năm bổ nhiệm ${esc(t)}</span><b>${y(c.date)}</b></div>`:'';}).join('')}<div><span>Học vị cao nhất</span><b>${esc(d.degree || 'Chưa xác minh')}</b></div>${d.degree?`<div><span>Năm nhận học vị</span><b>${y(d.degreeDate)}</b></div>`:''}</div><p class="caption">GS/PGS là chức danh khoa học; học vị lấy từ bằng cấp. Ngày công nhận đạt tiêu chuẩn và ngày bổ nhiệm được lưu riêng. CV lấy mục cao nhất đã xác minh.</p></div>`;
 }
 function renderProfileSection(tab) {
-  const d=S.data;let body='';
-    if (tab === 'basic') {
-      body = `<div class="grid2"><form data-form="profile" class="stack" id="basicProfileForm">
-        <div class="card profile-card"><h2 class="h2">Thông tin cá nhân</h2>
-          <div class="identity-grid">${fieldInput('fullName')}${fieldInput('dob', {label:'Ngày sinh'})}${fieldInput('gender', {select:['Nam','Nữ']})}</div>
-          <div class="category-grid">${fieldInput('ethnicity',{list:ETHNIC})}${fieldInput('nationality',{list:COUNTRIES,free:true})}${fieldInput('birthPlace',{list:PROVINCES,free:true})}</div>
-          <hr class="div"><h3 class="h3">Thông tin liên hệ</h3>
-          <div class="contact-grid">${fieldInput('contactEmail',{label:'Email cơ quan'})}${fieldInput('mobile',{label:'Số điện thoại'})}</div>
-          <div class="category-grid">${fieldInput('addressCountry',{label:'Quốc gia',list:COUNTRIES,free:true})}${fieldInput('province',{label:'Tỉnh / thành phố',list:PROVINCES})}${fieldInput('ward',{label:'Phường / xã'})}</div>
-          <div class="address-field">${fieldInput('address',{label:'Địa chỉ chi tiết',hint:'Nhập địa chỉ và mở Google Maps để kiểm tra. Không tự lấy vị trí của bạn.'})}</div>
-          <div class="panel-sub caption">${icon('map','sm')} Địa chỉ do bạn nhập. Hệ thống chưa tự gợi ý địa điểm hoặc xác nhận ghim.</div>
-        </div>
-        <details class="card profile-more"><summary>Thông tin khác của lý lịch</summary><div class="fgrid">
-          ${fieldInput('hometown',{c:'c4',list:PROVINCES,free:true})}${fieldInput('position',{c:'c4'})}${fieldInput('unit',{c:'c4'})}
-          ${fieldInput('phoneOffice',{c:'c4'})}${fieldInput('phoneHome',{c:'c4'})}${fieldInput('fax',{c:'c4'})}
-          ${fieldInput('idNumber',{c:'c4'})}${fieldInput('idDate',{c:'c4'})}${fieldInput('idPlace',{c:'c4'})}
-        </div></details>
-        <details class="card profile-more"><summary>Chuyên môn & hồ sơ học thuật</summary><div class="fgrid">
-          ${fieldInput('field',{c:'c6',list:E.fields(),free:true})}${fieldInput('keywords',{c:'c6',hint:'Ngăn bằng dấu chấm phẩy'})}
-          ${fieldInput('orcid',{c:'c6',placeholder:'0000-0000-0000-0000'})}${fieldInput('scholarUrl',{c:'c6'})}${fieldInput('bio',{c:'c12',area:true})}
-        </div></details>
-        <div class="row profile-save-row"><span class="caption">Cập nhật: ${esc(fmtDT(E.profile().updatedAt)||'—')}</span><button class="btn primary">Lưu thay đổi</button></div>
-      </form><aside class="stack profile-context" aria-label="Trạng thái hồ sơ và quyền riêng tư">
-        <div class="card"><h2 class="h2">Hồ sơ đáng tin cậy</h2>${badge(d.derived.degree?'Có học vị đã xác minh':'Chưa xác minh học vị',d.derived.degree?'success':'warning')}
-          <p>Học vị cao nhất: ${esc(d.derived.degree||'Chưa có')}<br>Chức danh khoa học: ${esc(d.derived.title||'Chưa có')}<br>Chức vụ: ${esc(E.profile().position||d.derived.position||'Chưa cập nhật')}</p>
-          <a class="btn ghost" href="#/profile?tab=cred">${icon('arrow')}Xem lịch sử học thuật</a>
-        </div>
-        <div class="card">${icon('shield','context-icon')}<h3 class="h3">Bạn kiểm soát thông tin liên hệ</h3><p class="muted">Danh sách gửi đối tác chỉ gồm chuyên môn và hồ sơ căn bản. CV đầy đủ được xuất theo quyền truy cập và lựa chọn của bạn.</p></div>
-        <div class="card place-card">${icon('map','place-icon')}<h3 class="h3">Kiểm tra địa chỉ trên bản đồ</h3><p class="muted">Mở địa chỉ đã nhập trên Google Maps để đối chiếu trước khi lưu.</p><a class="btn" data-profile-map href="${esc(profileMapURL())}" target="_blank" rel="noopener noreferrer">${icon('map','sm')}Mở Google Maps</a></div>
-      </aside></div>`;
-    } else if (tab === 'edu') {
-      let langs = []; try { langs = JSON.parse(E.profile().languages || '[]'); } catch (e) {}
-      S.drafts.langs = S.drafts.langs || (langs.length ? langs : [{ name: '', level: '' }]);
-      body = `<form data-form="profile" class="stack" id="academicProfileForm">
-        <div class="card"><div class="h2">1. Đại học</div><div class="fgrid">
-          ${fieldInput('ugSystem', { c: 'c4', select: ['Chính quy', 'Vừa làm vừa học', 'Liên thông', 'Văn bằng 2', 'Từ xa'] })}${fieldInput('ugPlace', { c: 'c8' })}
-          ${fieldInput('ugMajor', { c: 'c6' })}${fieldInput('ugCountry', { c: 'c3', list: COUNTRIES, free: true })}${fieldInput('ugYear', { c: 'c3' })}
-          ${fieldInput('ug2Major', { c: 'c9', label: 'Bằng đại học 2 (ngành)' })}${fieldInput('ug2Year', { c: 'c3', label: 'Năm tốt nghiệp' })}
-        </div></div>
-        <div class="card"><div class="h2">2. Sau đại học</div><div class="fgrid">
-          ${fieldInput('msMajor', { c: 'c9' })}${fieldInput('msYear', { c: 'c3', label: 'Năm cấp bằng' })}${fieldInput('msPlace', { c: 'c12', label: 'Nơi đào tạo' })}
-          ${fieldInput('phdMajor', { c: 'c9' })}${fieldInput('phdYear', { c: 'c3', label: 'Năm cấp bằng' })}${fieldInput('phdPlace', { c: 'c12', label: 'Nơi đào tạo' })}
-          ${fieldInput('thesis', { c: 'c12', area: true })}
-        </div><div class="callout" style="margin-top:16px">${icon('info', 'sm')}<div>Thông tin đào tạo để in lý lịch. Học vị dùng xét điều kiện vai trò được xác minh riêng ở mục <a href="#/profile?tab=cred">Học vị & chức danh</a>.</div></div></div>
-        <div class="card"><div class="row between"><div class="h2">3. Ngoại ngữ</div><button type="button" class="btn sm" data-act="lang-add">${icon('plus', 'sm')}Thêm ngoại ngữ</button></div>
-          <div class="stack" style="margin-top:16px">${S.drafts.langs.map((l, i) => `<div class="fgrid" data-lang="${i}"><label class="field c6"><span>${i + 1}. Ngoại ngữ</span><input name="lang-name" value="${esc(l.name)}" placeholder="Tiếng Anh"></label><label class="field c6"><span>Mức độ sử dụng</span><div class="row" style="flex-wrap:nowrap"><input name="lang-level" class="input" value="${esc(l.level)}" placeholder="IELTS 7.0 / B2 / thành thạo"><button type="button" class="iconbtn" data-act="lang-del" data-i="${i}" aria-label="Xóa">${icon('trash', 'sm')}</button></div></label></div>`).join('')}</div></div>
-        <div class="row" style="justify-content:flex-end"><button class="btn primary">${icon('check')}Lưu đào tạo</button></div></form>`;
-    } else if (tab === 'cred') {
-      const cs = d.credentials.slice().sort((a, b) => b.date.localeCompare(a.date));
-      body = `<div class="grid2"><div class="card"><div class="h2">Lịch sử học vị, chức danh, chức vụ</div>
-          <p class="muted" style="margin:-8px 0 16px">Mỗi mục có ngày đạt, minh chứng và trạng thái. Cao nhất được tính theo thứ bậc trên các mục đã xác minh — không lấy mục mới nhập.</p>
-          ${cs.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Loại · giá trị</th><th>Ngày đạt</th><th>Minh chứng</th><th>Trạng thái</th><th></th></tr></thead><tbody>${cs.map(x => `<tr><td>${esc(x.value)}<span class="sub">${esc(SL.labelOf(SL.CRED_KINDS, x.kind))}${x.source === 'cv' ? ' · nhập từ CV' : ''}</span></td><td class="num">${esc(SL.fmtDate(x.date))}</td>
-            <td>${x.fileId ? `<button type="button" class="linkbtn" data-act="open-file" data-id="${esc(x.fileId)}">${icon('file', 'sm')}${esc(x.fileName)}</button>` : `<label class="btn sm">${icon('upload', 'sm')}Tải minh chứng<input type="file" hidden accept=".pdf,.png,.jpg,.jpeg" data-cred-file="${esc(x.id)}"></label>`}</td>
-            <td>${credBadge(x)}${x.reviewNote ? `<span class="sub">${esc(x.reviewNote)}</span>` : ''}</td><td>${x.status !== 'verified' ? `<button type="button" class="iconbtn" data-act="cred-del" data-id="${esc(x.id)}" aria-label="Rút yêu cầu">${icon('trash', 'sm')}</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : emptyState('shield', 'Chưa có mục nào.')}
-        </div>
-        <form class="card" data-form="cred" id="credentialForm"><div class="h3">Thêm mục cần xác minh</div><div class="stack" style="margin-top:12px">
-          <label class="field"><span>Loại</span><select name="kind" data-act-change="cred-kind">${SL.CRED_KINDS.map(k => `<option value="${k.code}">${k.label}</option>`).join('')}</select></label>
-          <label class="field" id="credValue"><span>Giá trị *</span><select name="value">${E.degrees().map(x => `<option>${esc(x)}</option>`).join('')}</select></label>
-          <label class="field"><span>Ngày đạt / bổ nhiệm *</span><input name="date" placeholder="dd/mm/yyyy" inputmode="numeric"></label>
-          <label class="field"><span>Nước / cơ quan cấp</span><input name="country" placeholder="Việt Nam"></label>
-          <label class="field"><span>File minh chứng (bằng, quyết định)</span><input type="file" name="file" accept=".pdf,.png,.jpg,.jpeg"></label>
-          <label class="field"><span>Ghi chú cho người duyệt</span><x-ta name="note" rows="2"></x-ta></label>
-          <button class="btn primary block">${icon('send')}Gửi xác minh</button>
-          <div class="caption">Quản trị viên thấy hồ sơ trước và sau khi xác minh. Kết quả gửi về Thông báo riêng.</div>
-        </div></form></div>`;
-    } else body = listEditor(tab);
-
-  return body;
+  const d=S.data,p=E.profile();
+  if(tab==='basic') return `<div class="grid2"><form data-form="profile" class="stack" id="basicProfileForm"><div class="card profile-card"><h2 class="h2">Thông tin cá nhân</h2><p class="caption">${reqMark()} Trường bắt buộc cho hồ sơ. Căn cước là thông tin bổ sung theo mẫu.</p><div class="identity-grid">${fieldInput('fullName')}${fieldInput('dob',{label:'Ngày sinh'})}${fieldInput('gender',{select:['Nam','Nữ']})}</div><div class="category-grid">${fieldInput('ethnicity',{list:ETHNIC,free:true})}${fieldInput('nationality',{list:COUNTRIES,free:true})}${fieldInput('birthPlace',{list:PROVINCES,free:true})}</div><hr class="div"><h3 class="h3">Thông tin liên hệ</h3><div class="contact-grid">${fieldInput('contactEmail',{label:'Email liên hệ'})}${fieldInput('mobile',{label:'Di động Việt Nam',hint:'10 chữ số (03/05/07/08/09), hoặc +84 thay số 0.'})}</div><div class="category-grid">${fieldInput('addressCountry',{list:COUNTRIES,free:true})}${fieldInput('province',{list:PROVINCES,free:true,hint:'Địa chỉ hiện tại hoặc tên trên giấy tờ; giữ được địa danh cũ.'})}${fieldInput('ward',{label:'Phường / xã',list:[...new Set((d.profiles || [p]).map(x=>x.ward).filter(Boolean))],free:true})}</div>${fieldInput('address',{c:'c12',label:'Địa chỉ chi tiết'})}${mapCard()}</div><details class="card profile-more"><summary>Thông tin khác của lý lịch</summary><div class="fgrid">${fieldInput('hometown',{c:'c4',list:PROVINCES,free:true})}${fieldInput('position',{c:'c4'})}${fieldInput('unit',{c:'c4'})}${fieldInput('phoneOffice',{c:'c4'})}${fieldInput('phoneHome',{c:'c4'})}${fieldInput('fax',{c:'c4'})}<label class="field c12"><span>Loại giấy tờ</span><select name="idType" data-id-type>${[['identity','Thẻ căn cước (mẫu từ 01/07/2024)'],['cccd','Căn cước công dân (CCCD)'],['legacy','CMND — chỉ lưu lịch sử']].map(x=>`<option value="${x[0]}" ${(p.idType || (/^\d{9}$/.test(p.idNumber || '')?'legacy':'cccd'))===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select><span class="hint">CCCD/căn cước: đúng 12 chữ số. CMND hết giá trị sử dụng sau 31/12/2024.</span></label>${fieldInput('idNumber',{c:'c4',label:'Số căn cước / CMND lịch sử'})}<div class="c8 fgrid conditional" data-id-details>${fieldInput('idDate',{c:'c6',required:true})}${fieldInput('idPlace',{c:'c6',required:true,list:['Cục Cảnh sát ĐKQL cư trú và DLQG về dân cư','Bộ Công an','Cục Cảnh sát quản lý hành chính về trật tự xã hội','Cục Cảnh sát đăng ký quản lý cư trú và dữ liệu quốc gia về dân cư'],free:true,hint:'Gợi ý theo mẫu thẻ; đối chiếu và ghi đúng cơ quan trên giấy tờ.'})}</div></div></details><details class="card profile-more"><summary>Chuyên môn & hồ sơ học thuật</summary><div class="fgrid">${fieldInput('field',{list:E.fields(),free:true})}${fieldInput('keywords',{hint:'Ngăn bằng dấu chấm phẩy'})}${fieldInput('orcid')}${fieldInput('scholarUrl')}${fieldInput('bio',{c:'c12',area:true})}</div></details><div class="row profile-save-row"><span class="caption">Cập nhật: ${esc(fmtDT(p.updatedAt) || '—')}</span><button class="btn primary">Lưu thay đổi</button></div></form><aside class="stack profile-context"><div class="card"><h3 class="h2">Hồ sơ học thuật</h3><p>Học vị: ${esc(d.derived.degree || 'Chưa xác minh')}<br>Chức danh: ${esc(d.derived.title || 'Chưa có')}</p><a class="btn" href="#/profile?tab=cred">Xem lịch sử xác minh</a></div><div class="card"><h3 class="h3">Thông tin riêng tư</h3><p class="muted">Chủ hồ sơ và quản trị viên được xem tài liệu, gồm PDF đã xuất. Bản xuất cho đối tác tùy theo lựa chọn kèm thông tin liên hệ.</p></div></aside></div>`;
+  if(tab==='edu') return `<div class="stack">${academicSummary()}<form data-form="profile" class="stack" id="academicProfileForm"><div class="card"><h3 class="h2">1. Đại học</h3><div class="fgrid"><label class="field c12"><span>Trạng thái đào tạo${reqMark()}</span><select name="ugStatus" data-ug-status>${(()=>{const st=SL.ugState(p) || (S.data.derived.degree?'graduated':'studying');return [['studying','Đang học — sinh viên chưa tốt nghiệp'],['graduated','Đã tốt nghiệp']].map(o=>`<option value="${o[0]}" ${st===o[0]?'selected':''}>${o[1]}</option>`).join('');})()}</select><span class="hint">Sinh viên chưa tốt nghiệp chọn "Đang học": không cần năm tốt nghiệp, lý lịch in "Đang học".</span></label>${fieldInput('ugSystem',{list:['Chính quy','Vừa làm vừa học','Liên thông','Văn bằng 2','Từ xa'],free:true})}${fieldInput('ugPlace')}${fieldInput('ugMajor')}${fieldInput('ugCountry',{list:COUNTRIES,free:true})}<div data-ug-year class="c12">${fieldInput('ugYear',{c:'c6',required:true})}</div><div data-ug-expected class="c12 conditional">${fieldInput('ugExpectedYear',{c:'c6',required:false,hint:'Không bắt buộc. VD: 2029.'})}</div></div>${toggleBlock('hasUg2','Đã có bằng đại học thứ hai',['ug2Major','ug2Year'])}</div><div class="card"><h3 class="h2">2. Sau đại học</h3>${toggleBlock('hasMaster','Đã có bằng thạc sĩ',['msMajor','msYear','msPlace'])}${toggleBlock('hasPhd','Đã có bằng tiến sĩ',['phdMajor','phdYear','phdPlace','thesis'])}<p class="caption">Thông tin đào tạo phục vụ bản in. Bằng cấp và chức danh dùng xét điều kiện được gửi xác minh riêng phía dưới. Không bắt buộc có thạc sĩ trước tiến sĩ.</p></div><div class="card"><div class="row between"><h3 class="h2">3. Ngoại ngữ</h3><button type="button" class="btn sm" data-act="lang-add">Thêm ngoại ngữ</button></div><div class="stack" style="margin-top:12px">${(S.drafts.langs || (S.drafts.langs=(()=>{try{return JSON.parse(p.languages || '[]');}catch(e){return [];}})())).map((l,i)=>`<div class="fgrid" data-lang="${i}"><label class="field c6"><span>Ngoại ngữ</span>${combo('lang-name',l.name,['Tiếng Anh','Tiếng Pháp','Tiếng Đức','Tiếng Nhật','Tiếng Hàn','Tiếng Trung'],{free:true})}</label><label class="field c6"><span>Mức độ sử dụng</span><div class="row"><input name="lang-level" value="${esc(l.level || '')}" placeholder="B2 / IELTS 7.0 / thành thạo"><button type="button" class="iconbtn" data-act="lang-del" data-i="${i}" aria-label="Xóa">${icon('trash','sm')}</button></div></label></div>`).join('')}</div></div><button class="btn primary">Lưu đào tạo</button></form></div>`;
+  if(tab==='cred') {
+    const cs=d.credentials.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+    return `<div class="grid2"><div class="card"><h3 class="h2">Lịch sử học vị, chức danh, chức vụ</h3><p class="caption">Học vị/chức danh cao nhất chỉ tính từ mục đã xác minh. AI đối chiếu nội dung; quản trị viên xử lý mục chưa rõ.</p>${cs.length?`<div class="stack">${cs.map(x=>`<article class="credential-row"><div class="row between"><b>${esc(x.value)}</b>${credBadge(x)}</div><p class="caption">${esc(SL.labelOf(SL.CRED_KINDS,x.kind))} · ${esc(SL.fmtDate(x.date))} · ${esc(x.issuer || x.country || '')}${x.recognitionDate?'<br>Công nhận đạt tiêu chuẩn: '+esc(SL.fmtDate(x.recognitionDate)):''}${x.decisionNo?'<br>Quyết định: '+esc(x.decisionNo):''}</p>${x.fileId?`<button type="button" class="btn sm" data-act="open-file" data-id="${esc(x.fileId)}">Xem ${esc(x.fileName)}</button>`:`<label class="btn sm">Tải minh chứng<input type="file" hidden accept=".pdf,.png,.jpg,.jpeg" data-cred-file="${esc(x.id)}"></label>`}${aiStatusHTML(x)}${x.reviewNote?`<p class="caption">${esc(x.reviewNote)}</p>`:''}${x.fileId&&x.status!=='verified'?`<button type="button" class="btn sm" data-act="ai-retry" data-kind="cred" data-id="${esc(x.id)}">Kiểm tra lại AI</button>`:''}${x.status!=='verified'?`<button type="button" class="btn sm" data-act="cred-edit" data-id="${esc(x.id)}">Bổ sung thông tin</button><button type="button" class="btn sm" data-act="cred-del" data-id="${esc(x.id)}">Rút yêu cầu</button>`:''}</article>`).join('')}</div>`:emptyState('shield','Chưa có mục nào.')}</div><form class="card" data-form="cred" id="credentialForm"><h3 class="h3">Thêm mục cần xác minh</h3><input type="hidden" name="id"><div class="stack" style="margin-top:12px"><label class="field"><span>Loại${reqMark()}</span><select name="kind" data-act-change="cred-kind">${SL.CRED_KINDS.map(k=>`<option value="${k.code}">${k.label}</option>`).join('')}</select></label><label class="field" id="credValue"><span>Giá trị${reqMark()}</span><select name="value" required><option value="">— Chọn —</option>${E.degrees().map(x=>`<option>${esc(x)}</option>`).join('')}</select></label><label class="field"><span id="credentialDateLabel">Ngày cấp bằng${reqMark()}</span><input name="date" placeholder="dd/mm/yyyy" inputmode="numeric" required></label><div class="stack conditional" data-title-extra hidden><label class="field"><span>Ngày công nhận đạt tiêu chuẩn (nếu có)</span><input name="recognitionDate" placeholder="dd/mm/yyyy" inputmode="numeric"></label><label class="field"><span>Số quyết định bổ nhiệm${reqMark()}</span><input name="decisionNo" required></label></div><label class="field"><span>Nước nhận bằng / bổ nhiệm${reqMark()}</span>${combo('country','Việt Nam',COUNTRIES,{free:true,required:true})}</label><label class="field"><span>Cơ quan cấp bằng / quyết định${reqMark()}</span><input name="issuer" required></label><label class="field"><span>File minh chứng (PDF, ảnh)${reqMark()}</span><input type="file" name="file" required accept=".pdf,.png,.jpg,.jpeg"><span class="hint">AI nhận tối đa 12 MB. Minh chứng được gửi Gemini để đối chiếu thông tin đã khai.</span></label><label class="field"><span>Ghi chú cho người duyệt</span><x-ta name="note" rows="2"></x-ta></label><button class="btn primary">Gửi xác minh</button><p class="caption">Lỗi AI hoặc nội dung chưa rõ sẽ được báo cụ thể, giữ trong hàng chờ quản trị viên.</p></div></form></div>`;
+  }
+  return listEditor(tab);
 }
+
 VIEWS.expert.profile = {
   crumb: () => 'Không gian chuyên gia / Hồ sơ của tôi',
   render(q) {
@@ -2599,6 +2709,7 @@ function impItems() {
     const cur = E.profile()[k] || '';
     const v = dr.fields[k].value;
     const same = SL.fold(cur) === SL.fold(v);
+    if (k === 'ugStatus') { items.push({ id: 'f:' + k, group: 'Đào tạo', label: f.label, key: k, value: v === 'studying' ? 'Đang học (chưa tốt nghiệp)' : 'Đã tốt nghiệp', cur: cur ? (SL.ugState({ ugStatus: cur }) === 'studying' ? 'Đang học (chưa tốt nghiệp)' : 'Đã tốt nghiệp') : '', same: SL.ugState({ ugStatus: cur }) === v, kind: 'field', flag: dr.fields[k].flag }); return; }
     items.push({ id: 'f:' + k, group: f.sec === 'II' ? 'Đào tạo' : 'Thông tin cá nhân', label: f.label, key: k, value: f.type === 'date' ? SL.fmtDate(v) : v, cur: f.type === 'date' ? SL.fmtDate(cur) : cur, flag: dr.fields[k].flag, same, kind: 'field' });
   });
   dr.credentials.forEach((c, i) => items.push({ same: S.data.credentials.some(r => r.kind === c.kind && SL.fold(r.value) === SL.fold(c.value) && r.status !== 'rejected'), id: 'c:' + i, group: 'Học vị, chức danh, chức vụ', label: SL.labelOf(SL.CRED_KINDS, c.kind), value: c.value, date: c.date ? SL.fmtDate(c.date) : '', flag: c.flag || (!c.date ? 'Cần ngày đạt để gửi xác minh.' : ''), kind: 'cred', c }));
@@ -2739,7 +2850,7 @@ VIEWS.expert.pubs = {
     const years = [...new Set(all.map(p => p.year).filter(Boolean))].sort().reverse();
     const fq = SL.fold(q.q || ''), fs = q.s || '', fy = q.y || '';
     const list = all.filter(p => (!fq || SL.fold(p.title + ' ' + p.authors + ' ' + p.doi + ' ' + p.venue).includes(fq)) && (!fy || p.year === fy) &&
-      (!fs || (fs === 'needs_file' ? SL.pubNeedsFile(p) : fs === 'cv' ? p.source === 'cv' : p.status === fs))).sort((a, b) => String(b.year).localeCompare(String(a.year)) || b.uploadedAt.localeCompare(a.uploadedAt));
+      (!fs || (fs === 'needs_file' ? SL.pubNeedsFile(p) : fs === 'cv' ? p.source === 'cv' : p.status === fs))).sort(FXRules.sortPubs);
     const cvWait = all.filter(p => p.source === 'cv' && SL.pubNeedsFile(p)).length;
     return pageHead('Công bố khoa học', 'Theo dõi công bố, minh chứng và kết quả đối chiếu metadata.',
       `<button type="button" class="btn" data-act="go" data-page="help" data-q='{"tab":"quick"}'>${icon('list')}Nhập nhanh</button><button type="button" class="btn primary" data-act="go" data-page="pub">${icon('plus')}Thêm công bố</button>`) +
@@ -2788,13 +2899,13 @@ VIEWS.expert.pub = {
         ${locked ? `<div class="callout ok" style="margin-bottom:16px">${icon('check', 'sm')}<div>Đã xác minh. Sửa tên, tác giả, năm, nơi đăng hoặc DOI sẽ đưa bài về "Chờ duyệt".</div></div>` : ''}
         <div class="fgrid">
           <label class="field c12"><span>${isBook ? 'Tên sách / giáo trình *' : 'Tên bài báo *'}</span><input name="title" value="${esc(x.title || '')}" maxlength="400" required></label>
-          <label class="field c8"><span>DOI / đường dẫn bài báo</span><input name="doi" value="${esc(x.doi || '')}" placeholder="Nhập DOI hoặc URL của nhà xuất bản"></label>
+          <label class="field c12"><span>Link bài báo để điền metadata</span><input name="sourceUrl" value="${esc(x.sourceUrl || '')}" placeholder="https://doi.org/… hoặc trang nhà xuất bản"><span class="hint">Tra link → xem kết quả → bấm Điền từ Crossref. Không tự ghi đè thông tin.</span></label><label class="field c8"><span>DOI</span><input name="doi" value="${esc(x.doi || '')}" placeholder="10.xxxx/…"></label>
           <div class="field c4"><span>&nbsp;</span><button type="button" class="btn" data-act="pub-meta">${icon('search')}Đối chiếu metadata</button></div>
           <label class="field c8"><span>${isBook ? 'Nhà xuất bản *' : 'Tạp chí / hội nghị *'}</span>${combo('venue', x.venue, [...new Set(d.pubs.map(z => z.venue).filter(Boolean))], { free: true, placeholder: isBook ? 'NXB…' : 'Chọn hoặc gõ tên, ISSN' })}</label>
           <label class="field c2"><span>Năm *</span><input name="year" value="${esc(x.year || '')}" inputmode="numeric" maxlength="4"></label>
           <label class="field c2"><span>Tháng</span><select name="month"><option value=""></option>${Array.from({ length: 12 }, (_, i) => `<option ${String(x.month) === String(i + 1) ? 'selected' : ''}>${i + 1}</option>`).join('')}</select></label>
           <label class="field c4"><span>Loại công bố</span><select name="type">${SL.PUB_TYPES.map(t => `<option value="${t.code}" ${x.type === t.code ? 'selected' : ''}>${t.label}</option>`).join('')}</select></label>
-          <label class="field c8"><span>Tác giả</span><input name="authors" value="${esc(x.authors || '')}" placeholder="Trần Minh Anh; Nguyễn Hoàng"></label>
+          <label class="field c8"><span>Tác giả<span class="req"> *</span></span><input required name="authors" value="${esc(x.authors || '')}" placeholder="Trần Minh Anh; Nguyễn Hoàng"></label>
           <label class="field c4"><span>ISSN / ISBN</span><input name="issn" value="${esc(x.issn || '')}"></label><label class="field c4"><span>Tập (số)</span><input name="volume" value="${esc(x.volume || '')}"></label><label class="field c4"><span>Trang</span><input name="pages" value="${esc(x.pages || '')}"></label>
           <label class="field c12"><span>Lĩnh vực / từ khóa</span><input name="keywords" value="${esc(x.keywords || '')}" placeholder="Chuỗi cung ứng; tối ưu hóa; sản xuất"></label>
         </div>
@@ -2810,7 +2921,7 @@ VIEWS.expert.pub = {
             ${meta && meta.meta ? `<div class="panel-sub" style="margin-top:8px;font-size:13px"><b>Crossref:</b> ${esc(meta.meta.title)} · ${esc(meta.meta.venue)} · ${esc(meta.meta.year)}<div class="caption">${esc(meta.meta.authors)}</div><button type="button" class="btn sm" style="margin-top:8px" data-act="pub-meta-apply">Điền từ Crossref</button></div>` : ''}</div>
           <div><div class="strong">Trùng lặp</div><div class="caption" style="margin:2px 0 8px">Tra DOI trước, rồi so tên bài + năm.</div>${dup ? badge('Trùng: ' + dup.title.slice(0, 40), 'warning') : badge(p ? 'Không trùng' : 'Kiểm tra khi lưu', p ? 'success' : 'info')}</div>
           <div><div class="strong">File minh chứng</div><div class="caption" style="margin:2px 0 8px">Bắt buộc trước khi gửi xác minh.</div>${x.fileId ? badge('Đã có file', 'success') : badge('Chưa có file', 'warning')}</div>
-          <div><div class="strong">Xét duyệt chất lượng</div><div class="caption" style="margin:2px 0 8px">Quản trị duyệt theo bộ tiêu chí ${esc(d.settings.PUB_CRITERIA || 'v1')} của đơn vị.</div>${p ? pubBadge(p) : badge('Chưa gửi', '')}</div>
+          <div><div class="strong">Xét duyệt chất lượng</div><div class="caption" style="margin:2px 0 8px">Quản trị duyệt theo bộ tiêu chí ${esc(d.settings.PUB_CRITERIA || 'v1')} của đơn vị.</div>${p ? pubBadge(p)+aiStatusHTML(p)+(p.fileId && p.status!=='verified'?`<button type="button" class="btn sm" data-act="ai-retry" data-kind="pub" data-id="${esc(p.id)}">Kiểm tra lại AI</button>`:'') : badge('Chưa gửi', '')}</div>
         </div></div>
         <div class="callout warn">${icon('shield', 'sm')}<div>Metadata khớp không đồng nghĩa bài báo đã được duyệt hoặc đạt chỉ tiêu.</div></div>
         <div class="card"><div class="h3">${icon('file')} Kho tài liệu hồ sơ</div><p class="muted" style="margin:8px 0 0">Lưu file gốc, phiên bản và lịch sử xác minh trong kho Drive của hệ thống. Không tự tạo đường dẫn công khai.</p></div>
@@ -2851,7 +2962,7 @@ ACT['pub-save'] = async el => {
   }
   discardFormDraft(form);
   S.drafts.pub = form && !form._draftSaved ? Object.assign(formData(form), { id: r.pub.id }) : null; S.ui.meta = null;
-  toast(a === 'submit' ? 'Đã gửi xác minh.' : 'Đã lưu bản nháp.', 'ok');
+  toast(a === 'submit' ? (r.ai ? r.ai.note : 'Đã gửi xác minh.') : 'Đã lưu bản nháp.', r.ai && r.ai.aiStatus==='error'?'error':'ok');
   await refresh();
   if (location.hash === routeAtStart) go('pub', { id: r.pub.id });
 };
@@ -3059,7 +3170,7 @@ const exportView = {
     const sig = expSig(src, st), ok = st.confirmed === sig;
     const m = cvModel(src, expOpts(st)), labels = SECTION_LABELS[st.tpl];
     const comp = SL.completeness(src.profile, { degree: src.derived.degree, work: src.work.length, pubs: src.pubs.length, needsFile: src.pubs.filter(SL.pubNeedsFile).length });
-    return pageHead(S.ws === 'admin' ? 'Xuất lý lịch · ' + nameOf(q.e) : 'Xuất lý lịch khoa học', 'Chọn mẫu → xem trước → tải Word hoặc PDF ngay trong bản xem trước.' + (S.ws === 'admin' ? ' Mỗi lần xuất được ghi nhật ký.' : ''),
+    return archivedPDFs(src.email) + pageHead(S.ws === 'admin' ? 'Xuất lý lịch · ' + nameOf(q.e) : 'Xuất lý lịch khoa học', 'Chọn mẫu → xem trước → tải Word hoặc PDF ngay trong bản xem trước.' + (S.ws === 'admin' ? ' Mỗi lần xuất được ghi nhật ký.' : ''),
       (S.ws === 'admin' ? `<button type="button" class="btn" data-act="go" data-page="export">${icon('user')}Đổi chuyên gia</button>` : `<button type="button" class="btn" data-act="exp-blank">${icon('file')}Tải mẫu trống</button>`) +
       `<button type="button" class="btn primary" data-act="exp-preview">${icon('download')}Xem trước & tải</button>`) +
       `<div class="grid2"><div class="card"><div class="h2">1. Chọn mẫu & nội dung</div>
@@ -3143,14 +3254,13 @@ ACT['exp-download'] = async el => {
   const fmt = el.dataset.f || st.format, body = expBody(q), m = cvModel(src, expOpts(st)), name = cvFileName(m, st.tpl), btn = el instanceof Element ? el : null;
   const meta = { email: src.email, template: st.tpl, sections: Object.keys(st.sections).filter(k => st.sections[k] === false).map(k => '-' + k).join(' '), name, format: fmt };
   if (fmt === 'doc') { downloadBlob(name + '.doc', new Blob([wordDoc(body, name)], { type: 'application/msword' })); API.logExport(meta).catch(() => {}); return; }
-  if (fmt === 'print') { API.logExport(meta).catch(() => {}); printBody(body); return; }
+  if (fmt === 'print') { API.logExport(Object.assign({},meta,{format:'print_request'})).catch(() => {}); printBody(body); toast('Đã mở lệnh in. Muốn lưu PDF vào kho quản trị, dùng nút PDF.','info'); return; }
   try {
     const r = await call(API.renderDoc(gdocHtml(body, name), name, fmt, meta), btn);
     downloadB64(r.name, r.mime, r.data);
+    if(r.archive) { toast('PDF đã được lưu riêng trong kho hồ sơ; quản trị viên xem được.','ok'); await refresh(); }
   } catch (e) {
-    // Máy chủ chưa dựng được .docx/.pdf (VD: chưa bật Drive API) → vẫn trả file Word tương thích để người dùng không bị kẹt.
-    downloadBlob(name + '.doc', new Blob([wordDoc(body, name)], { type: 'application/msword' }));
-    API.logExport(Object.assign({}, meta, { format: 'doc' })).catch(() => {});
+    toast('Chưa xuất được '+fmt.toUpperCase()+'. Chưa có PDF mới được lưu. '+e.message,'error');
   }
 };
 
@@ -3272,7 +3382,7 @@ ACT['expert-open'] = el => {
       <dl class="kv"><dt>Lĩnh vực</dt><dd>${esc(x.field || '—')}</dd><dt>Từ khóa</dt><dd>${esc(p.keywords || '—')}</dd><dt>Học vị</dt><dd>${esc(x.der.degree || '—')}${x.der.degreeDate ? ' (' + esc(SL.yearOf(x.der.degreeDate)) + ')' : ''}</dd><dt>Chức danh</dt><dd>${esc(x.der.title || '—')}</dd><dt>Chức vụ</dt><dd>${esc(p.position || '—')}</dd>
       <dt>Nhu cầu</dt><dd>${esc(needsText(x.needs).join('; ') || '—')}${x.needs.until ? '<br><span class="caption">đến ' + esc(SL.fmtDate(x.needs.until)) + (x.needs.availability === 'paused' ? ' · đang tạm dừng' : '') + '</span>' : ''}</dd><dt>Đào tạo</dt><dd>${esc([p.phdMajor && 'TS ' + p.phdMajor + ' (' + (p.phdYear || '?') + ')', p.msMajor && 'ThS ' + p.msMajor, p.ugMajor && 'ĐH ' + p.ugMajor].filter(Boolean).join(' · ') || '—')}</dd></dl>
       <div class="h3" style="margin:24px 0 8px">Học vị, chức danh (${x.creds.length})</div>${x.creds.map(c => `<div class="row between" style="padding:6px 0"><span>${esc(c.value)} <span class="caption">${esc(SL.fmtDate(c.date))}</span></span>${credBadge(c)}</div>`).join('') || '<p class="caption">—</p>'}
-      <div class="h3" style="margin:24px 0 8px">Công bố (${x.pubs.length})</div>${x.pubs.slice(0, 8).map(pb => `<div class="row between" style="padding:6px 0;flex-wrap:nowrap"><span>${esc(pb.title)} <span class="caption">${esc(pb.year)}</span></span>${pubBadge(pb)}</div>`).join('') || '<p class="caption">—</p>'}
+      <div class="h3" style="margin:24px 0 8px">Công bố (${x.pubs.length})</div>${x.pubs.slice().sort(FXRules.sortPubs).slice(0, 8).map(pb => `<div class="row between" style="padding:6px 0;flex-wrap:nowrap"><span>${esc(pb.title)} <span class="caption">${esc(pb.year)}</span></span>${pubBadge(pb)}</div>`).join('') || '<p class="caption">—</p>'}
       <div class="h3" style="margin:24px 0 8px">Còn thiếu</div><p class="caption">${esc(x.comp.missing.map(m => m.label).join(', ') || 'Không')}</p>
     </div>
     <div class="dlg-foot"><button type="button" class="btn" data-act="go" data-page="accounts" data-q='${esc(JSON.stringify({ e: x.email }))}'>${icon('key')}Tài khoản</button><button type="button" class="btn primary" data-act="go" data-page="export" data-q='${esc(JSON.stringify({ e: x.email }))}'>${icon('file')}Xem trước CV đầy đủ</button></div>`);
@@ -3467,7 +3577,7 @@ function rvOpen(q) {
     const before = SL.highest(all, kind), after = SL.highest(all.map(x => x.id === c.id ? Object.assign({}, x, { status: 'verified' }) : x), kind);
     const kl = SL.labelOf(SL.CRED_KINDS, c.kind);
     bodyHtml = `<dl class="kv rv-kv"><dt>Loại cập nhật</dt><dd>${esc(kl)}</dd><dt>Giá trị đề nghị</dt><dd><b class="strong">${esc(c.value)}</b></dd><dt>Ngày đạt</dt><dd>${esc(SL.fmtDate(c.date))}${c.country ? ' · ' + esc(c.country) : ''}</dd>
-        <dt>Minh chứng</dt><dd>${c.fileId ? `<button type="button" class="linkbtn rv-file" data-act="open-file" data-id="${esc(c.fileId)}">${icon('file', 'sm')}${esc(c.fileName)}</button>` : '<span class="bad-t">Chưa có file</span>'}${c.source === 'cv' ? ' · nhập từ CV' : ''}</dd>${c.note ? `<dt>Ghi chú</dt><dd>${esc(c.note)}</dd>` : ''}</dl>
+        <dt>Đối chiếu AI</dt><dd>${aiStatusHTML(c) || 'Chưa kiểm tra AI'}</dd><dt>Minh chứng</dt><dd>${c.fileId ? `<button type="button" class="linkbtn rv-file" data-act="open-file" data-id="${esc(c.fileId)}">${icon('file', 'sm')}${esc(c.fileName)}</button>` : '<span class="bad-t">Chưa có file</span>'}${c.source === 'cv' ? ' · nhập từ CV' : ''}</dd>${c.issuer ? `<dt>Cơ quan cấp</dt><dd>${esc(c.issuer)}</dd>`:''}${c.decisionNo ? `<dt>Quyết định</dt><dd>${esc(c.decisionNo)}</dd>`:''}${c.note ? `<dt>Ghi chú</dt><dd>${esc(c.note)}</dd>` : ''}</dl>
       <div class="rv-compare"><div class="panel-sub"><div class="label muted">Hồ sơ hiện tại</div><div class="h3" style="margin-top:4px">${esc(before ? before.value : '—')}</div><div class="caption">${esc(kl)} cao nhất${before ? ' · ' + esc(SL.fmtDate(before.date)) : ''}</div></div>
         <span class="rv-arrow">${icon('arrow')}</span>
         <div class="panel-ok"><div class="label">Sau khi xác minh</div><div class="h3" style="margin-top:4px">${esc(after ? after.value : '—')}</div><div class="caption">${esc(kl)} cao nhất${after ? ' · ' + esc(SL.fmtDate(after.date)) : ''}</div></div></div>
@@ -3480,7 +3590,7 @@ function rvOpen(q) {
     const co = p.doi ? d.pubs.filter(x => x.email !== p.email && SL.normDoi(x.doi) === SL.normDoi(p.doi)) : [];
     const meta = S.ui.meta && S.ui.meta.id === p.id ? S.ui.meta : null, ms = meta ? meta.status : p.metaStatus;
     bodyHtml = `<dl class="kv rv-kv"><dt>Loại</dt><dd>${esc(pubType(p.type))}</dd><dt>Tác giả</dt><dd>${esc(p.authors || '—')}</dd><dt>Nơi đăng</dt><dd>${esc(p.venue || '—')}${p.issn ? ' · ISSN ' + esc(p.issn) : ''}</dd><dt>Xuất bản</dt><dd>${esc(p.month ? p.month + '/' : '')}${esc(p.year)}</dd><dt>DOI</dt><dd>${p.doi ? esc(p.doi) : '—'}</dd>
-        <dt>Minh chứng</dt><dd>${p.fileId ? `<button type="button" class="linkbtn rv-file" data-act="open-file" data-id="${esc(p.fileId)}">${icon('file', 'sm')}${esc(p.fileName)}</button>` : '<span class="bad-t">Chưa có file</span>'}</dd>
+        <dt>Đối chiếu AI</dt><dd>${aiStatusHTML(p) || 'Chưa kiểm tra AI'}</dd><dt>Minh chứng</dt><dd>${p.fileId ? `<button type="button" class="linkbtn rv-file" data-act="open-file" data-id="${esc(p.fileId)}">${icon('file', 'sm')}${esc(p.fileName)}</button>` : '<span class="bad-t">Chưa có file</span>'}</dd>
         <dt>Metadata</dt><dd><div class="row" style="gap:8px">${{ match: badge('Khớp Crossref', 'success'), mismatch: badge('Lệch metadata', 'warning'), notfound: badge('Không có trên Crossref', 'warning') }[ms] || badge('Chưa đối chiếu', '')}${p.doi ? `<button type="button" class="btn sm" data-act="rev-meta" data-id="${esc(p.id)}">${icon('search', 'sm')}Đối chiếu DOI</button>` : ''}</div>${(meta && meta.notes && meta.notes.length) || p.metaNote ? `<div class="caption warn-t" style="margin-top:4px">${esc(meta ? meta.notes.join(' ') : p.metaNote)}</div>` : ''}</dd>
         <dt>Trùng lặp</dt><dd>${dup ? badge('Trùng: ' + dup.title, 'warning') : badge('Không trùng trong hồ sơ', 'success')}${co.length ? `<div class="caption" style="margin-top:4px">Đồng tác giả cùng DOI: ${esc(co.map(x => nameOf(x.email)).join(', '))} · thống kê đơn vị chỉ tính một lần.</div>` : ''}</dd></dl>
       <div class="panel-sub" style="margin-top:20px"><div class="h3" style="margin-bottom:6px">Tiêu chí xét duyệt ${esc(d.settings.PUB_CRITERIA || 'v1')}</div>${['Nơi đăng thuộc danh mục được tính của đơn vị', 'Chủ hồ sơ có tên trong danh sách tác giả', 'File minh chứng khớp tiêu đề, năm, nơi đăng', 'Năm/tháng xuất bản hợp lệ, không trùng bản ghi đã tính'].map((x, i) => `<label class="check"><input type="checkbox" class="revCrit" data-i="${i}"> <span>${x}</span></label>`).join('')}</div>
@@ -3626,14 +3736,14 @@ VIEWS.admin.files = {
   crumb: () => 'Quản trị / Kết nối chuyên gia',
   render(q) {
     const d = S.data, f = S.ui.files || (S.ui.files = { q: '', kind: '', email: '' });
-    const linked = x => x.link && ((/^pub:/.test(x.link) && d.pubs.some(p => 'pub:' + p.id === x.link)) || (/^cred:/.test(x.link) && d.credentials.some(c => 'cred:' + c.id === x.link)) || x.link === 'cv');
-    const linkLabel = x => { if (/^pub:/.test(x.link)) { const p = d.pubs.find(z => 'pub:' + z.id === x.link); return p ? 'Công bố: ' + p.title : 'Công bố đã xóa'; } if (/^cred:/.test(x.link)) { const c = d.credentials.find(z => 'cred:' + z.id === x.link); return c ? SL.labelOf(SL.CRED_KINDS, c.kind) + ' ' + c.value : '—'; } return x.link === 'cv' ? 'Nguồn nhập CV' : 'Chưa liên kết'; };
+    const linked = x => x.link && ((/^pub:/.test(x.link) && d.pubs.some(p => 'pub:' + p.id === x.link)) || (/^cred:/.test(x.link) && d.credentials.some(c => 'cred:' + c.id === x.link)) || x.link === 'cv' || /^export:|^project:/.test(x.link));
+    const linkLabel = x => { if (/^pub:/.test(x.link)) { const p = d.pubs.find(z => 'pub:' + z.id === x.link); return p ? 'Công bố: ' + p.title : 'Công bố đã xóa'; } if (/^cred:/.test(x.link)) { const c = d.credentials.find(z => 'cred:' + z.id === x.link); return c ? SL.labelOf(SL.CRED_KINDS, c.kind) + ' ' + c.value : '—'; } return x.kind==='export_pdf'?'PDF đã xuất · '+(x.template || 'CV'):x.kind==='acceptance'?'Minh chứng nghiệm thu':x.link === 'cv' ? 'Nguồn nhập CV' : 'Chưa liên kết'; };
     const list = d.files.filter(x => (!f.q || SL.fold(x.name + ' ' + nameOf(x.email) + ' ' + linkLabel(x)).includes(SL.fold(f.q))) && (!f.kind || x.kind === f.kind) && (!f.email || x.email === f.email)).sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
     const total = d.files.reduce((s, x) => s + Number(x.size || 0), 0);
-    return pageHead('Kho tài liệu hồ sơ', 'Lưu file gốc, liên kết công bố và quản lý quyền truy cập.', `<label class="btn primary">${icon('upload')}Tải tài liệu lên<input type="file" hidden id="adminUp" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"></label>`) +
+    return projectEvidenceQueue() + pageHead('Kho tài liệu hồ sơ', 'Xem PDF CV đã xuất của từng chuyên gia, file gốc và minh chứng nghiệm thu.', `<label class="btn primary">${icon('upload')}Tải tài liệu lên<input type="file" hidden id="adminUp" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"></label>`) +
       `<div class="kpis k3">${kpi('Tài liệu trong kho', d.files.length, API.demo ? 'File minh họa' : 'Drive riêng tư của hệ thống')}${kpi('Dung lượng sử dụng', kb(total), 'Kho Drive hệ thống')}${kpi('Tài liệu cần liên kết', d.files.filter(x => !linked(x)).length, 'Chưa gắn với bản ghi hồ sơ', 'warn-t')}</div>
       <div class="card"><div class="fgrid" style="margin-bottom:16px"><label class="field c6"><span>Tìm tài liệu</span><input data-fl="q" value="${esc(f.q)}" placeholder="Tên file, DOI hoặc chuyên gia"></label>
-        <label class="field c3"><span>Loại tài liệu</span><select data-fl="kind"><option value="">Tất cả</option>${[['paper', 'Paper'], ['decision', 'Bằng / quyết định'], ['cv', 'CV gốc'], ['other', 'Khác']].map(o => `<option value="${o[0]}" ${f.kind === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></label>
+        <label class="field c3"><span>Loại tài liệu</span><select data-fl="kind"><option value="">Tất cả</option>${[['export_pdf','PDF CV đã xuất'], ['paper', 'Paper'], ['decision', 'Bằng / quyết định'], ['acceptance','Minh chứng nghiệm thu'], ['cv', 'CV gốc'], ['other', 'Khác']].map(o => `<option value="${o[0]}" ${f.kind === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></label>
         <label class="field c3"><span>Chủ hồ sơ</span><select data-fl="email"><option value="">Tất cả</option>${[...new Set(d.files.map(x => x.email))].map(e => `<option value="${esc(e)}" ${f.email === e ? 'selected' : ''}>${esc(nameOf(e))}</option>`).join('')}</select></label></div>
         ${list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Tên file / hồ sơ</th><th>Liên kết</th><th>Phiên bản</th><th>Quyền</th><th></th></tr></thead><tbody>${list.map(x => `<tr><td>${esc(x.name)}<span class="sub">${esc(nameOf(x.email))} · ${kb(x.size)}</span></td><td>${esc(linkLabel(x))}</td><td class="num">v${esc(x.version)} · ${esc(fmtD(x.uploadedAt))}</td>
           <td><button type="button" class="badge ${x.access === 'internal' ? 'info' : ''}" style="border:0;cursor:pointer" data-act="file-acc" data-id="${esc(x.id)}" data-a="${x.access === 'internal' ? 'private' : 'internal'}" title="Bấm để đổi quyền">${x.access === 'internal' ? 'Nội bộ' : 'Riêng tư'}</button></td><td><button type="button" class="iconbtn" data-act="open-file" data-id="${esc(x.id)}" aria-label="Tải về">${icon('download', 'sm')}</button></td></tr>`).join('')}</tbody></table></div>` : emptyState('file', 'Không có tài liệu khớp bộ lọc.')}
@@ -3753,5 +3863,236 @@ ACT['build-info'] = async () => {
     <p class="caption" style="margin-top:16px">Nếu font chưa tải, kiểm tra Styles.html có đủ font nhúng và mở lại đúng link triển khai sau khi cập nhật.</p>`;
 };
 
+Object.assign(ServerAPI, {
+  placeSuggestions:(q,s)=>gas('api_placeSuggestions',q,s),placeDetails:(id,s)=>gas('api_placeDetails',id,s),
+  verifyEvidence:(k,id)=>gas('api_verifyEvidence',k,id),lookupPublication:(u,t,y)=>gas('api_lookupPublicationLink',u,t,y),reviewProject:(id,d,n)=>gas('api_reviewProjectEvidence',id,d,n)
+});
+Object.assign(MockAPI, {
+  placeSuggestions:async()=>{throw new Error('Bản xem thử chưa kết nối Google Places. Bản triển khai dùng MAPS_SERVER_KEY.');},
+  placeDetails:async()=>{throw new Error('Bản xem thử chưa kết nối Google Places.');},
+  verifyEvidence:async()=>({ok:true,status:'pending',aiStatus:'demo',note:'Bản demo không gọi Gemini. Hồ sơ vẫn chờ quản trị viên.'}),
+  lookupPublication:async(u,t,y)=>{const m=String(u).match(/10\.\d{4,9}\/[^\s?#]+/i);if(!m)throw new Error('Bản demo nhận DOI hoặc link chứa DOI.');const r=await MockAPI.checkDoi(m[0],t,y);if(r.meta)r.meta.doi=m[0];return r;},reviewProject:async()=>{throw new Error('Duyệt minh chứng đề tài cần bản triển khai có Google Sheets.');}
+});
+function aiStatusHTML(x) {
+  if(!x.aiStatus) return '';
+  const labels={manual:['Quản trị viên đã xử lý','info'],processing:['AI đang xử lý','info'],matched:['AI đối chiếu khớp','success'],uncertain:['Đang xử lý · chờ quản trị viên','warning'],mismatch:['Minh chứng cần bổ sung','warning'],error:['Lỗi AI · chờ quản trị viên','danger'],demo:['Demo · chưa gọi AI','neutral']};
+  return `<div class="ai-result" role="status">${badge(...(labels[x.aiStatus] || ['Chờ xử lý','info']))}${x.aiNote?`<p class="caption">${esc(x.aiNote)}</p>`:''}${x.aiModel?`<span class="caption">${esc(x.aiModel)} · ${esc(fmtDT(x.aiCheckedAt))}</span>`:''}</div>`;
+}
+async function verifyUI(kind,id,btn) {
+  toast('Đang gửi minh chứng để Gemini đối chiếu…','info');
+  const r=await call(API.verifyEvidence(kind,id),btn);
+  if(kind==='project' && r.ok) {const x=(S.drafts.projects || []).find(x=>x.id===id);if(x){x.evidenceStatus=r.status;x.aiStatus=r.aiStatus;x.aiNote=r.note;}}
+  toast(r.note || 'Đã kiểm tra minh chứng.',r.aiStatus==='error'?'error':r.status==='verified'?'ok':'info');
+  return r;
+}
+ACT['ai-retry']=async el=>{await verifyUI(el.dataset.kind,el.dataset.id,el);await refresh();};
+ACT['cred-edit']=el=>{
+  const x=S.data.credentials.find(x=>x.id===el.dataset.id),f=$('#credentialForm');if(!x || x.status==='verified' || !f)return;
+  f.elements.namedItem('kind').value=x.kind;f.elements.namedItem('kind').dispatchEvent(new Event('change',{bubbles:true}));
+  ['id','value','date','country','issuer','recognitionDate','decisionNo','note'].forEach(k=>{const inp=f.elements.namedItem(k);if(inp)inp.value=['date','recognitionDate'].includes(k)?SL.fmtDate(x[k]):x[k] || '';});
+  f.scrollIntoView({behavior:'smooth',block:'center'});captureFormDraft(f);toast('Đã mở thông tin cần bổ sung. Chọn lại file minh chứng rồi gửi xác minh.','info');
+};
+ACT['list-move']=el=>{
+  const kind=el.dataset.kind,rows=readListDom(kind),i=+el.dataset.i,n=i+ +el.dataset.step;
+  if(n<0||n>=rows.length)return;
+  [rows[i],rows[n]]=[rows[n],rows[i]];S.drafts[kind]=rows;S.structuredDirty[kind]=true;S.ui.keepScroll=true;route();
+};
+function setConditional(box,on) {
+  if(!box)return;box.hidden=!on;
+  $$('input,select,textarea',box).forEach(el=>{el.disabled=!on;el.setCustomValidity('');});
+}
+function styleRequiredMarks(root) {
+  $$('label.field > span:first-child',root || $('#main')).forEach(span=>{
+    if(span.querySelector('.req') || !/\*\s*$/.test(span.textContent))return;
+    span.innerHTML=esc(span.textContent.replace(/\s*\*\s*$/,''))+reqMark();
+  });
+}
+function contactAddress(p) {
+  if(p.mapPlaceId && p.address)return p.address;
+  const parts=[p.address || ''];
+  [p.ward,p.province,p.addressCountry].filter(Boolean).forEach(x=>{if(!SL.fold(parts.join(', ')).includes(SL.fold(x)))parts.push(x);});
+  return parts.filter(Boolean).join(', ');
+}
+VIEWS.expert.needs.mount=function() {
+  const f=$('#needsForm');if(!f)return;
+  const pairs=[['council','councilLevel'],['supervise','superviseLevel'],['guestLecture','teachField'],['consult','consultField'],['jointResearch','researchDirection']];
+  const sync=()=>pairs.forEach(([a,b])=>{const toggle=f.elements.namedItem(a),inp=f.elements.namedItem(b);if(!toggle||!inp)return;const box=inp.closest('label.field');inp.required=toggle.checked;setConditional(box,toggle.checked);if(toggle.checked && !box.querySelector('.req'))box.querySelector('span').insertAdjacentHTML('beforeend',reqMark());});
+  sync();pairs.forEach(([a])=>f.elements.namedItem(a).addEventListener('change',sync));
+};
+const originalNeedsSave=ACT['needs-save'];
+ACT['needs-save']=async el=>{const f=$('#needsForm');if(f && !f.reportValidity())return;await originalNeedsSave(el);};
+function syncProfileConditions(root) {
+  root=root || $('#main');
+  $$('[data-gate]',root).forEach(el=>setConditional($(`[data-gate-body="${el.dataset.gate}"]`,el.form),el.checked));
+  const ug=$('[data-ug-status]',root);if(ug){setConditional($('[data-ug-year]',ug.form),ug.value==='graduated');setConditional($('[data-ug-expected]',ug.form),ug.value==='studying');}
+  const id=$('[name=idNumber]',root);if(id)setConditional($('[data-id-details]',id.form),!!id.value.trim());
+  $$('[data-project-state]',root).forEach(el=>setConditional($('[data-acceptance-body]',el.closest('[data-list-row]')),el.value==='accepted'));
+  const kind=$('#credentialForm [name=kind]',root);
+  if(kind) {
+    setConditional($('[data-title-extra]',kind.form),kind.value==='title');
+    $('#credentialDateLabel').innerHTML=(kind.value==='degree'?'Ngày cấp bằng':'Ngày bổ nhiệm')+reqMark();
+  }
+}
+function suggestIdAuthority(form) {
+  const type=form.elements.namedItem('idType').value, place=form.elements.namedItem('idPlace');
+  const suggestions=['Bộ Công an','Cục Cảnh sát quản lý hành chính về trật tự xã hội','Cục Cảnh sát đăng ký quản lý cư trú và dữ liệu quốc gia về dân cư','Cục Cảnh sát ĐKQL cư trú và DLQG về dân cư'];
+  if(type!=='legacy' && (!place.value || suggestions.includes(place.value))) place.value=type==='identity'?'Bộ Công an':suggestions[1];
+}
+VIEWS.expert.profile.mount=function(q) {
+  mountProfileScroll(q);syncProfileConditions();mountMap();
+  $$('[data-list-sort]').forEach(el=>el.addEventListener('change',()=>{
+    const k=el.dataset.listSort,rows=readListDom(k),sign=el.value==='asc'?1:-1;
+    if(el.value!=='manual')rows.sort((a,b)=>sign*((+(a.year || a.from) || 0)-(+(b.year || b.from) || 0)));
+    S.drafts[k]=rows;S.structuredDirty[k]=true;S.ui.keepScroll=true;route();
+  }));
+  const kind=$('#credentialForm [name=kind]');
+  if(kind)kind.addEventListener('change',()=>{
+    const values=kind.value==='degree'?E.degrees():E.titles();
+    $('#credValue').innerHTML='<span>Giá trị'+reqMark()+'</span>'+(kind.value==='position'?'<input name="value" required placeholder="Ví dụ: Trưởng bộ môn">':`<select name="value" required><option value="">— Chọn —</option>${values.map(x=>`<option>${esc(x)}</option>`).join('')}</select>`);syncProfileConditions(kind.form);
+  });
+  $$('[data-cred-file]').forEach(inp=>inp.addEventListener('change',async()=>{
+    try {const f=await readFile(inp.files[0],['pdf','png','jpg','jpeg']);await call(API.uploadFile(f,'cred:'+inp.dataset.credFile));await verifyUI('cred',inp.dataset.credFile);await refresh();}catch(e){toast(e.message,'error');}
+  }));
+  $$('[data-project-file]').forEach(inp=>inp.addEventListener('change',async()=>{
+    try {
+      const rows=readListDom('projects'),r=rows[+inp.dataset.projectFile];
+      if(!r.id){toast('Lưu đề tài trước khi tải minh chứng.','error');return;}
+      const f=await readFile(inp.files[0],['pdf','png','jpg','jpeg']);await call(API.uploadFile(f,'project:'+r.id));await verifyUI('project',r.id);
+      S.drafts.projects=rows.map(x=>x.id===r.id?Object.assign(x,{fileName:f.name}):x);
+      // Server returns actual Drive ID; merge without discarding other unsaved fields.
+      const data=await API.bootstrap(S.ws),saved=data.projects.find(x=>x.id===r.id);
+      if(saved){['fileId','fileName','evidenceStatus','aiStatus','aiNote','aiModel','aiCheckedAt','reviewNote'].forEach(k=>S.drafts.projects[+inp.dataset.projectFile][k]=saved[k]);}
+      S.data=data;S.ui.keepScroll=true;route();toast('Đã lưu minh chứng nghiệm thu.','ok');
+    }catch(e){toast(e.message,'error');}
+  }));
+};
+document.addEventListener('change',e=>{
+  if(e.target.matches('[data-gate],[data-ug-status],[data-project-state],[data-project-rule]'))syncProfileConditions();
+  if(e.target.matches('[data-id-type]')){suggestIdAuthority(e.target.form);syncProfileConditions();}
+});
+document.addEventListener('input',e=>{
+  if(e.target.setCustomValidity)e.target.setCustomValidity('');
+  if(e.target.matches('#basicProfileForm [name=idNumber]')){syncProfileConditions();suggestIdAuthority(e.target.form);}
+});
+document.addEventListener('invalid',e=>{const details=e.target.closest('details');if(details)details.open=true;},true);
+document.addEventListener('focusout',e=>{
+  const w=e.target.closest && e.target.closest('[data-combo]');
+  if(w && w.dataset.free==='0' && e.target.tagName==='INPUT') {
+    const values=JSON.parse(w.querySelector('script').textContent);
+    e.target.setCustomValidity(!e.target.value || values.includes(e.target.value)?'':'Chọn một giá trị trong danh mục.');
+  }
+});
+const originalProfileSave=ACT['form-profile'];
+ACT['form-profile']=async(f,e)=>{
+  try {const o=formData(f);FXRules.profile(o,E.profile(),todayISO());await originalProfileSave(f,e);}catch(err){toast(err.message,'error');throw err;}
+};
+const originalListSave=ACT['form-list'];
+ACT['form-list']=async f=>{
+  try {if(f.dataset.kind==='projects')readListDom('projects').forEach(r=>FXRules.project(r,todayISO()));await originalListSave(f);}catch(err){toast(err.message,'error');throw err;}
+};
+ACT['form-cred']=async f=>{
+  try {
+    const o=formData(f),btn=f.querySelector('button.primary');FXRules.credential(o,todayISO(),E.degrees(),E.titles());
+    const file=f.querySelector('input[type=file]').files[0];if(!file)throw new Error('Chọn file minh chứng trước khi gửi.');
+    const fd=await readFile(file,['pdf','png','jpg','jpeg']);if(file.size>12*1024*1024)throw new Error('Minh chứng AI tối đa 12 MB.');
+    const r=await call(API.addCredential(o),btn);
+    try {await call(API.uploadFile(fd,'cred:'+r.credential.id),btn);await verifyUI('cred',r.credential.id,btn);}catch(err){toast('Yêu cầu đã lưu nhưng minh chứng chưa kiểm tra xong: '+err.message,'error');await refresh();return;}
+    discardFormDraft(f);await refresh();
+  }catch(err){toast(err.message,'error');throw err;}
+};
+let liveMap=null,liveMarker=null,mapsLoader=null,placeSession='';
+function loadGoogleMap(key) {
+  if(window.google && google.maps && google.maps.Map)return Promise.resolve();
+  if(mapsLoader)return mapsLoader;
+  mapsLoader=new Promise((resolve,reject)=>{
+    const t=setTimeout(()=>reject(new Error('Bản đồ tải quá lâu. Kiểm tra kết nối và MAPS_BROWSER_KEY.')),15000);
+    window.fxMapReady=()=>{clearTimeout(t);resolve();};
+    window.gm_authFailure=()=>{clearTimeout(t);mapsLoader=null;reject(new Error('Google Maps từ chối khóa. Kiểm tra khóa, billing và URL được phép.'));mapMessage('Google Maps từ chối khóa. Bạn vẫn có thể nhập địa chỉ.');};
+    const s=document.createElement('script');s.src='https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(key)+'&callback=fxMapReady&loading=async&language=vi&v=weekly';s.async=true;s.onerror=()=>{clearTimeout(t);mapsLoader=null;reject(new Error('Không tải được Google Maps.'));};document.head.appendChild(s);
+  });return mapsLoader;
+}
+function mapMessage(text){const el=$('#mapStatus');if(el)el.textContent=text;}
+function mapPoint(lat,lng,place) {
+  const f=$('#basicProfileForm');if(!f)return;
+  f.elements.namedItem('mapLat').value=String(+lat.toFixed(6));f.elements.namedItem('mapLng').value=String(+lng.toFixed(6));
+  f.elements.namedItem('mapPlaceId').value=place || '';f.elements.namedItem('mapConfirmed').value='false';
+  if(liveMap && liveMap.getDiv().isConnected){liveMap.setCenter({lat,lng});liveMap.setZoom(16);if(liveMarker)liveMarker.setPosition({lat,lng});else liveMarker=new google.maps.Marker({position:{lat,lng},map:liveMap,draggable:true});google.maps.event.clearListeners(liveMarker,'dragend');liveMarker.addListener('dragend',e=>mapPoint(e.latLng.lat(),e.latLng.lng(),''));}
+  else {const box=$('#profileLiveMap');if(box)box.innerHTML=`<iframe title="Bản đồ kiểm tra tọa độ" src="https://www.google.com/maps?q=${encodeURIComponent(lat+','+lng)}&z=16&output=embed" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;}
+  mapMessage('Đã chọn điểm. Đối chiếu địa chỉ rồi bấm Xác nhận ghim.');captureFormDraft(f);
+}
+async function mountMap() {
+  const box=$('#profileLiveMap'),f=$('#basicProfileForm');if(!box||!f)return;
+  if(liveMap)google.maps.event.clearInstanceListeners(liveMap);if(liveMarker){google.maps.event.clearInstanceListeners(liveMarker);liveMarker.setMap(null);}liveMap=null;liveMarker=null;
+  placeSession=crypto.randomUUID?crypto.randomUUID():uid('place');
+  const lat=+f.elements.namedItem('mapLat').value,lng=+f.elements.namedItem('mapLng').value,has=!!f.elements.namedItem('mapLat').value && !!f.elements.namedItem('mapLng').value;
+  const key=(S.data.settings || {}).MAPS_BROWSER_KEY;
+  if(key)try{await loadGoogleMap(key);if(!box.isConnected)return;liveMap=new google.maps.Map(box,{center:has?{lat,lng}:{lat:10.7769,lng:106.7009},zoom:has?16:11,mapTypeControl:false,streetViewControl:false});if(has)liveMarker=new google.maps.Marker({position:{lat,lng},map:liveMap,draggable:true});if(liveMarker)liveMarker.addListener('dragend',e=>mapPoint(e.latLng.lat(),e.latLng.lng(),''));liveMap.addListener('click',e=>mapPoint(e.latLng.lat(),e.latLng.lng(),''));}catch(e){mapMessage(e.message);}
+  if(!liveMap && box.isConnected) {const query=has?lat+','+lng:[f.elements.namedItem('address').value,f.elements.namedItem('province').value].filter(Boolean).join(', ') || 'Việt Nam';box.innerHTML=`<iframe title="Bản đồ địa chỉ" src="https://www.google.com/maps?q=${encodeURIComponent(query)}&output=embed" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;if(!key)mapMessage('Bản đồ xem trực tiếp. Để chọn/kéo ghim, quản trị viên cần cấu hình MAPS_BROWSER_KEY.');}
+  const inp=$('#placeSearch'),results=$('#placeResults');let timer=null,seq=0;
+  inp.addEventListener('input',()=>{
+    clearTimeout(timer);const current=++seq,q=inp.value.trim();results.hidden=true;inp.setAttribute('aria-expanded','false');
+    if(q.length<3)return;
+    timer=setTimeout(async()=>{try{
+      const choices=await API.placeSuggestions(q,placeSession);if(!inp.isConnected||current!==seq)return;
+      results.innerHTML=choices.map(x=>`<button type="button" role="option" data-place="${esc(x.id)}">${esc(x.label)}</button>`).join('')+'<span class="caption">Google Maps</span>';results.hidden=!choices.length;inp.setAttribute('aria-expanded',String(!!choices.length));if(!choices.length)mapMessage('Chưa tìm thấy địa điểm. Bạn có thể giữ địa chỉ tự nhập.');
+    }catch(e){if(current===seq&&inp.isConnected)mapMessage(e.message);}},400);
+  });
+  results.addEventListener('click',async e=>{
+    const b=e.target.closest('[data-place]');if(!b)return;const current=++seq;
+    try{const r=await API.placeDetails(b.dataset.place,placeSession);if(!f.isConnected||current!==seq)return;placeSession=crypto.randomUUID?crypto.randomUUID():uid('place');
+      f.elements.namedItem('address').value=r.address;['province','ward'].forEach(k=>{if(r[k])f.elements.namedItem(k).value=r[k];});if(r.country)f.elements.namedItem('addressCountry').value=r.country;
+      inp.value=r.address;results.hidden=true;inp.setAttribute('aria-expanded','false');mapPoint(r.lat,r.lng,r.id);
+    }catch(err){mapMessage(err.message);}
+  });
+  inp.addEventListener('keydown',e=>{const bs=$$('button',results);if(e.key==='Escape'){results.hidden=true;inp.setAttribute('aria-expanded','false');}else if(e.key==='ArrowDown'&&bs[0]){e.preventDefault();bs[0].focus();}});
+  results.addEventListener('keydown',e=>{const bs=$$('button',results),i=bs.indexOf(document.activeElement);if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();const n=Math.max(0,Math.min(bs.length-1,i+(e.key==='ArrowDown'?1:-1)));if(bs[n])bs[n].focus();}if(e.key==='Escape'){results.hidden=true;inp.focus();}});
+  ['address','province','ward','addressCountry'].forEach(k=>['input','change'].forEach(type=>f.elements.namedItem(k).addEventListener(type,()=>{f.elements.namedItem('mapConfirmed').value='false';f.elements.namedItem('mapPlaceId').value='';f.elements.namedItem('mapLat').value='';f.elements.namedItem('mapLng').value='';if(liveMarker){liveMarker.setMap(null);liveMarker=null;}mapMessage('Địa chỉ đã thay đổi. Chọn lại ghim nếu cần.');captureFormDraft(f);})));
+  ['mapLat','mapLng'].forEach(k=>f.elements.namedItem(k).addEventListener('input',()=>{f.elements.namedItem('mapConfirmed').value='false';f.elements.namedItem('mapPlaceId').value='';mapMessage('Tọa độ đã đổi; cần xác nhận lại ghim.');}));
+}
+ACT['map-locate']=()=>{
+  const f=$('#basicProfileForm');if(!navigator.geolocation){mapMessage('Trình duyệt chưa hỗ trợ định vị.');return;}
+  mapMessage('Đang xin quyền truy cập vị trí…');
+  navigator.geolocation.getCurrentPosition(p=>{if(f.isConnected){mapPoint(p.coords.latitude,p.coords.longitude,'');mapMessage('Đã lấy vị trí thiết bị. Kiểm tra địa chỉ và xác nhận ghim.');}},e=>{if(f.isConnected)mapMessage(e.code===1?'Bạn chưa cấp quyền vị trí. Tiếp tục nhập địa chỉ hoặc chọn trên bản đồ.':'Không xác định được vị trí. Chọn địa điểm hoặc nhập tọa độ.');},{enableHighAccuracy:true,timeout:12000,maximumAge:60000});
+};
+ACT['map-confirm']=()=>{
+  try{const f=$('#basicProfileForm'),o=formData(f);if(!o.mapLat||!o.mapLng||!o.address)throw new Error('Cần địa chỉ và tọa độ trước khi xác nhận ghim.');FXRules.profile({mapLat:o.mapLat,mapLng:o.mapLng},E.profile(),todayISO());f.elements.namedItem('mapConfirmed').value='true';mapMessage('Đã xác nhận ghim. Bấm Lưu thay đổi để lưu vào hồ sơ.');captureFormDraft(f);}catch(e){toast(e.message,'error');}
+};
+const originalPubMount=VIEWS.expert.pub.mount;
+VIEWS.expert.pub.mount=function(q){originalPubMount(q);};
+ACT['pub-meta']=async el=>{
+  const x=pubFormData();if(!x.doi && !x.sourceUrl){toast('Dán DOI hoặc đường dẫn bài báo.','error');return;}
+  const before=JSON.stringify(x), r=await call(API.lookupPublication(x.sourceUrl || x.doi,x.title,x.year),el);
+  if(JSON.stringify(pubFormData())!==before){toast('Nội dung đã thay đổi; tra lại link để tránh ghi đè.','info');return;}
+  S.drafts.pub=Object.assign({id:S.route.q.id || undefined},x);S.ui.meta=Object.assign({id:S.route.q.id || ''},r);S.ui.keepScroll=true;route();
+};
+const originalPubApply=ACT['pub-meta-apply'];
+ACT['pub-meta-apply']=()=>{const meta=S.ui.meta && S.ui.meta.meta;originalPubApply();if(meta && meta.doi){S.drafts.pub.doi=meta.doi;S.ui.keepScroll=true;route();}};
+async function openFile(id,btn) {
+  const f=await call(API.getFile(id),btn);
+  if(f.mime!=='application/pdf'){downloadB64(f.name,f.mime,f.data);return;}
+  const bytes=Uint8Array.from(atob(f.data),c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([bytes],{type:f.mime}));
+  try {await openDialog({title:f.name,wide:true,body:`<iframe class="pdf-preview" title="${esc(f.name)}" src="${url}"></iframe><p class="caption">Nếu trình duyệt không hiển thị PDF, bấm Tải PDF.</p>`,foot:`<a class="btn primary" href="${url}" download="${esc(f.name)}">Tải PDF</a><button type="button" class="btn" data-act="dlg-close">Đóng</button>`});}finally{URL.revokeObjectURL(url);}
+}
+function projectEvidenceQueue() {
+  const rows=(S.data.projects || []).filter(x=>x.fileId && !['verified','rejected'].includes(x.evidenceStatus));
+  return `<div class="card" style="margin-bottom:20px"><h3 class="h3">Minh chứng đề tài cần quản trị viên xử lý (${rows.length})</h3>${rows.length?`<div class="list">${rows.map(x=>`<div class="li"><div class="grow"><b>${esc(x.name)}</b><span class="sub">${esc(nameOf(x.email))} · ${esc(x.aiNote || 'Chờ đối chiếu minh chứng')}</span></div><button type="button" class="btn sm" data-act="project-review" data-id="${esc(x.id)}">Xem và duyệt</button></div>`).join('')}</div>`:'<p class="caption">Không có minh chứng đề tài trong hàng chờ.</p>'}</div>`;
+}
+ACT['project-review']=async el=>{
+  const x=S.data.projects.find(x=>x.id===el.dataset.id);if(!x)return;
+  await openDialog({title:'Đối chiếu minh chứng đề tài',wide:true,body:`<dl class="kv"><dt>Đề tài</dt><dd>${esc(x.name)}</dd><dt>Người khai</dt><dd>${esc(nameOf(x.email))}</dd><dt>Cấp / vai trò</dt><dd>${esc(x.level)} · ${esc(x.role)}</dd><dt>Nghiệm thu</dt><dd>${esc(x.acceptanceResult || 'Chưa có kết quả')} · ${esc(SL.fmtDate(x.acceptanceDate))}<br>${esc(x.acceptanceBasis || '')}</dd></dl>${aiStatusHTML(x)}<button type="button" class="btn" data-act="project-file" data-id="${esc(x.fileId)}">Xem minh chứng trong tab mới</button><label class="field" style="margin-top:14px"><span>Nhận xét / lý do bổ sung</span><input id="projectReviewNote" maxlength="700"></label>`,foot:[['verified','Xác minh minh chứng'],['needs_info','Yêu cầu bổ sung'],['rejected','Không ghi nhận']].map(d=>`<button type="button" class="btn ${d[0]==='verified'?'primary':''}" data-act="project-review-decide" data-id="${esc(x.id)}" data-d="${d[0]}">${d[1]}</button>`).join('')+'<button type="button" class="btn" data-act="dlg-close">Đóng</button>'});
+};
+ACT['project-review-decide']=async el=>{
+  const note=$('#projectReviewNote').value.trim();if(el.dataset.d!=='verified'&&!note){toast('Cần lý do để người khai bổ sung.','error');return;}
+  await call(API.reviewProject(el.dataset.id,el.dataset.d,note),el);closeDialog(true);await refresh();toast('Đã ghi nhận kết quả đối chiếu minh chứng.','ok');
+};
+ACT['project-file']=async el=>{
+  const tab=window.open('about:blank','_blank');
+  try{const f=await call(API.getFile(el.dataset.id),el),bytes=Uint8Array.from(atob(f.data),c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([bytes],{type:f.mime}));if(tab){tab.opener=null;tab.location.href=url;setTimeout(()=>URL.revokeObjectURL(url),300000);}else{downloadB64(f.name,f.mime,f.data);URL.revokeObjectURL(url);}}catch(e){if(tab)tab.close();throw e;}
+};
+
+function archivedPDFs(email) {
+  const files=(S.data.files || []).filter(x=>x.email===email && x.kind==='export_pdf').sort((a,b)=>String(b.uploadedAt).localeCompare(String(a.uploadedAt)));
+  return `<div class="card" style="margin-bottom:20px"><h3 class="h3">PDF đã xuất trong kho hồ sơ</h3>${files.length?`<div class="stack">${files.map(x=>`<div class="row between"><span>${esc(x.name)}<span class="sub">${esc(fmtDT(x.uploadedAt))} · v${esc(x.version)}</span></span><button type="button" class="btn sm" data-act="open-file" data-id="${esc(x.id)}">Xem PDF</button></div>`).join('')}</div>`:'<p class="caption">Chưa có PDF lưu trong kho. Dùng nút PDF để tạo bản lưu; lệnh In không tự tải PDF về kho.</p>'}</div>`;
+}
 boot();
 </script>
