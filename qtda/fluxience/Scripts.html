@@ -1239,7 +1239,7 @@ const MockAPI = (function () {
     const brand = { APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME, CITY: st.CITY, FORM_CODE: st.FORM_CODE, PUB_CRITERIA: st.PUB_CRITERIA };
     const e = who();
     const accounts = db.Users.map(u => ({ email: u.email, name: u.name, unit: u.unit, roles: u.roles, status: u.status }));
-    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.63-demo' });
+    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.64-demo' });
     const u = db.Users.find(x => x.email === e);
     if (!u) {
       const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: 'expert' };
@@ -1250,7 +1250,7 @@ const MockAPI = (function () {
     if (u.status === 'rejected') return wait({ state: 'denied', rejected: true, note: u.reviewNote, email: e, settings: brand, accounts, contact: ADMIN });
     if (u.status !== 'active') return wait({ state: 'disabled', email: e, settings: brand, accounts, contact: ADMIN });
     const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs.indexOf('admin') >= 0 ? 'admin' : rs[0];
-    const base = { state: 'ok', demo: true, version: '1.63-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
+    const base = { state: 'ok', demo: true, version: '1.64-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
     if (w === 'admin') {
       const der = {}; db.Users.forEach(x => { der[x.email] = derived(x.email); });
       return wait(Object.assign(base, { users: db.Users, profiles: db.Profiles, derivedAll: der, credentials: db.Credentials, pubs: db.Publications, needsAll: db.Needs, work: db.Work, projects: db.Projects, awards: db.Awards, rounds: db.Rounds, matchesAll: db.Matches, files: db.Files, supportAll: db.Support }));
@@ -1547,7 +1547,7 @@ const API = IS_GAS ? ServerAPI : MockAPI;
 /* =====================================================================
    TRẠNG THÁI & ĐIỀU HƯỚNG
    ===================================================================== */
-const UI_VERSION = '1.63';
+const UI_VERSION = '1.64';
 { const bi = document.querySelector('.build-info'); if (bi) bi.textContent = 'Fluxience · v' + UI_VERSION; }
 const S = { data: null, ws: '', route: { page: '', q: {} }, busy: 0, ui: {}, drafts: {}, formDrafts: {}, structuredDirty: {} };
 let sessionRevision = 0, refreshRevision = 0;
@@ -2102,6 +2102,7 @@ function wsActivate(root, force) {
   WS.active = root;
   // v1.58: mỗi mục trên thanh bên là một trang riêng → chỉ hiện mục đang chọn
   $$('#main > .ws-section').forEach(sec => { sec.hidden = sec.dataset.wsRoot !== root; });
+  animateIn(wsSection(root));
   $$('#nav a').forEach(a => { if (a.getAttribute('href') === '#/' + root) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   const c = WS.cur[root] || { page: root, q: {} }, v = VIEWS[S.ws][c.page] || VIEWS[S.ws][root];
   const base = S.ws === 'admin' ? 'Quản trị' : 'Chuyên gia', label = (NAV[S.ws].find(n => n[0] === root) || [])[2] || '';
@@ -2605,6 +2606,7 @@ VIEWS.expert.overview = {
       ${kpi('Công bố', pubs.length, 'Không tính bản ghi trùng')}${kpi('Cần bổ sung file', needFile.length, needFile.length ? 'Thêm paper để gửi xác minh' : 'Đủ minh chứng', needFile.length ? 'warn-t' : 'ok-t')}
       ${kpi('Đề xuất mới', fresh.length, fresh.length ? 'Chờ bạn phản hồi' : 'Không có đề xuất mới', fresh.length ? 'warn-t' : 'muted')}</div>
       ${quickNeedsCard(d)}
+      ${pubs.length ? yearChart(pubs, 'Công bố của bạn theo năm', 'my-year-chart') : ''}
       <div class="grid2"><div class="stack">
         <div class="card"><div class="row between"><div class="h2">Việc cần làm</div>${badge(todo.length ? todo.length + ' việc' : 'Đã xong', todo.length ? 'warning' : 'success')}</div>
           <div class="progress" style="margin:16px 0 4px" aria-label="Mức hoàn thiện"><i style="width:${c.pct}%"></i></div>
@@ -2628,7 +2630,7 @@ VIEWS.expert.overview = {
 function activateProfileSection(key) {
   const navKey=key==='cred'?'edu':key;
   S.ui.profileActive=key;
-  $$('[data-profile-section]').forEach(sec=>{sec.hidden=sec.dataset.profileSection!==navKey;});
+  $$('[data-profile-section]').forEach(sec=>{const was=sec.hidden;sec.hidden=sec.dataset.profileSection!==navKey;if(was&&!sec.hidden)animateIn(sec);});
   $$('.profile-tabs [data-profile-jump]').forEach(a=>{if(a.dataset.profileJump===navKey)a.setAttribute('aria-current','location');else a.removeAttribute('aria-current');});
   const save=$('[data-act="profile-save"]');if(save)save.textContent=key==='cred'?'Gửi xác minh':'Lưu mục đang xem';
   if(WS.cur.profile){WS.cur.profile.q=Object.assign({},WS.cur.profile.q,{tab:key});}
@@ -3349,7 +3351,7 @@ const exportView = {
         <div class="fgrid"><label class="field c12"><span>Mẫu xuất</span><select data-exp="tpl">${CV_TEMPLATES.filter(t => t.group === st.tab).map(t => `<option value="${t.code}" ${t.code === st.tpl ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select></label></div>
         <div class="h3" style="margin:20px 0 4px">Các mục trong bản xuất</div>
         ${tpl.sections.map(s => `<label class="check"><input type="checkbox" data-exp-sec="${s}" ${st.sections[s] !== false ? 'checked' : ''}> <span>${esc(labels[s])}</span></label>`).join('')}
-        ${st.tpl === 'bgd' ? (() => { const ex = st.extra || {}, nb = m.books.length, na = m.awards.length; return `<label class="check"><input type="checkbox" data-exp-extra="books" ${ex.books ? 'checked' : ''}> <span>V. Sách, giáo trình <span class="caption">(${nb} mục)</span></span></label><label class="check"><input type="checkbox" data-exp-extra="awards" ${ex.awards ? 'checked' : ''}> <span>${ex.books ? 'VI' : 'V'}. Giải thưởng, khen thưởng <span class="caption">(${na} mục)</span></span></label><p class="caption" style="margin:6px 0 0">Mục I–IV đúng Thông tư 08/2011. Tích thêm mục V–VI nếu muốn kèm sách, giáo trình và giải thưởng.</p>`; })() : ''}
+        ${st.tpl === 'bgd' ? (() => { const ex = st.extra || {}, nb = m.books.length, na = m.awards.length; return `<label class="check"><input type="checkbox" data-exp-extra="books" ${ex.books ? 'checked' : ''}> <span>V. Sách, giáo trình <span class="caption">(${nb} mục)</span></span></label><label class="check"><input type="checkbox" data-exp-extra="awards" ${ex.awards ? 'checked' : ''}> <span>VI. Giải thưởng, khen thưởng <span class="caption">(${na} mục)</span></span></label><p class="caption" style="margin:6px 0 0">Mục I–IV theo Phụ lục V, Thông tư 08/2011. Tích thêm V, VI nếu muốn kèm sách, giáo trình và giải thưởng (chỉ chọn VI thì trong bản xuất mục này được đánh số V cho liền mạch).</p>`; })() : ''}
         <div class="scope-now"><div><span class="label">Học hàm · học vị cao nhất (tự chọn)</span><div>${esc([src.derived.title && src.derived.title + (src.derived.titleDate ? ' (' + SL.yearOf(src.derived.titleDate) + ')' : ''), src.derived.degree && src.derived.degree + (src.derived.degreeDate ? ' (' + SL.yearOf(src.derived.degreeDate) + ')' : '')].filter(Boolean).join(' · ') || 'Chưa có mục đã xác minh')}</div></div></div>
         <hr class="div"><label class="check"><input type="checkbox" data-exp="contact" ${st.contact && st.tpl !== 'intro' ? 'checked' : ''} ${st.tpl === 'intro' ? 'disabled' : ''}> <span>Kèm thông tin liên hệ & số định danh${st.tpl === 'intro' ? ' (hồ sơ giới thiệu luôn ẩn)' : ''}</span></label>
         <label class="field" style="margin-top:12px"><span>Công bố đưa vào bản xuất</span><select data-exp="pubFilter">${PUB_FILTERS.map(f => `<option value="${f[0]}" ${f[0] === st.pubFilter ? 'selected' : ''}>${f[1]}</option>`).join('')}</select></label>
@@ -3814,6 +3816,38 @@ ACT['acc-do'] = async el => {
 };
 
 /* ---------- Thống kê công bố ---------- */
+/* v1.64 · Chuyển động: mục mới hiện ra trượt nhẹ + số liệu đếm lên. Tắt hết khi người dùng chọn giảm chuyển động. */
+const REDUCED = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+function animateIn(el) {
+  if (!el || REDUCED()) return;
+  el.classList.remove('fx-enter'); void el.offsetWidth; el.classList.add('fx-enter');
+  $$('.sum-tile b, .kpi .k-val', el).forEach(n => {
+    const txt = n.textContent, m = txt.match(/^(\d+)(.*)$/); if (!m || +m[1] === 0 || n._counting) return;
+    const end = +m[1], rest = m[2], t0 = performance.now(), dur = Math.min(900, 300 + end * 20); n._counting = true;
+    const tick = now => { const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3); n.textContent = Math.round(end * e) + rest; if (k < 1) requestAnimationFrame(tick); else { n.textContent = txt; n._counting = false; } };
+    requestAnimationFrame(tick);
+  });
+  $$('.yc-bar, .sum-row em', el).forEach(b => { b.style.animation = 'none'; void b.offsetWidth; b.style.animation = ''; });
+}
+/** v1.64 · Biểu đồ cột "Công bố theo năm": một chuỗi, một màu (brand), gốc ở trục 0, đầu cột bo 4px,
+    rê chuột/chạm để xem số; chỉ ghi số trên cột cao nhất và năm gần nhất; có bảng số liệu thay thế. */
+function yearChart(pubs, title, id) {
+  const by = {};
+  pubs.forEach(p => { const y = SL.yearOf(p.year); if (y) by[y] = (by[y] || 0) + 1; });
+  const ys = Object.keys(by).sort();
+  if (!ys.length) return `<div class="card yc"><div class="h3">${esc(title)}</div><p class="caption" style="margin:8px 0 0">Chưa có công bố có năm xuất bản.</p></div>`;
+  const all = []; for (let y = +ys[0]; y <= +ys[ys.length - 1]; y++) all.push(String(y));   // năm trống vẫn hiện (cột 0) để không méo trục thời gian
+  const shown = all.slice(-12), max = Math.max(...shown.map(y => by[y] || 0)), last = shown[shown.length - 1], top = shown.find(y => (by[y] || 0) === max);
+  const total = shown.reduce((a, y) => a + (by[y] || 0), 0);
+  const step = max <= 4 ? 1 : Math.ceil(max / 4), ticks = []; for (let t = 0; t <= max; t += step) ticks.push(t); if (ticks[ticks.length - 1] < max) ticks.push(ticks[ticks.length - 1] + step);
+  const ceil = ticks[ticks.length - 1] || 1;
+  return `<div class="card yc" id="${esc(id || '')}"><div class="row between"><div><div class="h3">${esc(title)}</div><div class="caption">${total} công bố · ${esc(shown[0])}–${esc(last)}${all.length > 12 ? ' (12 năm gần nhất)' : ''}</div></div></div>
+    <div class="yc-plot" role="img" aria-label="${esc(title + ': ' + shown.map(y => y + ' có ' + (by[y] || 0)).join(', '))}">
+      <div class="yc-grid" aria-hidden="true">${ticks.slice().reverse().map(t => `<div><span>${t}</span></div>`).join('')}</div>
+      <div class="yc-bars">${shown.map((y, i) => { const v = by[y] || 0, h = v / ceil * 100; return `<div class="yc-col" tabindex="0" data-tip="${esc(y + ': ' + v + ' công bố')}"><div class="yc-bar-wrap">${(y === top || y === last) && v ? `<b class="yc-val" style="bottom:calc(${h}% + 4px)">${v}</b>` : ''}<i class="yc-bar" style="height:${h}%;animation-delay:${i * 40}ms"></i></div><small>${esc(y)}</small></div>`; }).join('')}</div>
+    </div>
+    <details class="yc-table"><summary>Xem dạng bảng</summary><table class="tbl"><thead><tr><th>Năm</th><th>Số công bố</th></tr></thead><tbody>${shown.slice().reverse().map(y => `<tr><td>${esc(y)}</td><td class="num">${by[y] || 0}</td></tr>`).join('')}</tbody></table></details></div>`;
+}
 /** v1.58 · Tổng quan dữ liệu cho quản trị: chỉ số chính + xếp hạng dạng thanh ngang gọn (không dùng nhiều biểu đồ cột). */
 function adminSummaryHTML() {
   const d = S.data, ex = experts(), pubs = SL.dedupe((d.pubs || []).filter(p => p.status !== 'rejected'));
@@ -3825,6 +3859,7 @@ function adminSummaryHTML() {
   const degs = ['Tiến sĩ khoa học', 'Tiến sĩ', 'Thạc sĩ', 'Kỹ sư', 'Cử nhân'].map(g => [g, ex.filter(x => x.der.degree === g).length]).filter(r => r[1]).concat([['Chưa xác minh học vị', ex.filter(x => !x.der.degree).length]]);
   return `<div class="sum-grid">${tile('users', ex.length, 'Chuyên gia', (d.users || []).length + ' tài khoản')}${tile('user', filled, 'Đã điền hồ sơ', 'hoàn thiện từ 50%')}${tile('file', pubs.filter(p => typeOf(p) === 'journal').length, 'Bài báo', 'không trùng · ' + (d.pubs || []).length + ' lượt nhập')}${tile('alert', ex.filter(x => !withPub.has(x.email)).length, 'Chưa có công bố', 'cần nhắc bổ sung')}
     ${tile('brief', (d.projects || []).length, 'Đề tài', '')}${tile('spark', (d.awards || []).length, 'Giải thưởng', '')}${tile('chat', pubs.filter(p => typeOf(p) === 'conference').length, 'Bài hội thảo', '')}${tile('list', pubs.filter(p => typeOf(p) === 'book').length, 'Sách, giáo trình', '')}</div>
+    ${yearChart(pubs, 'Công bố theo năm xuất bản', 'admin-year-chart')}
     <div class="sum-ranks">${rank('Chuyên gia theo học vị', degs, 'Chưa có dữ liệu.')}${rank('Nhiều công bố nhất', count(pubs, p => nameOf(p.email)), 'Chưa có công bố.')}${rank('Tạp chí / nơi đăng nhiều nhất', count(pubs, p => p.venue), 'Chưa có công bố.')}</div>`;
 }
 VIEWS.admin.stats = {
@@ -4411,6 +4446,43 @@ boot();
 .sum-row em{display:block;height:100%;border-radius:999px;background:var(--sl-brand-default)}
 .sum-row b{text-align:right}
 .pub-type-tabs{flex-wrap:wrap}
+/* v1.64 · biểu đồ công bố theo năm (màu cột đã kiểm định: sáng #2563eb, tối #3d8fd6) */
+:root{--fx-chart:#2563eb;--fx-chart-hover:#1d4ed8}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--fx-chart:#3d8fd6;--fx-chart-hover:#5aa0dd}}
+:root[data-theme="dark"]{--fx-chart:#3d8fd6;--fx-chart-hover:#5aa0dd}
+.yc{margin-bottom:16px}
+.yc-plot{position:relative;height:220px;margin-top:16px;padding-left:28px}
+.yc-grid{position:absolute;inset:0 0 24px 28px;display:flex;flex-direction:column;justify-content:space-between}
+.yc-grid div{position:relative;border-top:1px solid var(--sl-border-default);height:0}
+.yc-grid div:last-child{border-top-color:var(--sl-border-strong)}
+.yc-grid span{position:absolute;left:-28px;top:-8px;width:22px;text-align:right;font-size:11.5px;color:var(--sl-text-secondary)}
+.yc-bars{position:absolute;inset:0 0 0 28px;display:flex;gap:2px;align-items:stretch}
+.yc-col{flex:1;display:flex;flex-direction:column;min-width:0;outline:none;position:relative;cursor:default}
+.yc-bar-wrap{position:relative;flex:1;margin-bottom:6px;display:flex;align-items:flex-end;justify-content:center}
+.yc-bar{display:block;width:min(70%,36px);min-height:0;background:var(--fx-chart);border-radius:4px 4px 0 0;transform-origin:bottom;animation:ycgrow .6s cubic-bezier(.2,.7,.2,1) both}
+.yc-col:hover .yc-bar,.yc-col:focus-visible .yc-bar{background:var(--fx-chart-hover)}
+.yc-val{position:absolute;left:0;right:0;text-align:center;font-size:12px;font-weight:600;color:var(--sl-text-primary)}
+.yc-col small{height:18px;text-align:center;font-size:11.5px;color:var(--sl-text-secondary);white-space:nowrap;overflow:hidden}
+.yc-col[data-tip]:hover::after,.yc-col[data-tip]:focus-visible::after{content:attr(data-tip);position:absolute;bottom:calc(100% - 8px);left:50%;transform:translateX(-50%);padding:6px 10px;border-radius:8px;background:var(--sl-text-primary);color:var(--sl-bg-surface);font-size:12.5px;white-space:nowrap;box-shadow:var(--sl-shadow);z-index:5;pointer-events:none}
+.yc-table{margin-top:10px}.yc-table summary{cursor:pointer;font-size:13px;color:var(--sl-brand-ink)}.yc-table table{margin-top:8px;max-width:320px}
+@keyframes ycgrow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.sum-row em{transform-origin:left;animation:fxbar .7s cubic-bezier(.2,.7,.2,1) both}
+@keyframes fxbar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+/* v1.64 · chuyển động giao diện */
+.fx-enter{animation:fxin .32s cubic-bezier(.2,.7,.2,1) both}
+@keyframes fxin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.card,.btn,.sum-tile,.record-row,.project-row{transition:box-shadow .18s ease,transform .18s ease,border-color .18s ease,background-color .18s ease}
+.sum-tile:hover,.kpi:hover{transform:translateY(-2px);box-shadow:var(--sl-shadow)}
+.btn:active{transform:translateY(1px)}
+#nav a{transition:background-color .15s ease,color .15s ease}
+dialog[open]{animation:fxdlg .22s cubic-bezier(.2,.7,.2,1)}
+dialog[open]::backdrop{animation:fxfade .22s ease}
+@keyframes fxdlg{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes fxfade{from{opacity:0}to{opacity:1}}
+.toast{animation:fxtoast .28s cubic-bezier(.2,.7,.2,1)}
+@keyframes fxtoast{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+#workLock.show .wl-card{animation:fxdlg .2s ease}
+@media (prefers-reduced-motion: reduce){.fx-enter,.yc-bar,.sum-row em,dialog[open],dialog[open]::backdrop,.toast,#workLock.show .wl-card{animation:none!important}.sum-tile:hover,.kpi:hover,.btn:active{transform:none}}
 /* Thẻ tài khoản: hiện đủ email (xuống dòng khi dài), vai trò ở dòng riêng */
 #meUnit{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;margin-top:6px!important}
 #meUnit .acct-mail{display:block;margin:0;overflow-wrap:anywhere;word-break:break-all;white-space:normal}
