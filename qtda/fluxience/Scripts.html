@@ -1213,7 +1213,7 @@ const MockAPI = (function () {
     const brand = { APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME, CITY: st.CITY, FORM_CODE: st.FORM_CODE, PUB_CRITERIA: st.PUB_CRITERIA };
     const e = who();
     const accounts = db.Users.map(u => ({ email: u.email, name: u.name, unit: u.unit, roles: u.roles, status: u.status }));
-    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.23-demo' });
+    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.24-demo' });
     const u = db.Users.find(x => x.email === e);
     if (!u) {
       const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: 'expert' };
@@ -1224,7 +1224,7 @@ const MockAPI = (function () {
     if (u.status === 'rejected') return wait({ state: 'denied', rejected: true, note: u.reviewNote, email: e, settings: brand, accounts, contact: ADMIN });
     if (u.status !== 'active') return wait({ state: 'disabled', email: e, settings: brand, accounts, contact: ADMIN });
     const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs.indexOf('admin') >= 0 ? 'admin' : rs[0];
-    const base = { state: 'ok', demo: true, version: '1.23-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
+    const base = { state: 'ok', demo: true, version: '1.24-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
     if (w === 'admin') {
       const der = {}; db.Users.forEach(x => { der[x.email] = derived(x.email); });
       return wait(Object.assign(base, { users: db.Users, profiles: db.Profiles, derivedAll: der, credentials: db.Credentials, pubs: db.Publications, needsAll: db.Needs, work: db.Work, projects: db.Projects, awards: db.Awards, rounds: db.Rounds, matchesAll: db.Matches, files: db.Files, supportAll: db.Support }));
@@ -1520,7 +1520,7 @@ const API = IS_GAS ? ServerAPI : MockAPI;
 /* =====================================================================
    TRẠNG THÁI & ĐIỀU HƯỚNG
    ===================================================================== */
-const UI_VERSION = '1.23';
+const UI_VERSION = '1.24';
 { const bi = document.querySelector('.build-info'); if (bi) bi.textContent = 'Fluxience · v' + UI_VERSION; }
 const S = { data: null, ws: '', route: { page: '', q: {} }, busy: 0, ui: {}, drafts: {}, formDrafts: {}, structuredDirty: {} };
 let sessionRevision = 0, refreshRevision = 0;
@@ -2899,8 +2899,8 @@ VIEWS.expert.pub = {
         ${locked ? `<div class="callout ok" style="margin-bottom:16px">${icon('check', 'sm')}<div>Đã xác minh. Sửa tên, tác giả, năm, nơi đăng hoặc DOI sẽ đưa bài về "Chờ duyệt".</div></div>` : ''}
         <div class="fgrid">
           <label class="field c12"><span>${isBook ? 'Tên sách / giáo trình *' : 'Tên bài báo *'}</span><input name="title" value="${esc(x.title || '')}" maxlength="400" required></label>
-          <label class="field c12"><span>Link bài báo để điền metadata</span><input name="sourceUrl" value="${esc(x.sourceUrl || '')}" placeholder="https://doi.org/… hoặc trang nhà xuất bản"><span class="hint">Tra link → xem kết quả → bấm Điền từ Crossref. Không tự ghi đè thông tin.</span></label><label class="field c8"><span>DOI</span><input name="doi" value="${esc(x.doi || '')}" placeholder="10.xxxx/…"></label>
-          <div class="field c4"><span>&nbsp;</span><button type="button" class="btn" data-act="pub-meta">${icon('search')}Đối chiếu metadata</button></div>
+          <label class="field c12"><span>Link bài báo để điền metadata</span><input name="sourceUrl" value="${esc(x.sourceUrl || '')}" placeholder="https://doi.org/… hoặc trang nhà xuất bản"><span class="hint">Dán link (doi.org, Taylor &amp; Francis, Springer, Elsevier…) rồi bấm "Tự điền từ link": tên bài, tác giả, tạp chí, năm, tập, trang được điền sẵn.</span></label><label class="field c8"><span>DOI</span><input name="doi" value="${esc(x.doi || '')}" placeholder="10.xxxx/…"></label>
+          <div class="field c4"><span>&nbsp;</span><button type="button" class="btn" data-act="pub-meta">${icon('search')}Tự điền từ link</button></div>
           <label class="field c8"><span>${isBook ? 'Nhà xuất bản *' : 'Tạp chí / hội nghị *'}</span>${combo('venue', x.venue, [...new Set(d.pubs.map(z => z.venue).filter(Boolean))], { free: true, placeholder: isBook ? 'NXB…' : 'Chọn hoặc gõ tên, ISSN' })}</label>
           <label class="field c2"><span>Năm *</span><input name="year" value="${esc(x.year || '')}" inputmode="numeric" maxlength="4"></label>
           <label class="field c2"><span>Tháng</span><select name="month"><option value=""></option>${Array.from({ length: 12 }, (_, i) => `<option ${String(x.month) === String(i + 1) ? 'selected' : ''}>${i + 1}</option>`).join('')}</select></label>
@@ -4059,14 +4059,43 @@ ACT['map-confirm']=()=>{
 };
 const originalPubMount=VIEWS.expert.pub.mount;
 VIEWS.expert.pub.mount=function(q){originalPubMount(q);};
+/* Tra link/DOI → TỰ ĐIỀN metadata Crossref vào biểu mẫu.
+   Bài mới (chưa có tên): điền toàn bộ. Bài đã có nội dung: chỉ điền ô trống, phần lệch hiện để người dùng chọn "Điền theo Crossref". */
+/** Ghi giá trị thẳng vào ô của biểu mẫu công bố (để cơ chế giữ bản nháp không chép đè giá trị cũ khi vẽ lại). */
+function fillPubForm(vals) {
+  const f=$('#pubForm');if(!f)return;
+  Object.keys(vals).forEach(k=>{const el=f.elements.namedItem(k);if(el && el.value!==undefined && vals[k]!=null){el.value=vals[k];el.dispatchEvent(new Event('input',{bubbles:true}));}});
+}
+const CROSSREF_TYPE={'journal-article':'journal','proceedings-article':'conference','book':'book','monograph':'book','edited-book':'book','book-chapter':'chapter'};
 ACT['pub-meta']=async el=>{
-  const x=pubFormData();if(!x.doi && !x.sourceUrl){toast('Dán DOI hoặc đường dẫn bài báo.','error');return;}
+  const x=pubFormData();if(!x.doi && !x.sourceUrl){toast('Dán link bài báo hoặc DOI rồi bấm lại.','error');return;}
   const before=JSON.stringify(x), r=await call(API.lookupPublication(x.sourceUrl || x.doi,x.title,x.year),el);
-  if(JSON.stringify(pubFormData())!==before){toast('Nội dung đã thay đổi; tra lại link để tránh ghi đè.','info');return;}
-  S.drafts.pub=Object.assign({id:S.route.q.id || undefined},x);S.ui.meta=Object.assign({id:S.route.q.id || ''},r);S.ui.keepScroll=true;route();
+  if(JSON.stringify(pubFormData())!==before){toast('Nội dung đã thay đổi trong lúc tra; bấm lại để điền.','info');return;}
+  const m=r && r.meta;
+  if(!r || !r.found || !m){S.drafts.pub=Object.assign({id:S.route.q.id || undefined},x);S.ui.meta=Object.assign({id:S.route.q.id || ''},r || {});S.ui.keepScroll=true;route();toast('Crossref không có DOI này. Kiểm tra lại link hoặc nhập tay.','error',7000);return;}
+  const fresh=!SL.trim(x.title), owner=SL.trim(S.data.profile && S.data.profile.fullName), out=Object.assign({},x), filled=[];
+  const put=(k,v,label)=>{v=SL.trim(v);if(!v)return;const cur=SL.trim(out[k]);
+    const replaceable=fresh || !cur || (k==='authors' && cur===owner) || (k==='year' && cur===String(new Date().getFullYear()) && !x.doi);
+    if(replaceable && cur!==v){out[k]=v;filled.push(label);}};
+  put('title',m.title,'tên bài');put('authors',m.authors,'tác giả');put('venue',m.venue,'tạp chí');put('year',m.year,'năm');
+  put('issn',m.issn,'ISSN');put('volume',m.volume,'tập');put('pages',m.pages,'trang');put('doi',m.doi,'DOI');
+  if(fresh && CROSSREF_TYPE[m.type])out.type=CROSSREF_TYPE[m.type];
+  const same=SL.normTitle(out.title)===SL.normTitle(m.title) && (!m.year || String(out.year)===String(m.year));
+  fillPubForm(out);
+  S.drafts.pub=Object.assign({id:S.route.q.id || undefined},out);
+  S.ui.meta=Object.assign({id:S.route.q.id || ''},r,same?{status:'match',notes:[]}:{});
+  S.ui.keepScroll=true;route();
+  toast(filled.length?'Đã điền từ Crossref: '+filled.join(', ')+'. Kiểm tra rồi lưu.':same?'Thông tin đã khớp Crossref.':'Có chỗ khác Crossref: xem khung Metadata bên phải và bấm "Điền theo Crossref" nếu muốn thay.',filled.length || same?'ok':'info',7000);
 };
-const originalPubApply=ACT['pub-meta-apply'];
-ACT['pub-meta-apply']=()=>{const meta=S.ui.meta && S.ui.meta.meta;originalPubApply();if(meta && meta.doi){S.drafts.pub.doi=meta.doi;S.ui.keepScroll=true;route();}};
+ACT['pub-meta-apply']=()=>{
+  const m=S.ui.meta && S.ui.meta.meta;if(!m)return;
+  const v={title:m.title,year:m.year,authors:m.authors,venue:m.venue,issn:m.issn,volume:m.volume,pages:m.pages,doi:m.doi};
+  Object.keys(v).forEach(k=>{if(!v[k])delete v[k];});
+  fillPubForm(v);
+  S.drafts.pub=Object.assign({id:S.route.q.id || undefined},pubFormData());
+  S.ui.meta=Object.assign({},S.ui.meta,{status:'match',notes:[]});
+  S.ui.keepScroll=true;route();toast('Đã điền theo Crossref. Kiểm tra rồi lưu.','ok');
+};
 async function openFile(id,btn) {
   const f=await call(API.getFile(id),btn);
   if(f.mime!=='application/pdf'){downloadB64(f.name,f.mime,f.data);return;}
