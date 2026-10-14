@@ -1086,7 +1086,7 @@ function saveToken(t) { TOKEN = t || ''; try { t ? localStorage.setItem(TOKEN_KE
   try { TOKEN = localStorage.getItem(TOKEN_KEY) || ''; } catch (e) {}
 })();
 /* Thời gian chờ tối đa theo loại việc: đọc CV (kèm AI), dựng .docx/.pdf, kiểm tra minh chứng cần lâu hơn thao tác thường. */
-const GAS_WAIT = { api_parseCV: 330000, api_reparseCV: 330000, api_importCV: 180000, api_renderDoc: 180000, api_verifyEvidence: 300000 };
+const GAS_WAIT = { api_parseCV: 355000, api_reparseCV: 355000, api_importCV: 180000, api_renderDoc: 180000, api_verifyEvidence: 355000, api_lookupPublicationLink: 120000 };
 const GAS_MSG = { api_parseCV: 'Đang đọc CV…', api_reparseCV: 'Đang đọc lại CV đã tải lên…', api_importCV: 'Đang lưu dữ liệu từ CV vào hồ sơ…', api_renderDoc: 'Đang tạo file Word / PDF…', api_verifyEvidence: 'AI đang đối chiếu minh chứng…', api_uploadFile: 'Đang tải file lên…' };
 function gas(fn, ...args) {
   if (GAS_MSG[fn] && !LOCK_MSG) LOCK_MSG = GAS_MSG[fn];
@@ -1237,7 +1237,7 @@ const MockAPI = (function () {
     const brand = { APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME, CITY: st.CITY, FORM_CODE: st.FORM_CODE, PUB_CRITERIA: st.PUB_CRITERIA };
     const e = who();
     const accounts = db.Users.map(u => ({ email: u.email, name: u.name, unit: u.unit, roles: u.roles, status: u.status }));
-    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.59-demo' });
+    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.60-demo' });
     const u = db.Users.find(x => x.email === e);
     if (!u) {
       const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: 'expert' };
@@ -1248,7 +1248,7 @@ const MockAPI = (function () {
     if (u.status === 'rejected') return wait({ state: 'denied', rejected: true, note: u.reviewNote, email: e, settings: brand, accounts, contact: ADMIN });
     if (u.status !== 'active') return wait({ state: 'disabled', email: e, settings: brand, accounts, contact: ADMIN });
     const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs.indexOf('admin') >= 0 ? 'admin' : rs[0];
-    const base = { state: 'ok', demo: true, version: '1.59-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
+    const base = { state: 'ok', demo: true, version: '1.60-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
     if (w === 'admin') {
       const der = {}; db.Users.forEach(x => { der[x.email] = derived(x.email); });
       return wait(Object.assign(base, { users: db.Users, profiles: db.Profiles, derivedAll: der, credentials: db.Credentials, pubs: db.Publications, needsAll: db.Needs, work: db.Work, projects: db.Projects, awards: db.Awards, rounds: db.Rounds, matchesAll: db.Matches, files: db.Files, supportAll: db.Support }));
@@ -1545,7 +1545,7 @@ const API = IS_GAS ? ServerAPI : MockAPI;
 /* =====================================================================
    TRẠNG THÁI & ĐIỀU HƯỚNG
    ===================================================================== */
-const UI_VERSION = '1.59';
+const UI_VERSION = '1.60';
 { const bi = document.querySelector('.build-info'); if (bi) bi.textContent = 'Fluxience · v' + UI_VERSION; }
 const S = { data: null, ws: '', route: { page: '', q: {} }, busy: 0, ui: {}, drafts: {}, formDrafts: {}, structuredDirty: {} };
 let sessionRevision = 0, refreshRevision = 0;
@@ -2537,11 +2537,27 @@ function quickNeedsCard(d) {
   return `<form class="card quick-needs" data-form="quick-needs"><div class="row between"><div><div class="h3">Sẵn sàng hợp tác</div><div class="caption">Trả lời nhanh, có thể đổi bất cứ lúc nào trong <a href="#/needs">Thông tin bổ sung</a>.</div></div><button class="btn sm primary">${icon('check', 'sm')}Lưu lựa chọn</button></div>
     <div class="quick-grid">${QUICK_NEEDS.map(([k, fk, qtext, flabel]) => { const yes = String(n[k]) === 'true'; return `<div class="quick-q"><div class="strong">${qtext}</div>
       <div class="seg" role="radiogroup" aria-label="${esc(qtext)}"><label><input type="radio" name="${k}" value="true" ${yes ? 'checked' : ''}><span>Có</span></label><label><input type="radio" name="${k}" value="false" ${yes ? '' : 'checked'}><span>Không</span></label></div>
-      <label class="field"><span>${flabel}${yes ? '' : ' <span class="caption">(điền khi chọn Có)</span>'}</span><input name="${fk}" value="${esc(n[fk] || '')}" placeholder="VD: Quản trị chuỗi cung ứng"></label></div>`; }).join('')}</div></form>`;
+      <label class="field quick-field ${yes ? '' : 'is-off'}"><span>${flabel}${yes ? reqMark() : ' <span class="caption">(chọn Có để điền)</span>'}</span><input name="${fk}" value="${yes ? esc(n[fk] || '') : ''}" placeholder="${yes ? 'VD: Quản trị chuỗi cung ứng' : 'Chỉ điền khi chọn Có'}" ${yes ? 'required' : 'disabled'} maxlength="200"></label></div>`; }).join('')}</div></form>`;
 }
+/* Có → ô lĩnh vực mở và bắt buộc; Không → khóa và xóa nội dung. */
+document.addEventListener('change', e => {
+  const r = e.target; if (!r.matches || !r.matches('.quick-needs input[type=radio]')) return;
+  const q = QUICK_NEEDS.find(x => x[0] === r.name); if (!q) return;
+  const box = r.closest('.quick-q'), inp = box && box.querySelector('input[name="' + q[1] + '"]'), lab = inp && inp.closest('.field'); if (!inp) return;
+  const yes = r.value === 'true' && r.checked;
+  inp.disabled = !yes; inp.required = yes; if (!yes) inp.value = '';
+  inp.placeholder = yes ? 'VD: Quản trị chuỗi cung ứng' : 'Chỉ điền khi chọn Có';
+  lab.classList.toggle('is-off', !yes);
+  lab.querySelector('span').innerHTML = esc(q[3]) + (yes ? reqMark() : ' <span class="caption">(chọn Có để điền)</span>');
+  if (yes) inp.focus();
+});
 ACT['form-quick-needs'] = async f => {
   const o = formData(f), n = Object.assign({}, S.data.needs || {});
-  QUICK_NEEDS.forEach(([k, fk]) => { n[k] = o[k] === 'true' ? 'true' : 'false'; n[fk] = o[fk] || ''; });
+  for (const [k, fk, , flabel] of QUICK_NEEDS) {
+    n[k] = o[k] === 'true' ? 'true' : 'false';
+    n[fk] = n[k] === 'true' ? SL.trim(o[fk] || '') : '';
+    if (n[k] === 'true' && !n[fk]) { toast(flabel + ': cần điền khi chọn Có.', 'error'); const el = f.querySelector('[name="' + fk + '"]'); if (el) el.focus(); return; }
+  }
   if (n.until && n.until < todayISO()) n.until = '';
   if (n.until) n.until = SL.fmtDate(n.until);
   await call(API.saveNeeds(n), f.querySelector('button.primary'));
@@ -2866,7 +2882,7 @@ VIEWS.expert.import = {
       const f = await readFile(file, ['doc', 'docx', 'pdf']).catch(e => { im.error = e.message; route(); });
       if (!f) return;
       im.file = f;
-      LOCK_MSG = 'Đang đọc ' + file.name + '. AI có thể cần 1–2 phút, giữ nguyên trang này.';
+      LOCK_MSG = 'Đang đọc ' + file.name + '. AI có thể cần vài phút để đọc kỹ, giữ nguyên trang này.';
       try {
         const r = await call(API.parseCV(f));
         Object.assign(im, { step: 2, draft: r.draft, source: r.source, fileRow: r.file, sel: null, pubAct: null, edits: {} });
@@ -2885,7 +2901,7 @@ function cvFilesCard() {
 }
 ACT['cv-refill'] = async el => {
   const im = impState();
-  im.error = ''; LOCK_MSG = 'Đang đọc lại ' + (el.dataset.name || 'CV') + '. AI có thể cần 1–2 phút, giữ nguyên trang này.';
+  im.error = ''; LOCK_MSG = 'Đang đọc lại ' + (el.dataset.name || 'CV') + '. AI có thể cần vài phút để đọc kỹ, giữ nguyên trang này.';
   try {
     const r = await call(API.reparseCV(el.dataset.id), el);
     Object.assign(im, { step: 2, draft: r.draft, source: r.source, fileRow: r.file, sel: null, pubAct: null, edits: {} });
@@ -3007,7 +3023,7 @@ VIEWS.expert.pub = {
         ${locked ? `<div class="callout ok" style="margin-bottom:16px">${icon('check', 'sm')}<div>Đã xác minh. Sửa tên, tác giả, năm, nơi đăng hoặc DOI sẽ đưa bài về "Chờ duyệt".</div></div>` : ''}
         <div class="fgrid">
           <label class="field c12"><span>${isBook ? 'Tên sách / giáo trình *' : 'Tên bài báo *'}</span><input name="title" value="${esc(x.title || '')}" maxlength="400" required></label>
-          <label class="field c12"><span>Link bài báo để điền metadata</span><input name="sourceUrl" value="${esc(x.sourceUrl || '')}" placeholder="https://doi.org/… hoặc trang nhà xuất bản"><span class="hint">Dán link (doi.org, Taylor &amp; Francis, Springer, Elsevier…) rồi bấm "Tự điền từ link": tên bài, tác giả, tạp chí, năm, tập, trang được điền sẵn.</span></label><label class="field c8"><span>DOI</span><input name="doi" value="${esc(x.doi || '')}" placeholder="10.xxxx/…"></label>
+          <label class="field c12"><span>Link bài báo để điền metadata</span><input name="sourceUrl" value="${esc(x.sourceUrl || '')}" placeholder="https:\/\/doi.org/… hoặc trang nhà xuất bản"><span class="hint">Dán link (doi.org, Taylor &amp; Francis, Springer, Elsevier…) rồi bấm "Tự điền từ link": tên bài, tác giả, tạp chí, năm, tập, trang được điền sẵn.</span></label><label class="field c8"><span>DOI</span><input name="doi" value="${esc(x.doi || '')}" placeholder="10.xxxx/…"></label>
           <div class="field c4"><span>&nbsp;</span><button type="button" class="btn" data-act="pub-meta">${icon('search')}Tự điền từ link</button></div>
           <label class="field c8"><span>${isBook ? 'Nhà xuất bản *' : 'Tạp chí / hội nghị *'}</span>${combo('venue', x.venue, [...new Set(d.pubs.map(z => z.venue).filter(Boolean))], { free: true, placeholder: isBook ? 'NXB…' : 'Chọn hoặc gõ tên, ISSN' })}</label>
           <label class="field c2"><span>Năm *</span><input name="year" value="${esc(x.year || '')}" inputmode="numeric" maxlength="4"></label>
@@ -3185,7 +3201,7 @@ VIEWS.expert.help = {
     const mine = (d.support || []).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     let body = '';
     if (tab === 'quick') body = `<div class="grid2"><div class="card"><div class="h2">Nhập nhanh công bố</div><p class="muted" style="margin:-8px 0 16px">Dán danh sách trích dẫn (mỗi dòng một bài, dạng APA hoặc "Tên bài, Tạp chí, Năm"; có DOI càng tốt). Hệ thống tách thành bản nháp để bạn kiểm tra.</p>
-        <label class="field"><span>Danh sách trích dẫn</span><x-ta id="quickText" rows="8" placeholder="Tran, M. A., & Le, T. H. (2024). Lean in SMEs. Journal of Operations, 3(1). https://doi.org/10.xxxx/yyyy">${esc((qp && qp.text) || '')}</x-ta></label>
+        <label class="field"><span>Danh sách trích dẫn</span><x-ta id="quickText" rows="8" placeholder="Tran, M. A., & Le, T. H. (2024). Lean in SMEs. Journal of Operations, 3(1). https:\/\/doi.org/10.xxxx/yyyy">${esc((qp && qp.text) || '')}</x-ta></label>
         <div class="row" style="margin-top:12px"><button type="button" class="btn primary" data-act="quick-parse">${icon('spark')}Tách dữ liệu</button>${qp && qp.rows ? `<button type="button" class="btn" data-act="quick-clear">Xóa</button>` : ''}</div>
         ${qp && qp.rows ? `<hr class="div"><div class="h3" style="margin-bottom:8px">${qp.rows.length} bài tách được</div>${qp.rows.map((r, i) => `<div class="rev-item ${r.on ? '' : 'skip'}"><input type="checkbox" ${r.on ? 'checked' : ''} data-act="quick-toggle" data-i="${i}" style="width:18px;height:18px;margin-top:4px;accent-color:var(--sl-brand-default)" aria-label="Chọn"><div><b class="strong">${esc(r.title || '(chưa rõ tên bài)')}</b><div class="caption">${esc([r.authors, r.venue, r.year, r.doi && 'DOI ' + r.doi].filter(Boolean).join(' · '))}</div>${r.dup ? `<div class="flag">Trùng với "${esc(r.dup.title)}" — mặc định bỏ qua.</div>` : (!r.year || !r.venue) ? '<div class="flag">Thiếu năm hoặc nơi đăng: bổ sung sau khi lưu nháp.</div>' : ''}</div><span class="caption">${r.dup ? 'Bỏ qua' : 'Lưu nháp'}</span></div>`).join('')}
           <div class="row" style="margin-top:16px;justify-content:flex-end"><button type="button" class="btn primary" data-act="quick-save">${icon('check')}Lưu các bài đã chọn (nháp)</button></div>` : ''}
@@ -4171,7 +4187,7 @@ function mapPoint(lat,lng,place) {
   f.elements.namedItem('mapLat').value=String(+lat.toFixed(6));f.elements.namedItem('mapLng').value=String(+lng.toFixed(6));
   f.elements.namedItem('mapPlaceId').value=place || '';f.elements.namedItem('mapConfirmed').value='false';
   if(liveMap && liveMap.getDiv().isConnected){liveMap.setCenter({lat,lng});liveMap.setZoom(16);if(liveMarker)liveMarker.setPosition({lat,lng});else liveMarker=new google.maps.Marker({position:{lat,lng},map:liveMap,draggable:true});google.maps.event.clearListeners(liveMarker,'dragend');liveMarker.addListener('dragend',e=>mapPoint(e.latLng.lat(),e.latLng.lng(),''));}
-  else {const box=$('#profileLiveMap');if(box)box.innerHTML=`<iframe title="Bản đồ kiểm tra tọa độ" src="https://www.google.com/maps?q=${encodeURIComponent(lat+','+lng)}&z=16&output=embed" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;}
+  else {const box=$('#profileLiveMap');if(box)box.innerHTML=`<iframe title="Bản đồ kiểm tra tọa độ" src="https:\/\/www.google.com/maps?q=${encodeURIComponent(lat+','+lng)}&z=16&output=embed" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;}
   mapMessage('Đã chọn điểm. Đối chiếu địa chỉ rồi bấm Xác nhận ghim.');captureFormDraft(f);
 }
 async function mountMap() {
@@ -4181,7 +4197,7 @@ async function mountMap() {
   const lat=+f.elements.namedItem('mapLat').value,lng=+f.elements.namedItem('mapLng').value,has=!!f.elements.namedItem('mapLat').value && !!f.elements.namedItem('mapLng').value;
   const key=(S.data.settings || {}).MAPS_BROWSER_KEY;
   if(key)try{await loadGoogleMap(key);if(!box.isConnected)return;liveMap=new google.maps.Map(box,{center:has?{lat,lng}:{lat:10.7769,lng:106.7009},zoom:has?16:11,mapTypeControl:false,streetViewControl:false});if(has)liveMarker=new google.maps.Marker({position:{lat,lng},map:liveMap,draggable:true});if(liveMarker)liveMarker.addListener('dragend',e=>mapPoint(e.latLng.lat(),e.latLng.lng(),''));liveMap.addListener('click',e=>mapPoint(e.latLng.lat(),e.latLng.lng(),''));}catch(e){mapMessage(e.message);}
-  if(!liveMap && box.isConnected) {const query=has?lat+','+lng:[f.elements.namedItem('address').value,f.elements.namedItem('province').value].filter(Boolean).join(', ') || 'Việt Nam';box.innerHTML=`<iframe title="Bản đồ địa chỉ" src="https://www.google.com/maps?q=${encodeURIComponent(query)}&output=embed" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;if(!key)mapMessage('Bản đồ xem trực tiếp. Để chọn/kéo ghim, quản trị viên cần cấu hình MAPS_BROWSER_KEY.');}
+  if(!liveMap && box.isConnected) {const query=has?lat+','+lng:[f.elements.namedItem('address').value,f.elements.namedItem('province').value].filter(Boolean).join(', ') || 'Việt Nam';box.innerHTML=`<iframe title="Bản đồ địa chỉ" src="https:\/\/www.google.com/maps?q=${encodeURIComponent(query)}&output=embed" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;if(!key)mapMessage('Bản đồ xem trực tiếp. Để chọn/kéo ghim, quản trị viên cần cấu hình MAPS_BROWSER_KEY.');}
   const inp=$('#placeSearch'),results=$('#placeResults');let timer=null,seq=0;
   inp.addEventListener('input',()=>{
     clearTimeout(timer);const current=++seq,q=inp.value.trim();results.hidden=true;inp.setAttribute('aria-expanded','false');
@@ -4349,6 +4365,8 @@ boot();
 .sum-row em{display:block;height:100%;border-radius:999px;background:var(--sl-brand-default)}
 .sum-row b{text-align:right}
 .pub-type-tabs{flex-wrap:wrap}
+.quick-field.is-off input{background:var(--sl-bg-subtle);cursor:not-allowed}
+.quick-field.is-off>span{color:var(--sl-text-secondary)}
 .cv-files .li{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--sl-border-default)}
 .cv-files .li:first-child{border-top:0}
 .cv-files .grow{flex:1;min-width:0}
