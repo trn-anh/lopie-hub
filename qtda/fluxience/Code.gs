@@ -27,7 +27,7 @@
 /* =====================================================================
    0. CẤU HÌNH
    ===================================================================== */
-const APP_VERSION = '1.58';
+const APP_VERSION = '1.59';
 const TZ = 'Asia/Ho_Chi_Minh';
 const SESSION_HOURS = 12;
 const MAX_UPLOAD_MB = 20;
@@ -1851,6 +1851,16 @@ function docViaDrive_(blob, mime) {
 function api_parseCV(token, f) {
   const c = expert_(token), started = Date.now();
   const up = api_uploadFile(token, f, 'cv').file;
+  return parseStoredCV_(c, up, started);
+}
+/** "Điền nhanh": đọc lại một CV đã tải lên trước đó (VD: lần trước lỗi hoặc quá thời gian), không cần tải lại file. */
+function api_reparseCV(token, fileId) {
+  const c = expert_(token), started = Date.now();
+  const row = T_('Files').find(x => x.id === fileId && x.email === c.email && x.kind === 'cv');
+  if (!row) throw new Error('Không tìm thấy file CV này trong hồ sơ của bạn.');
+  return parseStoredCV_(c, { id: row.id, mime: row.mime, name: row.name, size: row.size, uploadedAt: row.uploadedAt }, started);
+}
+function parseStoredCV_(c, up, started) {
   const blob = DriveApp.getFileById(up.id).getBlob();
   const mime = up.mime;
   let doc;

@@ -1086,8 +1086,8 @@ function saveToken(t) { TOKEN = t || ''; try { t ? localStorage.setItem(TOKEN_KE
   try { TOKEN = localStorage.getItem(TOKEN_KEY) || ''; } catch (e) {}
 })();
 /* Thời gian chờ tối đa theo loại việc: đọc CV (kèm AI), dựng .docx/.pdf, kiểm tra minh chứng cần lâu hơn thao tác thường. */
-const GAS_WAIT = { api_parseCV: 330000, api_importCV: 180000, api_renderDoc: 180000, api_verifyEvidence: 300000 };
-const GAS_MSG = { api_parseCV: 'Đang đọc CV…', api_importCV: 'Đang lưu dữ liệu từ CV vào hồ sơ…', api_renderDoc: 'Đang tạo file Word / PDF…', api_verifyEvidence: 'AI đang đối chiếu minh chứng…', api_uploadFile: 'Đang tải file lên…' };
+const GAS_WAIT = { api_parseCV: 330000, api_reparseCV: 330000, api_importCV: 180000, api_renderDoc: 180000, api_verifyEvidence: 300000 };
+const GAS_MSG = { api_parseCV: 'Đang đọc CV…', api_reparseCV: 'Đang đọc lại CV đã tải lên…', api_importCV: 'Đang lưu dữ liệu từ CV vào hồ sơ…', api_renderDoc: 'Đang tạo file Word / PDF…', api_verifyEvidence: 'AI đang đối chiếu minh chứng…', api_uploadFile: 'Đang tải file lên…' };
 function gas(fn, ...args) {
   if (GAS_MSG[fn] && !LOCK_MSG) LOCK_MSG = GAS_MSG[fn];
   return new Promise((res, rej) => {
@@ -1111,7 +1111,7 @@ const ServerAPI = {
   savePublication: (p, a) => gas('api_savePublication', p, a), deletePublication: id => gas('api_deletePublication', id),
   checkDoi: (d, t, y) => gas('api_checkDoi', d, t, y), setPubMeta: (id, s, n) => gas('api_setPubMeta', id, s, n),
   uploadFile: (f, l) => gas('api_uploadFile', f, l), getFile: id => gas('api_getFile', id),
-  parseCV: f => gas('api_parseCV', f), importCV: p => gas('api_importCV', p),
+  parseCV: f => gas('api_parseCV', f), reparseCV: id => gas('api_reparseCV', id), importCV: p => gas('api_importCV', p),
   renderDoc: (h, n, f, m) => gas('api_renderDoc', h, n, f, m), logExport: m => gas('api_logExport', m),
   saveUser: u => gas('api_saveUser', u), importUsers: t => gas('api_importUsers', t),
   reviewCredential: (id, d, n) => gas('api_reviewCredential', id, d, n), reviewAccess: (e, d, r, u, n) => gas('api_reviewAccess', e, d, r, u, n), reviewPublication: (id, d, n) => gas('api_reviewPublication', id, d, n),
@@ -1237,7 +1237,7 @@ const MockAPI = (function () {
     const brand = { APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME, CITY: st.CITY, FORM_CODE: st.FORM_CODE, PUB_CRITERIA: st.PUB_CRITERIA };
     const e = who();
     const accounts = db.Users.map(u => ({ email: u.email, name: u.name, unit: u.unit, roles: u.roles, status: u.status }));
-    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.58-demo' });
+    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.59-demo' });
     const u = db.Users.find(x => x.email === e);
     if (!u) {
       const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: 'expert' };
@@ -1248,7 +1248,7 @@ const MockAPI = (function () {
     if (u.status === 'rejected') return wait({ state: 'denied', rejected: true, note: u.reviewNote, email: e, settings: brand, accounts, contact: ADMIN });
     if (u.status !== 'active') return wait({ state: 'disabled', email: e, settings: brand, accounts, contact: ADMIN });
     const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs.indexOf('admin') >= 0 ? 'admin' : rs[0];
-    const base = { state: 'ok', demo: true, version: '1.58-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
+    const base = { state: 'ok', demo: true, version: '1.59-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
     if (w === 'admin') {
       const der = {}; db.Users.forEach(x => { der[x.email] = derived(x.email); });
       return wait(Object.assign(base, { users: db.Users, profiles: db.Profiles, derivedAll: der, credentials: db.Credentials, pubs: db.Publications, needsAll: db.Needs, work: db.Work, projects: db.Projects, awards: db.Awards, rounds: db.Rounds, matchesAll: db.Matches, files: db.Files, supportAll: db.Support }));
@@ -1435,6 +1435,7 @@ const MockAPI = (function () {
       const source = doc.paras.join('\n') + '\n' + doc.tables.map(t => t.map(r => r.join(' | ')).join('\n')).join('\n\n');
       return clone({ draft, source: source.slice(0, 30000), file: up.file });
     },
+    reparseCV: async id => { const im = impState(); if (!im.file) throw new Error('Bản demo không lưu nội dung file: chọn lại file để đọc.'); return api.parseCV(im.file); },
     importCV: async plan => {
       load(); const u = me(); let added = 0, merged = 0;
       if (plan.fields && Object.keys(plan.fields).length || plan.languages) await api.saveProfile(Object.assign({}, plan.fields, plan.languages ? { languages: plan.languages } : {}));
@@ -1544,7 +1545,7 @@ const API = IS_GAS ? ServerAPI : MockAPI;
 /* =====================================================================
    TRẠNG THÁI & ĐIỀU HƯỚNG
    ===================================================================== */
-const UI_VERSION = '1.58';
+const UI_VERSION = '1.59';
 { const bi = document.querySelector('.build-info'); if (bi) bi.textContent = 'Fluxience · v' + UI_VERSION; }
 const S = { data: null, ws: '', route: { page: '', q: {} }, busy: 0, ui: {}, drafts: {}, formDrafts: {}, structuredDirty: {} };
 let sessionRevision = 0, refreshRevision = 0;
@@ -2693,7 +2694,7 @@ function academicSummary() {
 }
 function renderProfileSection(tab) {
   const d=S.data,p=E.profile();
-  if(tab==='basic') return `<div class="grid2"><form data-form="profile" class="stack" id="basicProfileForm"><div class="card profile-card"><h2 class="h2">Thông tin cá nhân</h2><p class="caption">${reqMark()} Trường bắt buộc cho hồ sơ. Căn cước là thông tin bổ sung theo mẫu.</p><div class="identity-grid">${fieldInput('fullName')}${fieldInput('dob',{label:'Ngày sinh'})}${fieldInput('gender',{select:['Nam','Nữ']})}</div><div class="category-grid">${fieldInput('ethnicity',{list:ETHNIC,free:true})}${fieldInput('nationality',{list:COUNTRIES,free:true})}${fieldInput('birthPlace',{list:PROVINCES,free:true})}</div><hr class="div"><h3 class="h3">Thông tin liên hệ</h3><div class="contact-grid">${fieldInput('contactEmail',{label:'Email liên hệ'})}${fieldInput('mobile',{label:'Di động Việt Nam',hint:'10 chữ số (03/05/07/08/09), hoặc +84 thay số 0.'})}</div><div class="category-grid">${fieldInput('addressCountry',{list:COUNTRIES,free:true})}${fieldInput('province',{list:PROVINCES,free:true,hint:'Địa chỉ hiện tại hoặc tên trên giấy tờ; giữ được địa danh cũ.'})}${fieldInput('ward',{label:'Phường / xã',list:[...new Set((d.profiles || [p]).map(x=>x.ward).filter(Boolean))],free:true})}</div>${fieldInput('address',{c:'c12',label:'Địa chỉ chi tiết'})}${mapCard()}</div><details class="card profile-more"><summary>Thông tin khác của lý lịch</summary><div class="fgrid">${fieldInput('hometown',{c:'c4',list:PROVINCES,free:true})}${fieldInput('position',{c:'c4'})}${fieldInput('unit',{c:'c4'})}${fieldInput('phoneOffice',{c:'c4'})}${fieldInput('phoneHome',{c:'c4'})}${fieldInput('fax',{c:'c4'})}<label class="field c12"><span>Loại giấy tờ</span><select name="idType" data-id-type>${[['identity','Thẻ căn cước (mẫu từ 01/07/2024)'],['cccd','Căn cước công dân (CCCD)'],['legacy','CMND — chỉ lưu lịch sử']].map(x=>`<option value="${x[0]}" ${(p.idType || (/^\d{9}$/.test(p.idNumber || '')?'legacy':'cccd'))===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select><span class="hint">CCCD/căn cước: đúng 12 chữ số. CMND hết giá trị sử dụng sau 31/12/2024.</span></label>${fieldInput('idNumber',{c:'c4',label:'Số căn cước / CMND lịch sử'})}<div class="c8 fgrid conditional" data-id-details>${fieldInput('idDate',{c:'c6',required:true})}${fieldInput('idPlace',{c:'c6',required:true,list:['Cục Cảnh sát ĐKQL cư trú và DLQG về dân cư','Bộ Công an','Cục Cảnh sát quản lý hành chính về trật tự xã hội','Cục Cảnh sát đăng ký quản lý cư trú và dữ liệu quốc gia về dân cư'],free:true,hint:'Gợi ý theo mẫu thẻ; đối chiếu và ghi đúng cơ quan trên giấy tờ.'})}</div></div></details><details class="card profile-more"><summary>Chuyên môn & hồ sơ học thuật</summary><div class="fgrid">${fieldInput('field',{list:E.fields(),free:true})}${fieldInput('keywords',{hint:'Ngăn bằng dấu chấm phẩy'})}${fieldInput('orcid')}${fieldInput('scholarUrl')}${fieldInput('bio',{c:'c12',area:true})}</div></details><div class="row profile-save-row"><span class="caption">Cập nhật: ${esc(fmtDT(p.updatedAt) || '—')}</span><button class="btn primary">Lưu thay đổi</button></div></form><aside class="stack profile-context"><div class="card"><h3 class="h2">Hồ sơ học thuật</h3><p>Học vị: ${esc(d.derived.degree || 'Chưa xác minh')}<br>Chức danh: ${esc(d.derived.title || 'Chưa có')}</p><a class="btn" href="#/profile?tab=cred">Xem lịch sử xác minh</a></div><div class="card"><h3 class="h3">Thông tin riêng tư</h3><p class="muted">Chủ hồ sơ và quản trị viên được xem tài liệu, gồm PDF đã xuất. Bản xuất cho đối tác tùy theo lựa chọn kèm thông tin liên hệ.</p></div></aside></div>`;
+  if(tab==='basic') return `<div class="grid2"><form data-form="profile" class="stack" id="basicProfileForm"><div class="card profile-card"><h2 class="h2">Thông tin cá nhân</h2><p class="caption">${reqMark()} Trường bắt buộc cho hồ sơ. Căn cước là thông tin bổ sung theo mẫu.</p><div class="identity-grid">${fieldInput('fullName')}${fieldInput('dob',{label:'Ngày sinh'})}${fieldInput('gender',{select:['Nam','Nữ']})}</div><div class="category-grid">${fieldInput('ethnicity',{list:ETHNIC,free:true})}${fieldInput('nationality',{list:COUNTRIES,free:true})}${fieldInput('birthPlace',{list:PROVINCES,free:true})}</div><hr class="div"><h3 class="h3">Thông tin liên hệ</h3><div class="contact-grid">${fieldInput('contactEmail',{label:'Email liên hệ'})}${fieldInput('mobile',{label:'Di động Việt Nam',hint:'10 chữ số (03/05/07/08/09), hoặc +84 thay số 0.'})}</div><div class="category-grid">${fieldInput('addressCountry',{list:COUNTRIES,free:true})}${fieldInput('province',{list:PROVINCES,free:true,hint:'Địa chỉ hiện tại hoặc tên trên giấy tờ; giữ được địa danh cũ.'})}${fieldInput('ward',{label:'Phường / xã',list:[...new Set((d.profiles || [p]).map(x=>x.ward).filter(Boolean))],free:true})}</div>${fieldInput('address',{c:'c12',label:'Địa chỉ chi tiết'})}${mapCard()}</div><details class="card profile-more"><summary>Thông tin khác của lý lịch</summary><div class="fgrid">${fieldInput('hometown',{c:'c4',list:PROVINCES,free:true})}${fieldInput('position',{c:'c4'})}${fieldInput('unit',{c:'c4'})}${fieldInput('phoneOffice',{c:'c4'})}${fieldInput('phoneHome',{c:'c4'})}${fieldInput('fax',{c:'c4'})}<label class="field c12"><span>Loại giấy tờ</span><select name="idType" data-id-type>${[['identity','Thẻ căn cước (mẫu từ 01/07/2024)'],['cccd','Căn cước công dân (CCCD)'],['legacy','CMND — chỉ lưu lịch sử']].map(x=>`<option value="${x[0]}" ${(p.idType || (/^\d{9}$/.test(p.idNumber || '')?'legacy':'cccd'))===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select><span class="hint">CCCD/căn cước: đúng 12 chữ số. CMND hết giá trị sử dụng sau 31/12/2024.</span></label>${fieldInput('idNumber',{c:'c4',label:'Số căn cước / CMND lịch sử'})}<div class="c8 fgrid conditional" data-id-details>${fieldInput('idDate',{c:'c6',required:true})}${fieldInput('idPlace',{c:'c6',required:true,list:['Bộ Công an','Cục Cảnh sát quản lý hành chính về trật tự xã hội','Cục Cảnh sát đăng ký quản lý cư trú và dữ liệu quốc gia về dân cư'],free:true,hint:'Gợi ý theo mẫu thẻ; đối chiếu và ghi đúng cơ quan trên giấy tờ.'})}</div></div></details><details class="card profile-more"><summary>Chuyên môn & hồ sơ học thuật</summary><div class="fgrid">${fieldInput('field',{list:E.fields(),free:true})}${fieldInput('keywords',{hint:'Ngăn bằng dấu chấm phẩy'})}${fieldInput('orcid')}${fieldInput('scholarUrl')}${fieldInput('bio',{c:'c12',area:true})}</div></details><div class="row profile-save-row"><span class="caption">Cập nhật: ${esc(fmtDT(p.updatedAt) || '—')}</span><button class="btn primary">Lưu thay đổi</button></div></form><aside class="stack profile-context"><div class="card"><h3 class="h2">Hồ sơ học thuật</h3><p>Học vị: ${esc(d.derived.degree || 'Chưa xác minh')}<br>Chức danh: ${esc(d.derived.title || 'Chưa có')}</p><a class="btn" href="#/profile?tab=cred">Xem lịch sử xác minh</a></div><div class="card"><h3 class="h3">Thông tin riêng tư</h3><p class="muted">Chủ hồ sơ và quản trị viên được xem tài liệu, gồm PDF đã xuất. Bản xuất cho đối tác tùy theo lựa chọn kèm thông tin liên hệ.</p></div></aside></div>`;
   if(tab==='edu') return `<div class="stack">${academicSummary()}<form data-form="profile" class="stack" id="academicProfileForm"><div class="card"><h3 class="h2">1. Đại học</h3><div class="fgrid"><label class="field c12"><span>Trạng thái đào tạo${reqMark()}</span><select name="ugStatus" data-ug-status>${(()=>{const st=SL.ugState(p) || (S.data.derived.degree?'graduated':'studying');return [['studying','Đang học — sinh viên chưa tốt nghiệp'],['graduated','Đã tốt nghiệp']].map(o=>`<option value="${o[0]}" ${st===o[0]?'selected':''}>${o[1]}</option>`).join('');})()}</select><span class="hint">Sinh viên chưa tốt nghiệp chọn "Đang học": không cần năm tốt nghiệp, lý lịch in "Đang học".</span></label>${fieldInput('ugSystem',{list:['Chính quy','Vừa làm vừa học','Liên thông','Văn bằng 2','Từ xa'],free:true})}${fieldInput('ugPlace')}${fieldInput('ugMajor')}${fieldInput('ugCountry',{list:COUNTRIES,free:true})}<div data-ug-year class="c12">${fieldInput('ugYear',{c:'c6',required:true})}</div><div data-ug-expected class="c12 conditional">${fieldInput('ugExpectedYear',{c:'c6',required:false,hint:'Không bắt buộc. VD: 2029.'})}</div></div>${toggleBlock('hasUg2','Đã có bằng đại học thứ hai',['ug2Major','ug2Year'])}</div><div class="card"><h3 class="h2">2. Sau đại học</h3>${toggleBlock('hasMaster','Đã có bằng thạc sĩ',['msMajor','msYear','msPlace'])}${toggleBlock('hasPhd','Đã có bằng tiến sĩ',['phdMajor','phdYear','phdPlace','thesis'])}<p class="caption">Thông tin đào tạo phục vụ bản in. Bằng cấp và chức danh dùng xét điều kiện được gửi xác minh riêng phía dưới. Không bắt buộc có thạc sĩ trước tiến sĩ.</p></div><div class="card"><div class="row between"><h3 class="h2">3. Ngoại ngữ</h3><button type="button" class="btn sm" data-act="lang-add">Thêm ngoại ngữ</button></div><div class="stack" style="margin-top:12px">${(S.drafts.langs || (S.drafts.langs=(()=>{try{return JSON.parse(p.languages || '[]');}catch(e){return [];}})())).map((l,i)=>`<div class="fgrid" data-lang="${i}"><label class="field c6"><span>Ngoại ngữ</span>${combo('lang-name',l.name,['Tiếng Anh','Tiếng Pháp','Tiếng Đức','Tiếng Nhật','Tiếng Hàn','Tiếng Trung'],{free:true})}</label><label class="field c6"><span>Mức độ sử dụng</span><div class="row"><input name="lang-level" value="${esc(l.level || '')}" placeholder="B2 / IELTS 7.0 / thành thạo"><button type="button" class="iconbtn" data-act="lang-del" data-i="${i}" aria-label="Xóa">${icon('trash','sm')}</button></div></label></div>`).join('')}</div></div><button class="btn primary">Lưu đào tạo</button></form></div>`;
   if(tab==='cred') {
     const cs=d.credentials.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)));
@@ -2822,6 +2823,7 @@ VIEWS.expert.import = {
           <p class="caption" style="margin:12px 0 0">DOC, DOCX hoặc PDF. Đọc tốt nhất với lý lịch theo mẫu Bộ GD&ĐT (TT 08/2011). ${API.demo ? 'Bản demo đọc .docx ngay trên trình duyệt; bản chạy thật đọc thêm .doc/.pdf qua Google Drive.' : 'File scan có thể cần OCR và kiểm tra thêm.'}</p>
           ${im.error ? `<div class="callout bad" style="margin-top:16px">${icon('alert', 'sm')}<div><b>File chưa đọc được.</b> ${esc(im.error)}<br>File đã chọn vẫn được giữ: thử lại hoặc lưu sang .docx.</div></div>` : ''}
         </div>
+        ${cvFilesCard()}
         <div class="card"><div class="h3">Nếu file chưa đọc được</div><p class="muted" style="margin:8px 0 0">Hệ thống hiển thị lý do, giữ file đã chọn và cho thử lại. Nếu CV có dữ liệu trùng với hồ sơ, bạn sẽ chọn giữ dữ liệu hiện tại hoặc gộp ở bước đối chiếu.</p></div></div>
         <div class="stack"><div class="card"><div class="h3">Thông tin sẽ được tách</div><ol style="margin:12px 0;padding-left:22px;line-height:28px"><li>Thông tin cơ bản & liên hệ</li><li>Đào tạo, học vị & chức danh</li><li>Công tác & đề tài</li><li>Công bố, giáo trình & giải thưởng</li></ol><hr class="div"><p class="muted" style="margin:0">Dữ liệu tách chưa được ghi vào hồ sơ. Bạn quyết định mục nào được thêm, cập nhật hoặc bỏ qua.</p></div>
         <div class="callout">${icon('shield', 'sm')}<div>Không thay thế nội dung đang có nếu bạn chưa xác nhận.</div></div></div></div>`;
@@ -2869,10 +2871,26 @@ VIEWS.expert.import = {
         const r = await call(API.parseCV(f));
         Object.assign(im, { step: 2, draft: r.draft, source: r.source, fileRow: r.file, sel: null, pubAct: null, edits: {} });
         go('import');
-      } catch (e) { im.error = e.message; route(); }
+      } catch (e) { im.error = e.message; route(); if (!API.demo) refresh().catch(() => {}); }   // tải lại để file vừa lên hiện trong "Điền nhanh"
     });
     $$('[data-imp-edit]').forEach(inp => inp.addEventListener('change', () => { im.edits = im.edits || {}; im.edits[inp.dataset.impEdit] = inp.value; }));
   }
+};
+/** Danh sách CV đã tải lên: "Điền nhanh" đọc lại file cũ (lỗi / quá thời gian) mà không phải tải lên lần nữa. */
+function cvFilesCard() {
+  const files = ((S.data && S.data.files) || []).filter(f => f.kind === 'cv').sort((a, b) => String(b.uploadedAt).localeCompare(String(a.uploadedAt))).slice(0, 5);
+  if (!files.length) return '';
+  return `<div class="card"><div class="h3">Điền nhanh từ file đã tải lên</div><p class="caption" style="margin:4px 0 12px">File lần trước bị lỗi hoặc quá thời gian? Bấm <b>Điền nhanh</b> để đọc lại ngay, không cần tải lên lần nữa. Muốn dùng file khác thì kéo thả ở khung phía trên.</p>
+    <div class="list cv-files">${files.map(f => `<div class="li"><div class="grow"><b>${esc(f.name)}</b><span class="sub">Tải lên ${esc(fmtDT(f.uploadedAt))}${f.size ? ' · ' + Math.max(1, Math.round(+f.size / 1024)) + ' KB' : ''}</span></div><button type="button" class="btn sm primary" data-act="cv-refill" data-id="${esc(f.id)}" data-name="${esc(f.name)}">${icon('refresh', 'sm')}Điền nhanh</button></div>`).join('')}</div></div>`;
+}
+ACT['cv-refill'] = async el => {
+  const im = impState();
+  im.error = ''; LOCK_MSG = 'Đang đọc lại ' + (el.dataset.name || 'CV') + '. AI có thể cần 1–2 phút, giữ nguyên trang này.';
+  try {
+    const r = await call(API.reparseCV(el.dataset.id), el);
+    Object.assign(im, { step: 2, draft: r.draft, source: r.source, fileRow: r.file, sel: null, pubAct: null, edits: {} });
+    go('import');
+  } catch (e) { im.error = e.message; route(); }
 };
 function impRow(it) {
   const im = impState(), on = im.sel[it.id];
@@ -4043,7 +4061,7 @@ function syncProfileConditions(root) {
 }
 function suggestIdAuthority(form) {
   const type=form.elements.namedItem('idType').value, place=form.elements.namedItem('idPlace');
-  const suggestions=['Bộ Công an','Cục Cảnh sát quản lý hành chính về trật tự xã hội','Cục Cảnh sát đăng ký quản lý cư trú và dữ liệu quốc gia về dân cư','Cục Cảnh sát ĐKQL cư trú và DLQG về dân cư'];
+  const suggestions=['Bộ Công an','Cục Cảnh sát quản lý hành chính về trật tự xã hội','Cục Cảnh sát đăng ký quản lý cư trú và dữ liệu quốc gia về dân cư'];
   if(type!=='legacy' && (!place.value || suggestions.includes(place.value))) place.value=type==='identity'?'Bộ Công an':suggestions[1];
 }
 VIEWS.expert.profile.mount=function(q) {
@@ -4331,5 +4349,10 @@ boot();
 .sum-row em{display:block;height:100%;border-radius:999px;background:var(--sl-brand-default)}
 .sum-row b{text-align:right}
 .pub-type-tabs{flex-wrap:wrap}
+.cv-files .li{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--sl-border-default)}
+.cv-files .li:first-child{border-top:0}
+.cv-files .grow{flex:1;min-width:0}
+.cv-files .grow b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cv-files .sub{display:block;font-size:12.5px;color:var(--sl-text-secondary)}
 @media (max-width:1000px){.sum-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sum-ranks{grid-template-columns:1fr}}
 </style>
