@@ -27,7 +27,7 @@
 /* =====================================================================
    0. CẤU HÌNH
    ===================================================================== */
-const APP_VERSION = '1.24';
+const APP_VERSION = '1.53';
 const TZ = 'Asia/Ho_Chi_Minh';
 const SESSION_HOURS = 12;
 const MAX_UPLOAD_MB = 20;
