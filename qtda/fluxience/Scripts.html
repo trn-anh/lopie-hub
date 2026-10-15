@@ -844,6 +844,7 @@ var SL = (function () {
   }
 
   return {
+    QUARTILES: ['Q1', 'Q2', 'Q3', 'Q4'],
     DEGREES: DEGREES, TITLES: TITLES, NEED_TYPES: NEED_TYPES, LEVELS: LEVELS, PUB_TYPES: PUB_TYPES, PUB_STATUS: PUB_STATUS,
     CRED_KINDS: CRED_KINDS, PROJECT_LEVELS: PROJECT_LEVELS, PROJECT_ROLES: PROJECT_ROLES, PROFILE_FIELDS: PROFILE_FIELDS,
     str: str, trim: trim, fold: fold, normTitle: normTitle, normDoi: normDoi, isDoi: isDoi, words: words, pad: pad,
@@ -982,7 +983,16 @@ var FXRules = (function () {
     }
     return { status: ok ? 'verified' : ai.verdict === 'mismatch' ? 'needs_info' : 'pending', aiStatus: ok ? 'matched' : ai.verdict === 'mismatch' ? 'mismatch' : 'uncertain', note: SL.trim(ai.reason).slice(0,700) || (ok ? 'AI đối chiếu nội dung minh chứng khớp hồ sơ.' : 'Cần quản trị viên đối chiếu minh chứng.') };
   }
-  return { date:date, year:year, phone:phone, profile:profile, project:project, credential:credential, sortPubs:sortPubs, results:results, evidenceDecision:evidenceDecision };
+  /** Đọc bảng "Category · Year · Quartile" trên trang tạp chí của SCImago: năm mới nhất, hạng tốt nhất. */
+  function parseSjr(html) {
+    var re = /<tr>\s*<td>([^<]{1,200})<\/td>\s*<td>(\d{4})<\/td>\s*<td>(Q[1-4])<\/td>\s*<\/tr>/g, m, rows = [];
+    while ((m = re.exec(String(html || '')))) rows.push({ category: m[1].replace(/&amp;/g, '&').trim(), year: m[2], quartile: m[3] });
+    if (!rows.length) return null;
+    var last = rows.reduce(function (y, r) { return r.year > y ? r.year : y; }, '0');
+    var cur = rows.filter(function (r) { return r.year === last; }).sort(function (a, b) { return a.quartile.localeCompare(b.quartile); });
+    return { quartile: cur[0].quartile, year: last, category: cur.filter(function (r) { return r.quartile === cur[0].quartile; }).map(function (r) { return r.category; }).slice(0, 3).join('; ') };
+  }
+  return { date:date, year:year, phone:phone, profile:profile, project:project, credential:credential, sortPubs:sortPubs, results:results, evidenceDecision:evidenceDecision, parseSjr:parseSjr };
 })();
 
 /* ==== SL-SHARED END ==== */
@@ -1272,7 +1282,7 @@ const MockAPI = (function () {
   }
   const clip = (v, n) => SL.trim(v).slice(0, n || 500);
   function cleanPub(p, email) {
-    return { type: SL.PUB_TYPES.some(t => t.code === p.type) ? p.type : 'journal', title: clip(p.title, 400), authors: clip(p.authors), year: SL.yearOf(p.year), month: /^(0?[1-9]|1[0-2])$/.test(String(p.month || '')) ? String(Number(p.month)) : '', venue: clip(p.venue, 300), issn: clip(p.issn, 30), volume: clip(p.volume, 30), pages: clip(p.pages, 30), doi: SL.normDoi(p.doi), keywords: clip(p.keywords, 300), sourceUrl:clip(p.sourceUrl,500), myRole: PUB_ROLES.includes(p.myRole) ? p.myRole : '', email };
+    return { type: SL.PUB_TYPES.some(t => t.code === p.type) ? p.type : 'journal', title: clip(p.title, 400), authors: clip(p.authors), year: SL.yearOf(p.year), month: /^(0?[1-9]|1[0-2])$/.test(String(p.month || '')) ? String(Number(p.month)) : '', venue: clip(p.venue, 300), issn: clip(p.issn, 30), volume: clip(p.volume, 30), pages: clip(p.pages, 30), doi: SL.normDoi(p.doi), keywords: clip(p.keywords, 300), sourceUrl:clip(p.sourceUrl,500), myRole: PUB_ROLES.includes(p.myRole) ? p.myRole : '', quartile: SL.QUARTILES.includes(p.quartile) ? p.quartile : '', quartileNote: clip(p.quartileNote, 160), email };
   }
   /** Đọc .docx ngay trên trình duyệt: tìm word/document.xml trong file zip rồi giải nén deflate. */
   async function readDocx(file) {
@@ -1383,7 +1393,7 @@ const MockAPI = (function () {
       if (dup && !p.confirmDup) return { ok: false, dup: { id: dup.id, title: dup.title, year: dup.year, status: dup.status } };
       const row = Object.assign({}, cur || { id: uid('P'), source: p.source === 'cv' ? 'cv' : 'manual', uploadedAt: nowStr(), metaStatus: '', metaNote: '', fileId: '', fileName: '', reviewNote: '' }, x);
       if (p.fileId) { const f = db.Files.find(z => z.id === p.fileId && z.email === u.email); if (f) { row.fileId = f.id; row.fileName = f.name; } }
-      const changed = cur && ['title', 'authors', 'year', 'venue', 'doi', 'type'].some(k => String(cur[k]) !== String(row[k]));
+      const changed = cur && ['title', 'authors', 'year', 'venue', 'doi', 'type', 'quartile'].some(k => String(cur[k] == null ? '' : cur[k]) !== String(row[k] == null ? '' : row[k]));
       if (action === 'submit') { if (!row.fileId) throw new Error('Cần tải file minh chứng (paper, quyết định…) trước khi gửi xác minh.'); row.status = cur && cur.status === 'verified' && !changed ? 'verified' : 'pending'; }
       else if (!cur) row.status = 'draft'; else if (cur.status === 'verified' && changed) row.status = 'pending';
       if (!row.status) row.status = 'draft';
@@ -1408,7 +1418,7 @@ const MockAPI = (function () {
       const notes = [];
       if (!(SL.normTitle(t) === SL.normTitle(title) || ov >= .8)) notes.push('Tiêu đề khác Crossref: "' + t + '".');
       if (year && y && String(year) !== y) notes.push('Năm khác Crossref: ' + y + '.');
-      return { found: true, status: notes.length ? 'mismatch' : 'match', notes, meta: { title: t, year: y, authors: (m.author || []).map(a => [a.family, a.given].filter(Boolean).join(' ')).join('; '), venue: (m['container-title'] || [])[0] || m.publisher || '', issn: (m.ISSN || [])[0] || '', volume: m.volume || '', pages: m.page || '' } };
+      return { found: true, status: notes.length ? 'mismatch' : 'match', notes, meta: { title: t, year: y, authors: (m.author || []).map(a => [a.family, a.given].filter(Boolean).join(' ')).join('; '), venue: (m['container-title'] || [])[0] || m.publisher || '', issn: (m.ISSN || [])[0] || '', issns: m.ISSN || [], type: m.type || '', volume: m.volume || '', pages: m.page || '' } };
     },
     setPubMeta: guard((u, id, s, n) => { const p = db.Publications.find(r => r.id === id); if (!p) throw new Error('Không tìm thấy công bố.'); p.metaStatus = s; p.metaNote = clip(n); return { ok: true, pub: p }; }),
     uploadFile: guard((u, f, link) => {
@@ -3033,7 +3043,7 @@ VIEWS.expert.pubs = {
         <label class="field c3"><span>Năm xuất bản</span><select name="y"><option value="">Tất cả</option>${years.map(y => `<option ${fy === y ? 'selected' : ''}>${y}</option>`).join('')}</select></label>
       </form>
       ${list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="w-xs">TT</th><th>Tên công bố / tác giả</th><th>${ft === 'book' ? 'Nhà xuất bản' : ft === 'conference' ? 'Hội thảo' : 'Tạp chí / nơi đăng'}</th><th>Năm</th><th>Minh chứng</th><th>Trạng thái</th></tr></thead><tbody>
-        ${list.map((p, i) => `<tr class="click" data-act="go" data-page="pub" data-q='${esc(JSON.stringify({ id: p.id }))}'><td class="num">${i + 1}</td><td>${esc(p.title)}<span class="sub">${esc(p.authors || '—')} · ${esc(pubType(p.type))}${p.myRole ? ' · ' + esc(p.myRole) : ''}${p.source === 'cv' ? ' · nhập từ CV' : ''}</span></td><td>${esc(p.venue || '—')}${p.issn ? `<span class="sub">ISSN ${esc(p.issn)}</span>` : ''}</td><td class="num">${esc([p.month, p.year].filter(Boolean).join('/'))}</td><td>${p.fileId ? `<button type="button" class="btn sm" data-act="open-file" data-id="${esc(p.fileId)}" title="${esc(p.fileName || '')}">${icon('file', 'sm')}PDF</button>` : p.status === 'verified' ? '<span class="muted">—</span>' : `<button type="button" class="btn sm primary" data-act="pub-quick-upload" data-id="${esc(p.id)}" data-title="${esc(p.title)}">${icon('upload', 'sm')}Tải file</button>`}</td><td>${pubBadge(p)}</td></tr>`).join('')}
+        ${list.map((p, i) => `<tr class="click" data-act="go" data-page="pub" data-q='${esc(JSON.stringify({ id: p.id }))}'><td class="num">${i + 1}</td><td>${esc(p.title)}<span class="sub">${esc(p.authors || '—')} · ${esc(pubType(p.type))}${p.myRole ? ' · ' + esc(p.myRole) : ''}${p.source === 'cv' ? ' · nhập từ CV' : ''}</span></td><td>${esc(p.venue || '—')}${p.quartile ? ` <span class="badge q-badge q${esc(p.quartile.slice(1))}" title="${esc(p.quartileNote || 'Xếp hạng SCImago')}">${esc(p.quartile)}</span>` : ''}${p.issn ? `<span class="sub">ISSN ${esc(p.issn)}</span>` : ''}</td><td class="num">${esc([p.month, p.year].filter(Boolean).join('/'))}</td><td>${p.fileId ? `<button type="button" class="btn sm" data-act="open-file" data-id="${esc(p.fileId)}" title="${esc(p.fileName || '')}">${icon('file', 'sm')}PDF</button>` : p.status === 'verified' ? '<span class="muted">—</span>' : `<button type="button" class="btn sm primary" data-act="pub-quick-upload" data-id="${esc(p.id)}" data-title="${esc(p.title)}">${icon('upload', 'sm')}Tải file</button>`}</td><td>${pubBadge(p)}</td></tr>`).join('')}
       </tbody></table></div><div class="row between" style="margin-top:12px"><span class="caption">${list.length} / ${all.length} công bố</span>${needFile.length ? `<button type="button" class="btn primary" data-act="pub-quick-upload" data-id="${esc(needFile[0].id)}" data-title="${esc(needFile[0].title)}">${icon('upload')}Bổ sung minh chứng${needFile.length > 1 ? ' (' + needFile.length + ' bài)' : ''}</button>` : ''}</div>`
         : emptyState('file', all.length ? 'Không có công bố khớp bộ lọc.' : 'Chưa có công bố. Thêm thủ công, nhập từ CV hoặc dán danh sách trích dẫn.')}
       </div>${cvWait ? `<div class="callout" style="margin-top:20px">${icon('shield', 'sm')}<div>${cvWait} công bố nhập từ CV đang chờ file. Thêm file để hoàn thiện kho hồ sơ và gửi xác minh.</div></div>` : ''}`;
@@ -3086,7 +3096,7 @@ VIEWS.expert.pub = {
       `${p && !locked ? `<button type="button" class="btn danger" data-act="pub-del" data-id="${esc(p.id)}">${icon('trash')}Xóa</button>` : ''}<button type="button" class="btn" data-act="pub-save" data-a="draft">Lưu bản nháp</button><button type="button" class="btn primary" data-act="pub-save" data-a="submit">${icon('check')}Gửi xác minh</button>`) +
       `<div class="grid2"><form class="card" id="pubForm" novalidate><div class="row" style="margin-bottom:16px">${p ? pubBadge(p) : ''}${p && p.source === 'cv' ? badge('Công bố nhập từ CV', 'info') : ''}${p ? `<span class="caption">Tải lên lần đầu ${esc(fmtDT(p.uploadedAt))}</span>` : ''}</div>
         ${p && p.reviewNote ? `<div class="callout ${p.status === 'rejected' ? 'bad' : 'warn'}" style="margin-bottom:16px">${icon('alert', 'sm')}<div><b>Ghi chú của người duyệt:</b> ${esc(p.reviewNote)}</div></div>` : ''}
-        ${locked ? `<div class="callout ok" style="margin-bottom:16px">${icon('check', 'sm')}<div>Đã xác minh. Sửa tên, tác giả, năm, nơi đăng hoặc DOI sẽ đưa bài về "Chờ duyệt".</div></div>` : ''}
+        ${locked ? `<div class="callout ok" style="margin-bottom:16px">${icon('check', 'sm')}<div>Đã xác minh. Sửa tên, tác giả, năm, nơi đăng, DOI hoặc hạng Q sẽ đưa bài về "Chờ duyệt".</div></div>` : ''}
         <div class="fgrid">
           <label class="field c12"><span>${isBook ? 'Tên sách / giáo trình *' : 'Tên bài báo *'}</span><input name="title" value="${esc(x.title || '')}" maxlength="400" required></label>
           <label class="field c12"><span>Link bài báo để điền metadata</span><input name="sourceUrl" value="${esc(x.sourceUrl || '')}" placeholder="https:\/\/doi.org/… hoặc trang nhà xuất bản"><span class="hint">Dán link (doi.org, Taylor &amp; Francis, Springer, Elsevier…) rồi bấm "Tự điền từ link": tên bài, tác giả, tạp chí, năm, tập, trang được điền sẵn.</span></label><label class="field c8"><span>DOI</span><input name="doi" value="${esc(x.doi || '')}" placeholder="10.xxxx/…"></label>
@@ -3097,7 +3107,8 @@ VIEWS.expert.pub = {
           <label class="field c4"><span>Loại công bố</span><select name="type">${SL.PUB_TYPES.map(t => `<option value="${t.code}" ${x.type === t.code ? 'selected' : ''}>${t.label}</option>`).join('')}</select></label>
           <label class="field c8"><span>Vai trò của bạn</span><select name="myRole"><option value="">— Chọn vai trò người đứng tên —</option>${PUB_ROLES.map(r => `<option ${x.myRole === r ? 'selected' : ''}>${r}</option>`).join('')}</select><span class="hint">Chủ nhiệm đề tài · Thành viên thực hiện · Giảng viên hướng dẫn</span></label>
           <label class="field c12"><span>Tác giả<span class="req"> *</span></span><input required name="authors" value="${esc(x.authors || '')}" placeholder="Trần Minh Anh; Nguyễn Hoàng"></label>
-          <label class="field c4"><span>ISSN / ISBN</span><input name="issn" value="${esc(x.issn || '')}"></label><label class="field c4"><span>Tập (số)</span><input name="volume" value="${esc(x.volume || '')}"></label><label class="field c4"><span>Trang</span><input name="pages" value="${esc(x.pages || '')}"></label>
+          <label class="field c4"><span>Xếp hạng tạp chí</span><select name="quartile"><option value="">Chưa xếp hạng / không rõ</option>${SL.QUARTILES.map(v => `<option ${x.quartile === v ? 'selected' : ''}>${v}</option>`).join('')}</select><input type="hidden" name="quartileNote" value="${esc(x.quartileNote || '')}"><span class="hint">${esc(x.quartileNote || 'Theo SCImago (SJR); tự điền khi bấm "Tự điền từ link".')}</span></label>
+          <label class="field c4"><span>ISSN / ISBN</span><input name="issn" value="${esc(x.issn || '')}"></label><label class="field c2"><span>Tập (số)</span><input name="volume" value="${esc(x.volume || '')}"></label><label class="field c2"><span>Trang</span><input name="pages" value="${esc(x.pages || '')}"></label>
           <label class="field c12"><span>Lĩnh vực / từ khóa</span><input name="keywords" value="${esc(x.keywords || '')}" placeholder="Chuỗi cung ứng; tối ưu hóa; sản xuất"></label>
         </div>
         <div class="h3" style="margin:24px 0 12px">File nghiên cứu</div>
@@ -3267,12 +3278,12 @@ VIEWS.expert.help = {
     const d = S.data, tab = q.tab || 'quick', qp = S.ui.quick;
     const mine = (d.support || []).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     let body = '';
-    if (tab === 'quick') body = `<div class="grid2"><div class="card"><div class="h2">Nhập nhanh công bố</div><p class="muted" style="margin:-8px 0 16px">Dán danh sách trích dẫn (mỗi dòng một bài, dạng APA hoặc "Tên bài, Tạp chí, Năm"; có DOI càng tốt). Hệ thống tách thành bản nháp để bạn kiểm tra.</p>
+    if (tab === 'quick') body = `<div class="grid2"><div class="card"><div class="h2">Nhập nhanh công bố</div><p class="muted" style="margin:-8px 0 16px">Dán danh sách trích dẫn hoặc <b>link bài báo</b> (mỗi dòng một bài: APA, "Tên bài, Tạp chí, Năm", DOI hoặc link nhà xuất bản). Link/DOI được tra Crossref để điền đủ thông tin và hạng Q (SCImago); bạn kiểm tra trước khi lưu nháp.</p>
         <label class="field"><span>Danh sách trích dẫn</span><x-ta id="quickText" rows="8" placeholder="Tran, M. A., & Le, T. H. (2024). Lean in SMEs. Journal of Operations, 3(1). https:\/\/doi.org/10.xxxx/yyyy">${esc((qp && qp.text) || '')}</x-ta></label>
         <div class="row" style="margin-top:12px"><button type="button" class="btn primary" data-act="quick-parse">${icon('spark')}Tách dữ liệu</button>${qp && qp.rows ? `<button type="button" class="btn" data-act="quick-clear">Xóa</button>` : ''}</div>
-        ${qp && qp.rows ? `<hr class="div"><div class="h3" style="margin-bottom:8px">${qp.rows.length} bài tách được</div>${qp.rows.map((r, i) => `<div class="rev-item ${r.on ? '' : 'skip'}"><input type="checkbox" ${r.on ? 'checked' : ''} data-act="quick-toggle" data-i="${i}" style="width:18px;height:18px;margin-top:4px;accent-color:var(--sl-brand-default)" aria-label="Chọn"><div><b class="strong">${esc(r.title || '(chưa rõ tên bài)')}</b><div class="caption">${esc([r.authors, r.venue, r.year, r.doi && 'DOI ' + r.doi].filter(Boolean).join(' · '))}</div>${r.dup ? `<div class="flag">Trùng với "${esc(r.dup.title)}" — mặc định bỏ qua.</div>` : (!r.year || !r.venue) ? '<div class="flag">Thiếu năm hoặc nơi đăng: bổ sung sau khi lưu nháp.</div>' : ''}</div><span class="caption">${r.dup ? 'Bỏ qua' : 'Lưu nháp'}</span></div>`).join('')}
+        ${qp && qp.rows ? `<hr class="div"><div class="h3" style="margin-bottom:8px">${qp.rows.length} bài tách được</div>${qp.rows.map((r, i) => `<div class="rev-item ${r.on ? '' : 'skip'}"><input type="checkbox" ${r.on ? 'checked' : ''} data-act="quick-toggle" data-i="${i}" style="width:18px;height:18px;margin-top:4px;accent-color:var(--sl-brand-default)" aria-label="Chọn"><div><b class="strong">${esc(r.title || '(chưa rõ tên bài)')}</b><div class="caption">${esc([r.authors, r.venue, r.year, r.doi && 'DOI ' + r.doi].filter(Boolean).join(' · '))}${r.quartile ? ` <span class="badge q-badge q${esc(r.quartile.slice(1))}" title="${esc(r.quartileNote || '')}">${esc(r.quartile)}</span>` : ''}</div>${r.err ? `<div class="flag">${esc(r.err)}</div>` : r.dup ? `<div class="flag">Trùng với "${esc(r.dup.title)}" — mặc định bỏ qua.</div>` : (!r.year || !r.venue) ? '<div class="flag">Thiếu năm hoặc nơi đăng: bổ sung sau khi lưu nháp.</div>' : r.qMsg ? `<div class="caption">${esc(r.qMsg)}</div>` : ''}</div><span class="caption">${r.err ? 'Chưa tra được' : r.dup ? 'Bỏ qua' : 'Lưu nháp'}</span></div>`).join('')}
           <div class="row" style="margin-top:16px;justify-content:flex-end"><button type="button" class="btn primary" data-act="quick-save">${icon('check')}Lưu các bài đã chọn (nháp)</button></div>` : ''}
-      </div><div class="stack"><div class="card"><div class="h3">Mẹo</div><ul style="margin:8px 0 0;padding-left:20px;line-height:24px;color:var(--sl-text-secondary)"><li>Dòng có DOI cho kết quả tốt nhất; mở từng bài để <b>Đối chiếu metadata</b> với Crossref.</li><li>Bài thiếu tạp chí/năm vẫn lưu được ở dạng nháp với thông tin tạm "(cần bổ sung)".</li><li>Bài lưu nháp chưa tính vào thống kê cho tới khi được xác minh.</li></ul></div>
+      </div><div class="stack"><div class="card"><div class="h3">Mẹo</div><ul style="margin:8px 0 0;padding-left:20px;line-height:24px;color:var(--sl-text-secondary)"><li>Dòng có DOI hoặc link bài báo cho kết quả tốt nhất: tự điền tên bài, tác giả, tạp chí, năm và <b>hạng Q1–Q4</b>.</li><li>Bài thiếu tạp chí/năm vẫn lưu được ở dạng nháp với thông tin tạm "(cần bổ sung)".</li><li>Bài lưu nháp chưa tính vào thống kê cho tới khi được xác minh.</li></ul></div>
       <div class="card"><div class="h3">Nhập cả lý lịch</div><p class="muted" style="margin:8px 0 12px">Có sẵn lý lịch khoa học dạng Word/PDF? Nhập một lần cho toàn bộ hồ sơ.</p><button type="button" class="btn" data-act="go" data-page="import">${icon('upload')}Nhập từ CV</button></div></div></div>`;
     else if (tab === 'support') body = `<div class="grid2"><div class="card"><div class="h2">Yêu cầu của tôi</div>${mine.length ? `<div class="list">${mine.map(s => `<div class="li" style="align-items:flex-start"><div class="grow"><div class="row between"><b class="strong">${esc(s.subject)}</b>${badge(s.status === 'open' ? 'Đang chờ' : s.status === 'answered' ? 'Đã phản hồi' : 'Đã đóng', s.status === 'open' ? 'warning' : 'success')}</div><div class="caption">${esc(fmtDT(s.createdAt))}</div><p style="margin:6px 0">${esc(s.body)}</p>${s.reply ? `<div class="panel-ok"><b class="strong">Phản hồi:</b> ${esc(s.reply)}<div class="caption">${esc(fmtDT(s.repliedAt))}</div></div>` : ''}</div></div>`).join('')}</div>` : emptyState('chat', 'Chưa gửi yêu cầu nào.')}</div>
       <form class="card" data-form="support"><div class="h3">Gửi yêu cầu đến quản trị viên</div><div class="stack" style="margin-top:12px"><label class="field"><span>Tiêu đề *</span><input name="subject" maxlength="150" placeholder="Ví dụ: Cập nhật chức danh PGS"></label><label class="field"><span>Nội dung *</span><x-ta name="body" rows="6" maxlength="3000"></x-ta></label><button class="btn primary block">${icon('send')}Gửi yêu cầu</button></div></form></div>`;
@@ -3282,13 +3293,40 @@ VIEWS.expert.help = {
       `<div class="tabs" role="tablist" style="margin-bottom:20px;max-width:620px">${[['quick', 'Nhập nhanh công bố'], ['support', 'Yêu cầu hỗ trợ'], ['faq', 'Câu hỏi thường gặp']].map(t => `<a role="tab" href="#/help?tab=${t[0]}" aria-selected="${tab === t[0]}">${t[1]}</a>`).join('')}</div>` + body;
   }
 };
-ACT['quick-parse'] = () => {
+/** Dòng chỉ có link hoặc DOI (không phải trích dẫn) → tra Crossref/Scimago thay vì tách chữ. */
+const QUICK_LINK = l => /^https?:\/\/\S+$/i.test(l) || /^(doi:\s*)?10\.\d{4,9}\/\S+$/i.test(l);
+ACT['quick-parse'] = async () => {
   const text = $('#quickText').value;
   const lines = text.split(/\r?\n/).map(s => s.trim()).filter(s => s.length > 8);
-  if (!lines.length) { toast('Dán ít nhất một dòng trích dẫn.', 'error'); return; }
-  const existing = S.data.pubs;
-  const rows = lines.map(l => { const r = SL.parseRef(l); r.type = /hoi nghi|conference|proceedings|ky yeu/.test(SL.fold(l)) ? 'conference' : /giao trinh/.test(SL.fold(l)) ? 'textbook' : 'journal'; r.dup = SL.findDup(r, existing); r.on = !r.dup; return r; });
+  if (!lines.length) { toast('Dán ít nhất một dòng trích dẫn hoặc link bài báo.', 'error'); return; }
+  if (S.busy > 0) return;
+  const existing = S.data.pubs, rows = [];
+  const look = lines.filter(l => QUICK_LINK(l) || SL.parseRef(l).doi).length;
+  let n = 0;
+  if (look) { LOCK_MSG = 'Đang tra Crossref & SCImago…'; busy(true); }
+  try {
+    for (const l of lines) {
+      let r = SL.parseRef(l), linkOnly = QUICK_LINK(l);
+      r.type = /hoi nghi|conference|proceedings|ky yeu/.test(SL.fold(l)) ? 'conference' : /giao trinh/.test(SL.fold(l)) ? 'textbook' : 'journal';
+      if (linkOnly) { r = { title: '', authors: '', venue: '', year: '', doi: '', type: 'journal' }; if (/^https?:/i.test(l)) r.sourceUrl = l; }
+      if (linkOnly || r.doi) {
+        n++; const m = $('#workLock .wl-msg'); if (m) m.textContent = 'Đang tra bài ' + n + '/' + look + ' trên Crossref & SCImago…';
+        try {
+          const res = await API.lookupPublication(linkOnly ? l : r.doi, r.title, r.year), meta = res && res.found && res.meta;
+          if (meta) {
+            ['title', 'authors', 'venue', 'year', 'issn', 'volume', 'pages', 'doi', 'quartile'].forEach(k => { if (meta[k]) r[k] = meta[k]; });
+            r.quartileNote = meta.quartile ? meta.quartileNote : ''; r.qMsg = meta.quartile ? '' : meta.quartileNote;
+            if (CROSSREF_TYPE[meta.type]) r.type = CROSSREF_TYPE[meta.type];
+          } else if (linkOnly) r.err = 'Crossref không có DOI của link này. Mở bài để nhập tay.';
+        } catch (e) { if (linkOnly) r.err = e.message || 'Không tra được link này.'; }
+        if (linkOnly && !r.title) r.title = l;
+      }
+      r.dup = SL.findDup(r, existing); r.on = !r.dup && !r.err; rows.push(r);
+    }
+  } finally { if (look) busy(false); }
   S.ui.quick = { text, rows }; S.ui.keepScroll = true; route();
+  const bad = rows.filter(r => r.err).length;
+  if (look) toast(bad ? bad + ' link chưa tra được; các dòng còn lại đã điền từ Crossref.' : 'Đã điền ' + look + ' bài từ Crossref' + (rows.some(r => r.quartile) ? ', kèm hạng Q.' : '.'), bad ? 'info' : 'ok', 7000);
 };
 ACT['quick-clear'] = () => { S.ui.quick = null; route(); };
 ACT['quick-toggle'] = el => { S.ui.quick.rows[+el.dataset.i].on = el.checked; el.closest('.rev-item').classList.toggle('skip', !el.checked); };
@@ -3297,7 +3335,7 @@ ACT['quick-save'] = async el => {
   if (!rows.length) { toast('Chọn ít nhất một bài.', 'error'); return; }
   let ok = 0;
   for (const r of rows) {
-    const x = { title: r.title, authors: r.authors || S.data.profile.fullName || '', year: r.year || String(new Date().getFullYear()), venue: r.venue || '(cần bổ sung)', doi: r.doi, type: r.type, confirmDup: true };
+    const x = { title: r.title, authors: r.authors || S.data.profile.fullName || '', year: r.year || String(new Date().getFullYear()), venue: r.venue || '(cần bổ sung)', doi: r.doi, type: r.type, issn: r.issn, volume: r.volume, pages: r.pages, sourceUrl: r.sourceUrl, quartile: r.quartile, quartileNote: r.quartileNote, confirmDup: true };
     try { const res = await call(API.savePublication(x, 'draft'), el); if (res.ok) ok++; } catch (e) {}
   }
   S.ui.quick = null;
@@ -3780,7 +3818,7 @@ function rvOpen(q) {
     const p = item, own = d.pubs.filter(x => x.email === p.email && x.id !== p.id), dup = SL.findDup(p, own);
     const co = p.doi ? d.pubs.filter(x => x.email !== p.email && SL.normDoi(x.doi) === SL.normDoi(p.doi)) : [];
     const meta = S.ui.meta && S.ui.meta.id === p.id ? S.ui.meta : null, ms = meta ? meta.status : p.metaStatus;
-    bodyHtml = `<dl class="kv rv-kv"><dt>Loại</dt><dd>${esc(pubType(p.type))}</dd><dt>Tác giả</dt><dd>${esc(p.authors || '—')}</dd><dt>Nơi đăng</dt><dd>${esc(p.venue || '—')}${p.issn ? ' · ISSN ' + esc(p.issn) : ''}</dd><dt>Xuất bản</dt><dd>${esc(p.month ? p.month + '/' : '')}${esc(p.year)}</dd><dt>DOI</dt><dd>${p.doi ? esc(p.doi) : '—'}</dd>
+    bodyHtml = `<dl class="kv rv-kv"><dt>Loại</dt><dd>${esc(pubType(p.type))}</dd><dt>Tác giả</dt><dd>${esc(p.authors || '—')}</dd><dt>Nơi đăng</dt><dd>${esc(p.venue || '—')}${p.issn ? ' · ISSN ' + esc(p.issn) : ''}${p.quartile ? ' · <b>' + esc(p.quartile) + '</b>' + (p.quartileNote ? ' <span class="caption">(' + esc(p.quartileNote) + ')</span>' : '') : ''}</dd><dt>Xuất bản</dt><dd>${esc(p.month ? p.month + '/' : '')}${esc(p.year)}</dd><dt>DOI</dt><dd>${p.doi ? esc(p.doi) : '—'}</dd>
         <dt>Đối chiếu AI</dt><dd>${aiStatusHTML(p) || 'Chưa kiểm tra AI'}</dd><dt>Minh chứng</dt><dd>${p.fileId ? `<button type="button" class="linkbtn rv-file" data-act="open-file" data-id="${esc(p.fileId)}">${icon('file', 'sm')}${esc(p.fileName)}</button>` : '<span class="bad-t">Chưa có file</span>'}</dd>
         <dt>Metadata</dt><dd><div class="row" style="gap:8px">${{ match: badge('Khớp Crossref', 'success'), mismatch: badge('Lệch metadata', 'warning'), notfound: badge('Không có trên Crossref', 'warning') }[ms] || badge('Chưa đối chiếu', '')}${p.doi ? `<button type="button" class="btn sm" data-act="rev-meta" data-id="${esc(p.id)}">${icon('search', 'sm')}Đối chiếu DOI</button>` : ''}</div>${(meta && meta.notes && meta.notes.length) || p.metaNote ? `<div class="caption warn-t" style="margin-top:4px">${esc(meta ? meta.notes.join(' ') : p.metaNote)}</div>` : ''}</dd>
         <dt>Trùng lặp</dt><dd>${dup ? badge('Trùng: ' + dup.title, 'warning') : badge('Không trùng trong hồ sơ', 'success')}${co.length ? `<div class="caption" style="margin-top:4px">Đồng tác giả cùng DOI: ${esc(co.map(x => nameOf(x.email)).join(', '))} · thống kê đơn vị chỉ tính một lần.</div>` : ''}</dd></dl>
@@ -3894,7 +3932,7 @@ function adminSummaryHTML() {
   const rank = (title, rows, empty) => { const max = Math.max(1, ...rows.map(r => r[1])); return `<div class="card sum-rank"><div class="h3">${esc(title)}</div>${rows.length ? rows.map(([k, v]) => `<div class="sum-row"><span title="${esc(k)}">${esc(k)}</span><i><em style="width:${Math.round(v / max * 100)}%"></em></i><b>${v}</b></div>`).join('') : `<p class="caption">${esc(empty)}</p>`}</div>`; };
   const count = (arr, key) => Object.entries(arr.reduce((o, x) => { const k = key(x); if (k) o[k] = (o[k] || 0) + 1; return o; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const degs = ['Tiến sĩ khoa học', 'Tiến sĩ', 'Thạc sĩ', 'Kỹ sư', 'Cử nhân'].map(g => [g, ex.filter(x => x.der.degree === g).length]).filter(r => r[1]).concat([['Chưa xác minh học vị', ex.filter(x => !x.der.degree).length]]);
-  return `<div class="sum-grid">${tile('users', ex.length, 'Chuyên gia', (d.users || []).length + ' tài khoản')}${tile('user', filled, 'Đã điền hồ sơ', 'hoàn thiện từ 50%')}${tile('file', pubs.filter(p => typeOf(p) === 'journal').length, 'Bài báo', 'không trùng · ' + (d.pubs || []).length + ' lượt nhập')}${tile('alert', ex.filter(x => !withPub.has(x.email)).length, 'Chưa có công bố', 'cần nhắc bổ sung')}
+  return `<div class="sum-grid">${tile('users', ex.length, 'Chuyên gia', (d.users || []).length + ' tài khoản')}${tile('user', filled, 'Đã điền hồ sơ', 'hoàn thiện từ 50%')}${tile('file', pubs.filter(p => typeOf(p) === 'journal').length, 'Bài báo', SL.QUARTILES.map(q => [q, pubs.filter(p => p.quartile === q).length]).filter(r => r[1]).map(r => r.join(': ')).join(' · ') || 'không trùng · ' + (d.pubs || []).length + ' lượt nhập')}${tile('alert', ex.filter(x => !withPub.has(x.email)).length, 'Chưa có công bố', 'cần nhắc bổ sung')}
     ${tile('brief', (d.projects || []).length, 'Đề tài', '')}${tile('spark', (d.awards || []).length, 'Giải thưởng', '')}${tile('chat', pubs.filter(p => typeOf(p) === 'conference').length, 'Bài hội thảo', '')}${tile('list', pubs.filter(p => typeOf(p) === 'book').length, 'Sách, giáo trình', '')}</div>
     ${yearChart(pubs, 'Công bố theo năm xuất bản', 'admin-year-chart')}
     <div class="sum-ranks">${rank('Chuyên gia theo học vị', degs, 'Chưa có dữ liệu.')}${rank('Nhiều công bố nhất', count(pubs, p => nameOf(p.email)), 'Chưa có công bố.')}${rank('Tạp chí / nơi đăng nhiều nhất', count(pubs, p => p.venue), 'Chưa có công bố.')}</div>`;
@@ -4142,7 +4180,11 @@ Object.assign(MockAPI, {
   placeSuggestions:async()=>{throw new Error('Bản xem thử chưa kết nối Google Places. Bản triển khai dùng MAPS_SERVER_KEY.');},
   placeDetails:async()=>{throw new Error('Bản xem thử chưa kết nối Google Places.');},
   verifyEvidence:async()=>({ok:true,status:'pending',aiStatus:'demo',note:'Bản demo không gọi Gemini. Hồ sơ vẫn chờ quản trị viên.'}),
-  lookupPublication:async(u,t,y)=>{const m=String(u).match(/10\.\d{4,9}\/[^\s?#]+/i);if(!m)throw new Error('Bản demo nhận DOI hoặc link chứa DOI.');const r=await MockAPI.checkDoi(m[0],t,y);if(r.meta)r.meta.doi=m[0];return r;},reviewProject:async()=>{throw new Error('Duyệt minh chứng đề tài cần bản triển khai có Google Sheets.');}
+  lookupPublication:async(u,t,y)=>{let s=String(u);try{s=decodeURIComponent(s);}catch(e){}let doi=(s.match(/10\.\d{4,9}\/[^\s?#]+/i)||[])[0]||'';
+    const pii=(s.match(/S\d{4}-?\d{3}[\dXx]\(?\d{2}\)?\d{5}-?[\dXx]/)||[])[0];
+    if(!doi && pii){try{const r=await fetch('https:\/\/api.crossref.org/works?rows=1&select=DOI&filter=alternative-id:'+pii.replace(/[^\dXxS]/g,'').toUpperCase());const it=((await r.json()).message||{}).items||[];doi=(it[0]||{}).DOI||'';}catch(e){}}
+    if(!doi)throw new Error('Bản demo chỉ đọc DOI hoặc link Elsevier/Cell (mã PII). Bản triển khai đọc thêm trang nhà xuất bản.');
+    const r=await MockAPI.checkDoi(doi,t,y);if(r.meta){r.meta.doi=SL.normDoi(doi);r.meta.quartileNote='Bản demo không tra Scimago; bản triển khai tự lấy hạng Q.';}return r;},reviewProject:async()=>{throw new Error('Duyệt minh chứng đề tài cần bản triển khai có Google Sheets.');}
 });
 function aiStatusHTML(x) {
   if(!x.aiStatus) return '';
@@ -4381,6 +4423,9 @@ ACT['pub-meta']=async el=>{
     if(replaceable && cur!==v){out[k]=v;filled.push(label);}};
   put('title',m.title,'tên bài');put('authors',m.authors,'tác giả');put('venue',m.venue,'tạp chí');put('year',m.year,'năm');
   put('issn',m.issn,'ISSN');put('volume',m.volume,'tập');put('pages',m.pages,'trang');put('doi',m.doi,'DOI');
+  if(m.quartile && out.quartile!==m.quartile){out.quartile=m.quartile;filled.push('hạng '+m.quartile);}
+  if(m.quartileNote && (m.quartile || !out.quartile))out.quartileNote=m.quartile?m.quartileNote:'';
+  if(!m.quartile && m.quartileNote)toast(m.quartileNote,'info',7000);
   if(fresh && CROSSREF_TYPE[m.type])out.type=CROSSREF_TYPE[m.type];
   const same=SL.normTitle(out.title)===SL.normTitle(m.title) && (!m.year || String(out.year)===String(m.year));
   fillPubForm(out);
@@ -4391,7 +4436,7 @@ ACT['pub-meta']=async el=>{
 };
 ACT['pub-meta-apply']=()=>{
   const m=S.ui.meta && S.ui.meta.meta;if(!m)return;
-  const v={title:m.title,year:m.year,authors:m.authors,venue:m.venue,issn:m.issn,volume:m.volume,pages:m.pages,doi:m.doi};
+  const v={title:m.title,year:m.year,authors:m.authors,venue:m.venue,issn:m.issn,volume:m.volume,pages:m.pages,doi:m.doi,quartile:m.quartile,quartileNote:m.quartile?m.quartileNote:''};
   Object.keys(v).forEach(k=>{if(!v[k])delete v[k];});
   fillPubForm(v);
   S.drafts.pub=Object.assign({id:S.route.q.id || undefined},pubFormData());
@@ -4429,6 +4474,8 @@ boot();
 </script>
 
 <style id="fx-collections">
+.q-badge{font-weight:700;letter-spacing:.02em;margin-left:6px;vertical-align:1px}.q-badge.q1{background:#dcfce7;color:#166534}.q-badge.q2{background:#dbeafe;color:#1e40af}.q-badge.q3{background:#fef3c7;color:#92400e}.q-badge.q4{background:#f3f4f6;color:#374151}
+:root[data-theme="dark"] .q-badge.q1{background:#14532d;color:#bbf7d0}:root[data-theme="dark"] .q-badge.q2{background:#1e3a8a;color:#bfdbfe}:root[data-theme="dark"] .q-badge.q3{background:#78350f;color:#fde68a}:root[data-theme="dark"] .q-badge.q4{background:#374151;color:#e5e7eb}
 /* v1.57 · Công tác / Đề tài / Giải thưởng: mỗi mục là một thẻ có khung, mỗi dòng là một ô viền như bản 1.5x */
 .collection-editor{background:var(--sl-bg-surface);border:1px solid var(--sl-border-default);border-radius:var(--sl-radius-12,12px);padding:20px 24px;box-shadow:var(--sl-shadow-sm)}
 .collection-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--sl-border-default)}

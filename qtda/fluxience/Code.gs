@@ -895,6 +895,7 @@ var SL = (function () {
   }
 
   return {
+    QUARTILES: ['Q1', 'Q2', 'Q3', 'Q4'],
     DEGREES: DEGREES, TITLES: TITLES, NEED_TYPES: NEED_TYPES, LEVELS: LEVELS, PUB_TYPES: PUB_TYPES, PUB_STATUS: PUB_STATUS,
     CRED_KINDS: CRED_KINDS, PROJECT_LEVELS: PROJECT_LEVELS, PROJECT_ROLES: PROJECT_ROLES, PROFILE_FIELDS: PROFILE_FIELDS,
     str: str, trim: trim, fold: fold, normTitle: normTitle, normDoi: normDoi, isDoi: isDoi, words: words, pad: pad,
@@ -1033,7 +1034,16 @@ var FXRules = (function () {
     }
     return { status: ok ? 'verified' : ai.verdict === 'mismatch' ? 'needs_info' : 'pending', aiStatus: ok ? 'matched' : ai.verdict === 'mismatch' ? 'mismatch' : 'uncertain', note: SL.trim(ai.reason).slice(0,700) || (ok ? 'AI đối chiếu nội dung minh chứng khớp hồ sơ.' : 'Cần quản trị viên đối chiếu minh chứng.') };
   }
-  return { date:date, year:year, phone:phone, profile:profile, project:project, credential:credential, sortPubs:sortPubs, results:results, evidenceDecision:evidenceDecision };
+  /** Đọc bảng "Category · Year · Quartile" trên trang tạp chí của SCImago: năm mới nhất, hạng tốt nhất. */
+  function parseSjr(html) {
+    var re = /<tr>\s*<td>([^<]{1,200})<\/td>\s*<td>(\d{4})<\/td>\s*<td>(Q[1-4])<\/td>\s*<\/tr>/g, m, rows = [];
+    while ((m = re.exec(String(html || '')))) rows.push({ category: m[1].replace(/&amp;/g, '&').trim(), year: m[2], quartile: m[3] });
+    if (!rows.length) return null;
+    var last = rows.reduce(function (y, r) { return r.year > y ? r.year : y; }, '0');
+    var cur = rows.filter(function (r) { return r.year === last; }).sort(function (a, b) { return a.quartile.localeCompare(b.quartile); });
+    return { quartile: cur[0].quartile, year: last, category: cur.filter(function (r) { return r.quartile === cur[0].quartile; }).map(function (r) { return r.category; }).slice(0, 3).join('; ') };
+  }
+  return { date:date, year:year, phone:phone, profile:profile, project:project, credential:credential, sortPubs:sortPubs, results:results, evidenceDecision:evidenceDecision, parseSjr:parseSjr };
 })();
 
 /* ==== SL-SHARED END ==== */
@@ -1151,7 +1161,7 @@ const SCHEMA = {
   Work: ['id', 'email', 'from', 'to', 'place', 'role', 'order'],
   Projects: ['id', 'email', 'name', 'from', 'to', 'level', 'role', 'order', 'code', 'acceptance', 'acceptanceDate', 'acceptanceRule', 'acceptanceResult', 'acceptanceBasis', 'evidenceUrl', 'fileId', 'fileName', 'evidenceStatus', 'reviewedBy', 'reviewedAt', 'reviewNote', 'aiStatus', 'aiNote', 'aiModel', 'aiCheckedAt', 'aiRun'],
   Publications: ['id', 'email', 'type', 'title', 'authors', 'year', 'month', 'venue', 'issn', 'volume', 'pages', 'doi', 'keywords',
-    'fileId', 'fileName', 'status', 'source', 'metaStatus', 'metaNote', 'reviewNote', 'reviewedBy', 'reviewedAt', 'uploadedAt', 'updatedAt', 'sourceUrl', 'aiStatus', 'aiNote', 'aiModel', 'aiCheckedAt', 'aiRun', 'myRole'],
+    'fileId', 'fileName', 'status', 'source', 'metaStatus', 'metaNote', 'reviewNote', 'reviewedBy', 'reviewedAt', 'uploadedAt', 'updatedAt', 'sourceUrl', 'aiStatus', 'aiNote', 'aiModel', 'aiCheckedAt', 'aiRun', 'myRole', 'quartile', 'quartileNote'],
   Awards: ['id', 'email', 'name', 'year', 'org', 'note', 'order'],
   Needs: ['email', 'council', 'councilLevel', 'supervise', 'superviseLevel', 'consult', 'jointResearch', 'guestLecture', 'teamUp',
     'teachField', 'consultField', 'researchDirection', 'availability', 'until', 'area', 'allowSuggest', 'updatedAt'],
@@ -1647,7 +1657,8 @@ function cleanPub_(p, email) {
   return {
     type: type, title: clip_(p.title, 400), authors: clip_(p.authors, 500), year: year, month: /^(0?[1-9]|1[0-2])$/.test(String(p.month || '')) ? String(Number(p.month)) : '',
     venue: clip_(p.venue, 300), issn: clip_(p.issn, 30), volume: clip_(p.volume, 30), pages: clip_(p.pages, 30), doi: doi,
-    keywords: clip_(p.keywords, 300), sourceUrl: clip_(p.sourceUrl, 500), myRole: PUB_ROLES_.indexOf(p.myRole) >= 0 ? p.myRole : '', email: email
+    keywords: clip_(p.keywords, 300), sourceUrl: clip_(p.sourceUrl, 500), myRole: PUB_ROLES_.indexOf(p.myRole) >= 0 ? p.myRole : '',
+    quartile: SL.QUARTILES.indexOf(p.quartile) >= 0 ? p.quartile : '', quartileNote: clip_(p.quartileNote, 160), email: email
   };
 }
 function validatePub_(x) {
@@ -1683,7 +1694,7 @@ function api_savePublication(token, p, action) {
     if (p.fileId !== undefined && T_('Files').some(f => f.id === p.fileId && f.email === c.email && f.link==='pub:'+p.id)) {
       row.fileId = p.fileId; row.fileName = (T_('Files').find(f => f.id === p.fileId) || {}).name || '';
     }
-    const changed = cur && ['title', 'authors', 'year', 'venue', 'doi', 'type', 'month', 'issn', 'volume', 'pages'].some(k => String(cur[k]) !== String(row[k]));
+    const changed = cur && ['title', 'authors', 'year', 'venue', 'doi', 'type', 'month', 'issn', 'volume', 'pages', 'quartile'].some(k => String(cur[k] == null ? '' : cur[k]) !== String(row[k] == null ? '' : row[k]));
     if (action === 'submit') {
       if (!row.fileId) throw new Error('Cần tải file minh chứng (paper, quyết định…) trước khi gửi xác minh.');
       row.status = cur && cur.status === 'verified' && !changed ? 'verified' : 'pending';
@@ -1738,7 +1749,7 @@ function compareMeta_(m, title, year) {
   if (year && y && String(year) !== y) notes.push('Năm khác Crossref: ' + y + '.');
   return {
     found: true, status: notes.length ? 'mismatch' : 'match', notes: notes,
-    meta: { title: t, year: y, authors: authors, venue: venue, issn: (m.ISSN || [])[0] || '', type: m.type || '', volume: m.volume || '', pages: m.page || '' }
+    meta: { title: t, year: y, authors: authors, venue: venue, issn: (m.ISSN || [])[0] || '', issns: m.ISSN || [], type: m.type || '', volume: m.volume || '', pages: m.page || '' }
   };
 }
 
@@ -2650,24 +2661,70 @@ function api_placeDetails(token, id, session) {
   const part = type => ((x.addressComponents || []).find(c=>(c.types || []).includes(type)) || {}).longText || '';
   return {id:x.id,address:x.formattedAddress,lat:x.location.latitude,lng:x.location.longitude,province:part('administrative_area_level_1'),ward:part('sublocality_level_1') || part('administrative_area_level_3'),country:part('country')};
 }
+const CR_UA_ = () => ({ 'User-Agent': 'Fluxience/' + APP_VERSION + ' (mailto:' + (ownerEmail_() || 'admin@example.com') + ')' });
+/** Mã PII của Elsevier/Cell (vd. S2405-8440(24)10925-5) → 'S2405844024109255'. */
+function piiOf_(url) {
+  const m = String(url || '').match(/S\d{4}-?\d{3}[\dXx]\(?\d{2}\)?\d{5}-?[\dXx]/) || String(url || '').match(/\/pii\/(S[\dXx]{16})\b/i);
+  return m ? (m[1] || m[0]).replace(/[^\dXxS]/g, '').toUpperCase() : '';
+}
+/** Tìm DOI từ một link bài báo: DOI nằm sẵn trong link → mã PII Elsevier/Cell (Crossref) → thẻ meta của trang nhà xuất bản. */
+function doiFromLink_(input) {
+  let url = SL.trim(input); try { url = decodeURIComponent(url); } catch (e) {}
+  const direct = url.match(/10\.\d{4,9}\/[^\s?#]+/i);
+  if (direct) return direct[0].replace(/[.,;)\]]+$/, '');
+  if (!/^https:\/\//i.test(url)) throw new Error('Link cần bắt đầu bằng https:// (hoặc dán DOI 10.xxxx/…).');
+  const pii = piiOf_(url);
+  if (pii) {
+    const r = UrlFetchApp.fetch('https://api.crossref.org/works?rows=1&select=DOI&filter=alternative-id:' + pii, { muteHttpExceptions: true, headers: CR_UA_() });
+    if (r.getResponseCode() === 200) { const it = ((JSON.parse(r.getContentText()).message || {}).items || [])[0]; if (it && it.DOI) return it.DOI; }
+  }
+  const r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Fluxience/' + APP_VERSION + ')', 'Accept': 'text/html' } });
+  if (r.getResponseCode() !== 200) throw new Error('Trang nhà xuất bản chặn truy cập (HTTP ' + r.getResponseCode() + '). Dán DOI (dạng 10.xxxx/…) để tiếp tục.');
+  const html = r.getContentText().slice(0, 1500000);
+  const metas = html.match(/<meta\b[^>]*>/gi) || [];
+  for (const tag of metas) {
+    if (!/(?:name|property)=["'](?:citation_doi|dc\.identifier|prism\.doi|bepress_citation_doi)["']/i.test(tag)) continue;
+    const v = ((tag.match(/content=["']([^"']+)["']/i) || [])[1] || '').match(/10\.\d{4,9}\/\S+/);
+    if (v) return v[0];
+  }
+  const any = html.match(/doi\.org\/(10\.\d{4,9}\/[^\s"'<>&]+)/i);
+  if (any) return any[1];
+  throw new Error('Không tìm thấy DOI trong trang này. Dán DOI (dạng 10.xxxx/…) để tiếp tục.');
+}
+/**
+ * Xếp hạng Q của tạp chí theo SCImago (SJR), lấy năm mới nhất và hạng TỐT NHẤT giữa các chuyên ngành.
+ * Trả null khi không tra được (Scimago chặn, tạp chí chưa được xếp hạng…). Lưu đệm 6 giờ.
+ */
+function journalQuartile_(issns) {
+  const list = [...new Set((issns || []).map(x => String(x || '').replace(/[^\dXx]/g, '').toUpperCase()).filter(x => x.length === 8))];
+  if (!list.length) return null;
+  const cache = CacheService.getScriptCache(), key = 'sjr:' + list.join(',');
+  const hit = cache.get(key); if (hit) return hit === '-' ? null : JSON.parse(hit);
+  const get = u => { const r = UrlFetchApp.fetch(u, { muteHttpExceptions: true, followRedirects: true, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Fluxience/' + APP_VERSION + ')' } }); return r.getResponseCode() === 200 ? r.getContentText() : ''; };
+  let out = null;
+  try {
+    for (const issn of list) {
+      const search = get('https://www.scimagojr.com/journalsearch.php?q=' + issn);
+      const sid = (search.match(/journalsearch\.php\?q=(\d+)&(?:amp;)?tip=sid/) || [])[1];
+      if (!sid) continue;
+      out = FXRules.parseSjr(get('https://www.scimagojr.com/journalsearch.php?q=' + sid + '&tip=sid&clean=0'));
+      if (out) { out.url = 'https://www.scimagojr.com/journalsearch.php?q=' + sid + '&tip=sid'; break; }
+    }
+  } catch (e) { out = null; }
+  try { cache.put(key, out ? JSON.stringify(out) : '-', out ? 21600 : 1800); } catch (e) {}
+  return out;
+}
 function api_lookupPublicationLink(token, input, title, year) {
   ctx_(token);
-  const url=SL.trim(input), match=url.match(/10\.\d{4,9}\/[^\s?#]+/i);
-  let doi = match ? match[0] : '';
-  if (!doi) {
-    const host=(url.match(/^https:\/\/([^/:?#]+)(?::443)?\//i) || [])[1] || '';
-    const allowed=['link.springer.com','www.nature.com','onlinelibrary.wiley.com','www.tandfonline.com','www.mdpi.com','www.frontiersin.org','journals.plos.org','www.sciencedirect.com'];
-    if (!allowed.includes(host.toLowerCase())) throw new Error('Chưa trích được DOI từ link này. Dán DOI hoặc link doi.org; chưa cập nhật thông tin bài báo.');
-    const r=UrlFetchApp.fetch(url,{muteHttpExceptions:true,followRedirects:false});
-    if(r.getResponseCode()!==200) throw new Error('Trang nhà xuất bản chặn truy cập hoặc chuyển hướng. Dán DOI để tiếp tục; chưa cập nhật dữ liệu.');
-    const html=r.getContentText().slice(0,1000000);
-    const tag=(html.match(/<meta\b[^>]*(?:name|property)=["']citation_doi["'][^>]*>/i) || [])[0] || '';
-    doi=(tag.match(/content=["']([^"']+)["']/i) || [])[1] || '';
+  const doi = SL.normDoi(doiFromLink_(input));
+  if (!SL.isDoi(doi)) throw new Error('Không đọc được DOI hợp lệ. Thông tin bài báo chưa được cập nhật.');
+  const out = api_checkDoi(token, doi, title, year);
+  if (out.meta) {
+    out.meta.doi = doi;
+    const q = journalQuartile_(out.meta.issns);
+    if (q) { out.meta.quartile = q.quartile; out.meta.quartileNote = 'SJR ' + q.year + (q.category ? ' · ' + q.category : ''); }
+    else out.meta.quartileNote = out.meta.issns && out.meta.issns.length ? 'Chưa tra được hạng Q trên Scimago; chọn tay nếu biết.' : '';
   }
-  doi=SL.normDoi(doi);
-  if(!SL.isDoi(doi)) throw new Error('Không đọc được DOI hợp lệ. Thông tin bài báo chưa được cập nhật.');
-  const out=api_checkDoi(token,doi,title,year);
-  if(out.meta) out.meta.doi=doi;
   return out;
 }
 function evidenceExpected_(kind, row) {
