@@ -1242,7 +1242,7 @@ const MockAPI = (function () {
     const brand = { APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME, CITY: st.CITY, FORM_CODE: st.FORM_CODE, PUB_CRITERIA: st.PUB_CRITERIA };
     const e = who();
     const accounts = db.Users.map(u => ({ email: u.email, name: u.name, unit: u.unit, roles: u.roles, status: u.status }));
-    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.65-demo' });
+    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.66-demo' });
     const u = db.Users.find(x => x.email === e);
     if (!u) {
       const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: 'expert' };
@@ -1253,7 +1253,7 @@ const MockAPI = (function () {
     if (u.status === 'rejected') return wait({ state: 'denied', rejected: true, note: u.reviewNote, email: e, settings: brand, accounts, contact: ADMIN });
     if (u.status !== 'active') return wait({ state: 'disabled', email: e, settings: brand, accounts, contact: ADMIN });
     const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs.indexOf('admin') >= 0 ? 'admin' : rs[0];
-    const base = { state: 'ok', demo: true, version: '1.65-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
+    const base = { state: 'ok', demo: true, version: '1.66-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
     if (w === 'admin') {
       const der = {}; db.Users.forEach(x => { der[x.email] = derived(x.email); });
       return wait(Object.assign(base, { users: db.Users, profiles: db.Profiles, derivedAll: der, credentials: db.Credentials, pubs: db.Publications, needsAll: db.Needs, work: db.Work, projects: db.Projects, awards: db.Awards, rounds: db.Rounds, matchesAll: db.Matches, files: db.Files, supportAll: db.Support }));
@@ -1268,7 +1268,7 @@ const MockAPI = (function () {
   }
   const clip = (v, n) => SL.trim(v).slice(0, n || 500);
   function cleanPub(p, email) {
-    return { type: SL.PUB_TYPES.some(t => t.code === p.type) ? p.type : 'journal', title: clip(p.title, 400), authors: clip(p.authors), year: SL.yearOf(p.year), month: /^(0?[1-9]|1[0-2])$/.test(String(p.month || '')) ? String(Number(p.month)) : '', venue: clip(p.venue, 300), issn: clip(p.issn, 30), volume: clip(p.volume, 30), pages: clip(p.pages, 30), doi: SL.normDoi(p.doi), keywords: clip(p.keywords, 300), sourceUrl:clip(p.sourceUrl,500), email };
+    return { type: SL.PUB_TYPES.some(t => t.code === p.type) ? p.type : 'journal', title: clip(p.title, 400), authors: clip(p.authors), year: SL.yearOf(p.year), month: /^(0?[1-9]|1[0-2])$/.test(String(p.month || '')) ? String(Number(p.month)) : '', venue: clip(p.venue, 300), issn: clip(p.issn, 30), volume: clip(p.volume, 30), pages: clip(p.pages, 30), doi: SL.normDoi(p.doi), keywords: clip(p.keywords, 300), sourceUrl:clip(p.sourceUrl,500), myRole: PUB_ROLES.includes(p.myRole) ? p.myRole : '', email };
   }
   /** Đọc .docx ngay trên trình duyệt: tìm word/document.xml trong file zip rồi giải nén deflate. */
   async function readDocx(file) {
@@ -1550,7 +1550,9 @@ const API = IS_GAS ? ServerAPI : MockAPI;
 /* =====================================================================
    TRẠNG THÁI & ĐIỀU HƯỚNG
    ===================================================================== */
-const UI_VERSION = '1.65';
+/** Vai trò của người đứng tên đối với công bố (khớp PUB_ROLES_ ở Code.gs). */
+const PUB_ROLES = ['Chủ nhiệm đề tài', 'Thành viên thực hiện', 'Giảng viên hướng dẫn'];
+const UI_VERSION = '1.66';
 { const bi = document.querySelector('.build-info'); if (bi) bi.textContent = 'Fluxience · v' + UI_VERSION; }
 const S = { data: null, ws: '', route: { page: '', q: {} }, busy: 0, ui: {}, drafts: {}, formDrafts: {}, structuredDirty: {} };
 let sessionRevision = 0, refreshRevision = 0;
@@ -3019,7 +3021,7 @@ VIEWS.expert.pubs = {
         <label class="field c3"><span>Năm xuất bản</span><select name="y"><option value="">Tất cả</option>${years.map(y => `<option ${fy === y ? 'selected' : ''}>${y}</option>`).join('')}</select></label>
       </form>
       ${list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="w-xs">TT</th><th>Tên công bố / tác giả</th><th>${ft === 'book' ? 'Nhà xuất bản' : ft === 'conference' ? 'Hội thảo' : 'Tạp chí / nơi đăng'}</th><th>Năm</th><th>Minh chứng</th><th>Trạng thái</th></tr></thead><tbody>
-        ${list.map((p, i) => `<tr class="click" data-act="go" data-page="pub" data-q='${esc(JSON.stringify({ id: p.id }))}'><td class="num">${i + 1}</td><td>${esc(p.title)}<span class="sub">${esc(p.authors || '—')} · ${esc(pubType(p.type))}${p.source === 'cv' ? ' · nhập từ CV' : ''}</span></td><td>${esc(p.venue || '—')}${p.issn ? `<span class="sub">ISSN ${esc(p.issn)}</span>` : ''}</td><td class="num">${esc([p.month, p.year].filter(Boolean).join('/'))}</td><td>${p.fileId ? `<button type="button" class="btn sm" data-act="open-file" data-id="${esc(p.fileId)}" title="${esc(p.fileName || '')}">${icon('file', 'sm')}PDF</button>` : p.status === 'verified' ? '<span class="muted">—</span>' : `<button type="button" class="btn sm primary" data-act="pub-quick-upload" data-id="${esc(p.id)}" data-title="${esc(p.title)}">${icon('upload', 'sm')}Tải file</button>`}</td><td>${pubBadge(p)}</td></tr>`).join('')}
+        ${list.map((p, i) => `<tr class="click" data-act="go" data-page="pub" data-q='${esc(JSON.stringify({ id: p.id }))}'><td class="num">${i + 1}</td><td>${esc(p.title)}<span class="sub">${esc(p.authors || '—')} · ${esc(pubType(p.type))}${p.myRole ? ' · ' + esc(p.myRole) : ''}${p.source === 'cv' ? ' · nhập từ CV' : ''}</span></td><td>${esc(p.venue || '—')}${p.issn ? `<span class="sub">ISSN ${esc(p.issn)}</span>` : ''}</td><td class="num">${esc([p.month, p.year].filter(Boolean).join('/'))}</td><td>${p.fileId ? `<button type="button" class="btn sm" data-act="open-file" data-id="${esc(p.fileId)}" title="${esc(p.fileName || '')}">${icon('file', 'sm')}PDF</button>` : p.status === 'verified' ? '<span class="muted">—</span>' : `<button type="button" class="btn sm primary" data-act="pub-quick-upload" data-id="${esc(p.id)}" data-title="${esc(p.title)}">${icon('upload', 'sm')}Tải file</button>`}</td><td>${pubBadge(p)}</td></tr>`).join('')}
       </tbody></table></div><div class="row between" style="margin-top:12px"><span class="caption">${list.length} / ${all.length} công bố</span>${needFile.length ? `<button type="button" class="btn primary" data-act="pub-quick-upload" data-id="${esc(needFile[0].id)}" data-title="${esc(needFile[0].title)}">${icon('upload')}Bổ sung minh chứng${needFile.length > 1 ? ' (' + needFile.length + ' bài)' : ''}</button>` : ''}</div>`
         : emptyState('file', all.length ? 'Không có công bố khớp bộ lọc.' : 'Chưa có công bố. Thêm thủ công, nhập từ CV hoặc dán danh sách trích dẫn.')}
       </div>${cvWait ? `<div class="callout" style="margin-top:20px">${icon('shield', 'sm')}<div>${cvWait} công bố nhập từ CV đang chờ file. Thêm file để hoàn thiện kho hồ sơ và gửi xác minh.</div></div>` : ''}`;
@@ -3081,7 +3083,8 @@ VIEWS.expert.pub = {
           <label class="field c2"><span>Năm *</span><input name="year" value="${esc(x.year || '')}" inputmode="numeric" maxlength="4"></label>
           <label class="field c2"><span>Tháng</span><select name="month"><option value=""></option>${Array.from({ length: 12 }, (_, i) => `<option ${String(x.month) === String(i + 1) ? 'selected' : ''}>${i + 1}</option>`).join('')}</select></label>
           <label class="field c4"><span>Loại công bố</span><select name="type">${SL.PUB_TYPES.map(t => `<option value="${t.code}" ${x.type === t.code ? 'selected' : ''}>${t.label}</option>`).join('')}</select></label>
-          <label class="field c8"><span>Tác giả<span class="req"> *</span></span><input required name="authors" value="${esc(x.authors || '')}" placeholder="Trần Minh Anh; Nguyễn Hoàng"></label>
+          <label class="field c8"><span>Vai trò của bạn</span><select name="myRole"><option value="">— Chọn vai trò người đứng tên —</option>${PUB_ROLES.map(r => `<option ${x.myRole === r ? 'selected' : ''}>${r}</option>`).join('')}</select><span class="hint">Chủ nhiệm đề tài · Thành viên thực hiện · Giảng viên hướng dẫn</span></label>
+          <label class="field c12"><span>Tác giả<span class="req"> *</span></span><input required name="authors" value="${esc(x.authors || '')}" placeholder="Trần Minh Anh; Nguyễn Hoàng"></label>
           <label class="field c4"><span>ISSN / ISBN</span><input name="issn" value="${esc(x.issn || '')}"></label><label class="field c4"><span>Tập (số)</span><input name="volume" value="${esc(x.volume || '')}"></label><label class="field c4"><span>Trang</span><input name="pages" value="${esc(x.pages || '')}"></label>
           <label class="field c12"><span>Lĩnh vực / từ khóa</span><input name="keywords" value="${esc(x.keywords || '')}" placeholder="Chuỗi cung ứng; tối ưu hóa; sản xuất"></label>
         </div>

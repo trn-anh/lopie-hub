@@ -27,7 +27,7 @@
 /* =====================================================================
    0. CẤU HÌNH
    ===================================================================== */
-const APP_VERSION = '1.65';
+const APP_VERSION = '1.66';
 const TZ = 'Asia/Ho_Chi_Minh';
 const SESSION_HOURS = 12;
 const MAX_UPLOAD_MB = 20;
@@ -1147,7 +1147,7 @@ const SCHEMA = {
   Work: ['id', 'email', 'from', 'to', 'place', 'role', 'order'],
   Projects: ['id', 'email', 'name', 'from', 'to', 'level', 'role', 'order', 'code', 'acceptance', 'acceptanceDate', 'acceptanceRule', 'acceptanceResult', 'acceptanceBasis', 'evidenceUrl', 'fileId', 'fileName', 'evidenceStatus', 'reviewedBy', 'reviewedAt', 'reviewNote', 'aiStatus', 'aiNote', 'aiModel', 'aiCheckedAt', 'aiRun'],
   Publications: ['id', 'email', 'type', 'title', 'authors', 'year', 'month', 'venue', 'issn', 'volume', 'pages', 'doi', 'keywords',
-    'fileId', 'fileName', 'status', 'source', 'metaStatus', 'metaNote', 'reviewNote', 'reviewedBy', 'reviewedAt', 'uploadedAt', 'updatedAt', 'sourceUrl', 'aiStatus', 'aiNote', 'aiModel', 'aiCheckedAt', 'aiRun'],
+    'fileId', 'fileName', 'status', 'source', 'metaStatus', 'metaNote', 'reviewNote', 'reviewedBy', 'reviewedAt', 'uploadedAt', 'updatedAt', 'sourceUrl', 'aiStatus', 'aiNote', 'aiModel', 'aiCheckedAt', 'aiRun', 'myRole'],
   Awards: ['id', 'email', 'name', 'year', 'org', 'note', 'order'],
   Needs: ['email', 'council', 'councilLevel', 'supervise', 'superviseLevel', 'consult', 'jointResearch', 'guestLecture', 'teamUp',
     'teachField', 'consultField', 'researchDirection', 'availability', 'until', 'area', 'allowSuggest', 'updatedAt'],
@@ -1634,6 +1634,8 @@ function api_support(token, subject, body) {
 /* =====================================================================
    8. API CHUYÊN GIA — CÔNG BỐ
    ===================================================================== */
+/** Vai trò của người đứng tên đối với công bố / công trình. */
+const PUB_ROLES_ = ['Chủ nhiệm đề tài', 'Thành viên thực hiện', 'Giảng viên hướng dẫn'];
 function cleanPub_(p, email) {
   const type = SL.PUB_TYPES.some(t => t.code === p.type) ? p.type : 'journal';
   const year = SL.yearOf(p.year);
@@ -1641,7 +1643,7 @@ function cleanPub_(p, email) {
   return {
     type: type, title: clip_(p.title, 400), authors: clip_(p.authors, 500), year: year, month: /^(0?[1-9]|1[0-2])$/.test(String(p.month || '')) ? String(Number(p.month)) : '',
     venue: clip_(p.venue, 300), issn: clip_(p.issn, 30), volume: clip_(p.volume, 30), pages: clip_(p.pages, 30), doi: doi,
-    keywords: clip_(p.keywords, 300), sourceUrl: clip_(p.sourceUrl, 500), email: email
+    keywords: clip_(p.keywords, 300), sourceUrl: clip_(p.sourceUrl, 500), myRole: PUB_ROLES_.indexOf(p.myRole) >= 0 ? p.myRole : '', email: email
   };
 }
 function validatePub_(x) {
