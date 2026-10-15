@@ -1010,7 +1010,7 @@ var FXRules = (function () {
       if (x.acceptanceDate) x.acceptanceDate = date(x.acceptanceDate, 'Ngày họp nghiệm thu', today, true);
       x.acceptanceRule = ''; x.acceptanceResult = 'Không được nghiệm thu'; x.acceptanceBasis = SL.trim(x.acceptanceBasis || '');
     } else { ['acceptanceDate','acceptanceRule','acceptanceResult','acceptanceBasis'].forEach(function(k){x[k]='';}); }
-    if (x.evidenceUrl && !/^https:\/\/[^\s]+$/.test(x.evidenceUrl)) throw new Error('Link minh chứng đề tài cần bắt đầu bằng https://.');
+    if (x.evidenceUrl && !/^https:\/\/[^\s]+$/.test(x.evidenceUrl)) throw new Error('Link minh chứng đề tài cần bắt đầu bằng https:\/\/.');
     return x;
   }
   function credential(x, today, degrees, titles) {
@@ -1698,7 +1698,7 @@ function cleanPub_(p, email) {
 }
 function validatePub_(x) {
   const e = [];
-  if (x.sourceUrl && !/^https:\/\/[^\s]+$/.test(x.sourceUrl)) e.push('Link công bố cần bắt đầu bằng https://.');
+  if (x.sourceUrl && !/^https:\/\/[^\s]+$/.test(x.sourceUrl)) e.push('Link công bố cần bắt đầu bằng https:\/\/.');
   if (!x.authors) e.push('Nhập tác giả công bố.');
   if (!x.title) e.push('Nhập tên bài báo / công trình.');
   if (!x.year) e.push('Nhập năm xuất bản.');
