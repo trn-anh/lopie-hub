@@ -599,13 +599,14 @@ var SL = (function () {
           // Ưu tiên đọc cột theo tiêu đề (mẫu khác nhau xếp cột khác nhau); không nhận ra thì theo thứ tự mẫu Bộ
           var H = (t[hi] || []).map(function (x) { return fold(x); });
           var col = function (re) { for (var q = 0; q < H.length; q++) if (re.test(H[q])) return q; return -1; };
-          var pc = { name: col(/ten de tai|ten du an/), per: col(/thoi gian|nam bat dau/), lvl: col(/^cap|de tai cap|cap quan ly|\bcap\b/), role: col(/trach nhiem|vai tro/) };
-          var byHead = pc.name >= 0 && pc.per >= 0 && pc.lvl >= 0 && pc.role >= 0 && pc.lvl !== pc.name;
+          var pc = { name: col(/ten de tai|ten du an/), per: col(/thoi gian|nam bat dau/), lvl: col(/^cap|de tai cap|cap quan ly|\bcap\b/), role: col(/trach nhiem|vai tro/), code: col(/^ma( so)?\b|ma de tai/), note: col(/ghi chu|tinh trang|ket qua/) };
+          // Có cột tên + ít nhất một cột khác nhận ra theo tiêu đề → đọc theo tiêu đề (cột thiếu để trống), không đoán theo thứ tự
+          var byHead = pc.name >= 0 && (pc.per >= 0 || pc.lvl >= 0 || pc.role >= 0) && pc.lvl !== pc.name;
           var off = /^\d+\.?$/.test(c[0]) || !c[0] ? 1 : 0;
-          if (!byHead) pc = { name: off, per: off + 1, lvl: off + 2, role: off + 3 };
+          if (!byHead) pc = { name: off, per: off + 1, lvl: off + 2, role: off + 3, code: -1, note: -1 };
           var yrs = splitPeriod(c[pc.per]);
           if (!cleanVal(c[pc.name])) return;
-          out.projects.push({ name: cleanVal(c[pc.name]), from: yrs.from, to: yrs.to, level: cleanVal(c[pc.lvl]), role: cleanVal(c[pc.role]), flag: yrs.from ? '' : 'Thiếu năm bắt đầu/hoàn thành.' });
+          out.projects.push(({ name: cleanVal(c[pc.name]), code: pc.code >= 0 ? cleanVal(c[pc.code]) : '', from: yrs.from, to: yrs.to, level: pc.lvl >= 0 ? cleanVal(c[pc.lvl]) : '', role: pc.role >= 0 ? cleanVal(c[pc.role]) : '', note: pc.note >= 0 ? cleanVal(c[pc.note]) : '', flag: yrs.from ? '' : 'Thiếu năm bắt đầu/hoàn thành.' }));
         } else if (kind === 'pubs' || kind === 'books') {
           var o2 = /^\d+\.?$/.test(c[0]) || !c[0] ? 1 : 0;
           var title = cleanVal(c[o2]);
@@ -666,6 +667,7 @@ var SL = (function () {
       var dup = findDup(p, ctx.existingPubs || []);
       if (dup) p.dup = { id: dup.id, title: dup.title, status: dup.status };
     });
+    out.projects = fixProjects(out.projects, out.notes);   // sắp lại cột mã/cấp/trách nhiệm, gộp dòng không có tên
     var flagged = 0, total = 0;
     Object.keys(out.fields).forEach(function (k) { total++; if (out.fields[k].flag) flagged++; });
     ['work', 'projects', 'pubs', 'books', 'awards', 'credentials'].forEach(function (k) {
@@ -899,10 +901,54 @@ var SL = (function () {
     }
   }
 
+  /**
+   * Chuẩn hóa một dòng đề tài tách từ CV/AI (AI hay đặt nhầm cột): mã số không nằm ở ô tên, "Thành viên/Chủ nhiệm" không nằm ở ô cấp,
+   * câu ghi chú không nằm ở ô trách nhiệm, năm chỉ giữ 4 chữ số. Chỗ nào đã sắp lại thì gắn cờ để người dùng kiểm tra.
+   */
+  function fixProject(r) {
+    var x = { name: trim(r.name), code: trim(r.code), from: trim(r.from), to: trim(r.to), level: trim(r.level), role: trim(r.role) };
+    var note = trim(r.note), moved = false;
+    var holder = function (s) { return /^\[[^\]]*\]$/.test(trim(s)) || /can bo sung/.test(fold(s)); };
+    var isCode = function (s) { return /^[a-z]{1,8}[\s.\-]?\d{2,6}([.\-\/]\d{1,6})*$/i.test(fold(s).replace(/\s+/g, '')); };
+    var roleOf = function (s) { var f = fold(s); return /chu nhiem|chu tri/.test(f) ? 'Chủ nhiệm' : /thu ky/.test(f) ? 'Thư ký' : /thanh vien chinh/.test(f) ? 'Thành viên chính' : /thanh vien|tham gia|cong tac vien/.test(f) ? 'Thành viên' : ''; };
+    var levelOf = function (s) {
+      var f = fold(s).replace(/^cap\s+/, '');
+      for (var i = 0; i < PROJECT_LEVELS.length; i++) if (f === fold(PROJECT_LEVELS[i])) return PROJECT_LEVELS[i];
+      return /^nha nuoc/.test(f) ? 'Nhà nước' : /^(bo|cap bo)\b/.test(f) ? 'Bộ' : /^nganh/.test(f) ? 'Ngành' : /^(tinh|thanh pho)/.test(f) ? 'Tỉnh/Thành phố' : /^(truong|sinh vien)/.test(f) ? 'Trường' : /^co so/.test(f) ? 'Cơ sở' : '';
+    };
+    if (holder(x.code)) x.code = '';
+    if (holder(x.name) || isCode(x.name)) { if (isCode(x.name) && !x.code) x.code = x.name; x.name = ''; moved = true; }
+    if (x.level && !levelOf(x.level) && roleOf(x.level)) { if (!roleOf(x.role)) { if (x.role) note = [note, x.role].filter(Boolean).join('; '); x.role = roleOf(x.level); } x.level = ''; moved = true; }
+    else if (x.level) x.level = levelOf(x.level) || x.level;
+    if (x.role) {
+      // "Thành viên; dự giải Euréka" → vai trò "Thành viên" + ghi chú; "Chủ nhiệm đề tài" → "Chủ nhiệm" (không tạo ghi chú)
+      var parts = x.role.split(/\s*[;,(]\s*/), ro = roleOf(parts[0]), rest = trim(parts.slice(1).join('; ').replace(/\)\s*$/, ''));
+      if (!ro) { note = [note, x.role].filter(Boolean).join('; '); x.role = ''; moved = true; }
+      else { if (rest) note = [note, rest].filter(Boolean).join('; '); x.role = ro; }
+    }
+    var y1 = yearOf(x.from), y2 = /nay|now|present/i.test(fold(x.to)) ? '' : yearOf(x.to);
+    if (x.from && y1 !== x.from || x.to && y2 !== x.to) moved = true;
+    x.from = y1; x.to = y2;
+    var flag = trim([r.flag, moved ? 'Đã sắp lại cột từ CV (mã, cấp, trách nhiệm) · kiểm tra' : '', note ? 'Ghi chú trong CV: ' + note : ''].filter(Boolean).join(' · '));
+    x.flag = flag; x.note = note;
+    return x;
+  }
+  /** Chuẩn hóa cả danh sách: dòng không có tên (chỉ có mã/ghi chú) được gộp vào dòng cùng mã; không gộp được thì bỏ và báo lại. */
+  function fixProjects(rows, notes) {
+    var all = (rows || []).map(fixProject), named = all.filter(function (x) { return x.name; });
+    all.filter(function (x) { return !x.name; }).forEach(function (x) {
+      var host = x.code && named.find(function (y) { return fold(y.code) === fold(x.code); });
+      if (host) {
+        ['from', 'to', 'level', 'role'].forEach(function (k) { if (!host[k] && x[k]) host[k] = x[k]; });
+        if (x.note) host.flag = trim([host.flag, 'Ghi chú trong CV: ' + x.note].filter(Boolean).join(' · '));
+      } else if (notes) notes.push('Bỏ một dòng đề tài không có tên' + (x.code ? ' (mã ' + x.code + ')' : '') + (x.note ? ': ' + x.note : '') + '. Thêm tay ở Hồ sơ → Đề tài nếu cần.');
+    });
+    return named.map(function (x) { delete x.note; return x; });
+  }
   return {
     QUARTILES: ['Q1', 'Q2', 'Q3', 'Q4'],
     DEGREES: DEGREES, TITLES: TITLES, NEED_TYPES: NEED_TYPES, LEVELS: LEVELS, PUB_TYPES: PUB_TYPES, PUB_STATUS: PUB_STATUS,
-    CRED_KINDS: CRED_KINDS, PROJECT_LEVELS: PROJECT_LEVELS, PROJECT_ROLES: PROJECT_ROLES, PROFILE_FIELDS: PROFILE_FIELDS,
+    CRED_KINDS: CRED_KINDS, PROJECT_LEVELS: PROJECT_LEVELS, fixProject: fixProject, fixProjects: fixProjects, PROJECT_ROLES: PROJECT_ROLES, PROFILE_FIELDS: PROFILE_FIELDS,
     str: str, trim: trim, fold: fold, normTitle: normTitle, normDoi: normDoi, isDoi: isDoi, words: words, pad: pad,
     parseDate: parseDate, fmtDate: fmtDate, yearOf: yearOf, rankOf: rankOf, normDegree: normDegree, normTitleRank: normTitleRank,
     highest: highest, eligible: eligible, completeness: completeness, ugState: ugState, sameWork: sameWork, findDup: findDup, dedupe: dedupe,
@@ -1990,7 +2036,8 @@ function aiExtractCV_(source, deadline) {
     '"degree":{"value":"Cử nhân|Kỹ sư|Thạc sĩ|Tiến sĩ|Tiến sĩ khoa học hoặc rỗng","year":"","country":""},',
     '"title":{"value":"Phó Giáo sư|Giáo sư hoặc rỗng","year":""},',
     '"languages":[{"name":"","level":""}],"work":[{"from":"","to":"","place":"","role":""}],',
-    '"projects":[{"name":"","from":"","to":"","level":"","role":""}],',
+    '"projects":[{"name":"TÊN ĐẦY ĐỦ của đề tài (không phải mã số)","code":"mã số đề tài nếu có, VD SV2026-397","from":"năm bắt đầu yyyy","to":"năm kết thúc yyyy, rỗng nếu đang làm","level":"cấp đề tài: Nhà nước|Bộ|Ngành|Tỉnh/Thành phố|Trường|Cơ sở","role":"trách nhiệm: Chủ nhiệm|Thư ký|Thành viên chính|Thành viên","note":"ghi chú khác: tình trạng, giải thưởng…"}],',
+    'Mỗi đề tài chỉ ghi MỘT lần (gộp mọi thông tin của cùng một đề tài/mã số); không đặt mã số vào name, không đặt vai trò vào level, không đặt ghi chú vào role.',
     '"pubs":[{"title":"","authors":"","year":"","venue":"","doi":"","type":"journal|conference|book|textbook|chapter"}],',
     '"awards":[{"name":"","year":"","org":""}]}',
     'Sinh viên CHƯA tốt nghiệp đại học: ugYear để rỗng (không ghi "nay", "đang học" hay năm dự kiến vào ugYear).',
@@ -2032,7 +2079,11 @@ function mergeAI_(draft, ai, existingPubs) {
   };
   if (!draft.languages.length && Array.isArray(ai.languages)) ai.languages.forEach(l => { if (s(l.name)) { draft.languages.push({ name: s(l.name), level: s(l.level) }); added++; } });
   take('work', ai.work, r => s(r.place) ? { from: s(r.from), to: s(r.to), place: s(r.place), role: s(r.role) } : null);
-  take('projects', ai.projects, r => s(r.name) ? { name: s(r.name), from: s(r.from), to: s(r.to), level: s(r.level), role: s(r.role) } : null);
+  // Đề tài từ AI: chuẩn hóa cột (AI hay đặt mã số vào ô tên, "Thành viên" vào ô cấp, ghi chú vào ô trách nhiệm)
+  if (!(draft.projects || []).length && Array.isArray(ai.projects)) {
+    SL.fixProjects(ai.projects.map(r => ({ name: s(r.name), code: s(r.code), from: s(r.from), to: s(r.to), level: s(r.level), role: s(r.role), note: s(r.note) })), draft.notes)
+      .forEach(r => { r.flag = FLAG + (r.flag ? ' · ' + r.flag : ''); draft.projects.push(r); added++; });
+  }
   take('awards', ai.awards, r => s(r.name) ? { name: s(r.name), year: SL.yearOf(r.year), org: s(r.org) } : null);
   if (!draft.pubs.length && !draft.books.length && Array.isArray(ai.pubs)) {
     ai.pubs.forEach(r => {
