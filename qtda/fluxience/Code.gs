@@ -993,7 +993,8 @@ var FXRules = (function () {
   function project(r, today) {
     var x = Object.assign({}, r);
     if (!SL.trim(x.name)) throw new Error('Đề tài: cần tên đề tài (không dùng mã số thay tên).');
-    ['from', 'level', 'role'].forEach(function(k){ if(!SL.trim(x[k])) throw new Error('Đề tài: cần năm bắt đầu, cấp đề tài và trách nhiệm.'); });
+    var miss = [['from', 'năm bắt đầu'], ['level', 'cấp đề tài'], ['role', 'trách nhiệm tham gia']].filter(function(k){ return !SL.trim(x[k[0]]); }).map(function(k){ return k[1]; });
+    if (miss.length) throw new Error('Đề tài: cần ' + miss.join(', ') + '.');
     year(x.from, 'Năm bắt đầu', today);
     if (x.to) { year(x.to, 'Năm hoàn thành', today); if (+x.to < +x.from) throw new Error('Năm hoàn thành không được trước năm bắt đầu.'); }
     if (['unknown', 'ongoing', 'awaiting', 'accepted', 'failed'].indexOf(x.acceptance || '') < 0) throw new Error('Chọn tình trạng thực hiện/nghiệm thu.');
@@ -1164,11 +1165,11 @@ const SCHEMA = {
   Users: ['email', 'name', 'roles', 'unit', 'status', 'createdAt', 'createdBy', 'lastLogin', 'requestedRole', 'reviewNote', 'reviewedBy', 'reviewedAt'],
   Profiles: ['email'].concat(SL.PROFILE_FIELDS.map(f => f.key)).concat(['updatedAt']),
   Credentials: ['id', 'email', 'kind', 'value', 'date', 'country', 'fileId', 'fileName', 'status', 'source', 'note', 'reviewNote', 'prevHighest', 'reviewedBy', 'reviewedAt', 'createdAt', 'issuer', 'decisionNo', 'recognitionDate', 'aiStatus', 'aiNote', 'aiModel', 'aiCheckedAt', 'aiRun'],
-  Work: ['id', 'email', 'from', 'to', 'place', 'role', 'order'],
-  Projects: ['id', 'email', 'name', 'from', 'to', 'level', 'role', 'order', 'code', 'acceptance', 'acceptanceDate', 'acceptanceRule', 'acceptanceResult', 'acceptanceBasis', 'evidenceUrl', 'fileId', 'fileName', 'evidenceStatus', 'reviewedBy', 'reviewedAt', 'reviewNote', 'aiStatus', 'aiNote', 'aiModel', 'aiCheckedAt', 'aiRun'],
+  Work: ['id', 'email', 'from', 'to', 'place', 'role', 'order', 'fixNote'],
+  Projects: ['id', 'email', 'name', 'from', 'to', 'level', 'role', 'order', 'code', 'acceptance', 'acceptanceDate', 'acceptanceRule', 'acceptanceResult', 'acceptanceBasis', 'evidenceUrl', 'fileId', 'fileName', 'evidenceStatus', 'reviewedBy', 'reviewedAt', 'reviewNote', 'aiStatus', 'aiNote', 'aiModel', 'aiCheckedAt', 'aiRun', 'fixNote'],
   Publications: ['id', 'email', 'type', 'title', 'authors', 'year', 'month', 'venue', 'issn', 'volume', 'pages', 'doi', 'keywords',
     'fileId', 'fileName', 'status', 'source', 'metaStatus', 'metaNote', 'reviewNote', 'reviewedBy', 'reviewedAt', 'uploadedAt', 'updatedAt', 'sourceUrl', 'aiStatus', 'aiNote', 'aiModel', 'aiCheckedAt', 'aiRun', 'myRole', 'quartile', 'quartileNote'],
-  Awards: ['id', 'email', 'name', 'year', 'org', 'note', 'order'],
+  Awards: ['id', 'email', 'name', 'year', 'org', 'note', 'order', 'fixNote'],
   Needs: ['email', 'council', 'councilLevel', 'supervise', 'superviseLevel', 'consult', 'jointResearch', 'guestLecture', 'teamUp',
     'teachField', 'consultField', 'researchDirection', 'availability', 'until', 'area', 'allowSuggest', 'updatedAt'],
   Rounds: ['id', 'title', 'needType', 'level', 'period', 'goal', 'tags', 'partner', 'status', 'createdBy', 'createdAt', 'sentAt'],
@@ -1528,16 +1529,50 @@ const LIST_DEF = {
   awards: { sheet: 'Awards', cols: { name: 300, year: 10, org: 200, note: 300 }, need: 'name' }
 };
 /** Thay toàn bộ danh sách công tác / đề tài / giải thưởng của chính người dùng. */
-function api_saveList(token, kind, rows) {
-  const c = expert_(token);
+function api_saveList(token, kind, rows) { return saveList_(expert_(token), kind, rows, null); }
+/**
+ * issues = null: kiểm tra chặt (lưu từ biểu mẫu). issues = [] (nhập CV): dòng chưa đủ/chưa hợp lệ VẪN được lưu,
+ * gắn fixNote = việc cần bổ sung và ghi vào issues; người dùng hoàn thiện sau, lần lưu chặt kế tiếp sẽ xóa fixNote.
+ */
+function saveList_(c, kind, rows, issues) {
   const def = LIST_DEF[kind];
   if (!def) throw new Error('Danh sách không hợp lệ.');
   const clean = (rows || []).slice(0, 200).map((r, i) => {
     const x = { id: r.id && T_(def.sheet).some(x=>x.id===r.id && x.email===c.email) ? r.id : uid_(kind.charAt(0).toUpperCase()), email: c.email, order: String(i) };
     Object.keys(def.cols).forEach(k => { x[k] = clip_(r[k], def.cols[k]); });
-    if (!x[def.need] && Object.keys(def.cols).some(k => x[k])) throw new Error('Dòng '+(i+1)+': cần tên/nơi công tác; dòng chưa đủ thông tin chưa được lưu.');
+    x.fixNote = '';
+    if (!x[def.need] && Object.keys(def.cols).some(k => x[k])) {
+      if (issues) { issues.push({ sec: kind, item: SL.trim([x.from, x.year].join(' ')) || 'Dòng ' + (i + 1), note: 'Thiếu ' + (kind === 'work' ? 'nơi công tác' : 'tên') + ' nên chưa lưu dòng này.' }); return x; }
+      throw new Error('Dòng '+(i+1)+': cần tên/nơi công tác; dòng chưa đủ thông tin chưa được lưu.');
+    }
+    if (issues) {
+      // Nhập mềm: kiểm tra như lưu chặt; lỗi → giữ dòng, ghi việc cần bổ sung
+      if (kind === 'projects' && !x.acceptance) x.acceptance = 'unknown';   // dòng cũ chưa có tình trạng = "Chưa rõ" như biểu mẫu
+      try { saveListCheck_(c, kind, x); } catch (e) {
+        x.fixNote = clip_(String(e.message || e), 300);
+        if (kind === 'projects') {
+          if (!x.acceptance) x.acceptance = 'unknown';
+          const prior = T_('Projects').find(p => p.id === x.id && p.email === c.email);   // giữ trạng thái minh chứng đã có
+          if (prior) ['evidenceStatus','reviewedBy','reviewedAt','reviewNote','aiStatus','aiNote','aiModel','aiCheckedAt','aiRun'].forEach(k => { x[k] = prior[k] || ''; });
+        }
+        issues.push({ sec: kind, item: x.name || x.place || 'Dòng ' + (i + 1), note: x.fixNote });
+      }
+      return x;
+    }
+    return saveListCheck_(c, kind, x);
+  }).filter(x => x[def.need]);
+  return tx_(() => {
+    const others = T_(def.sheet).filter(r => r.email !== c.email);
+    save_(def.sheet, others.concat(clean));
+    log_(c.email, 'list_save', kind, clean.length + ' dòng');
+    return { ok: true, rows: clean };
+  });
+}
+/** Kiểm tra + chuẩn hóa một dòng danh sách (ném lỗi khi chưa hợp lệ). */
+function saveListCheck_(c, kind, x) {
+  {
     if (kind === 'projects' && x.name) {
-      Object.assign(x,FXRules.project(x,today_()));
+      try { Object.assign(x,FXRules.project(x,today_())); } catch (e) { throw new Error('Đề tài "' + clip_(x.name, 60) + '": ' + String(e.message || e).replace(/^Đề tài:\s*/, '')); }
       if (x.fileId && !T_('Files').some(f=>f.id===x.fileId && f.email===c.email && f.link==='project:'+x.id)) throw new Error('Minh chứng đề tài không thuộc bản ghi này.');
       const prior=T_('Projects').find(p=>p.id===x.id && p.email===c.email);
       if(prior) {
@@ -1552,13 +1587,7 @@ function api_saveList(token, kind, rows) {
     }
     if (kind === 'awards' && x.year) FXRules.year(x.year,'Năm giải thưởng',today_());
     return x;
-  }).filter(x => x[def.need]);
-  return tx_(() => {
-    const others = T_(def.sheet).filter(r => r.email !== c.email);
-    save_(def.sheet, others.concat(clean));
-    log_(c.email, 'list_save', kind, clean.length + ' dòng');
-    return { ok: true, rows: clean };
-  });
+  }
 }
 
 /** Thêm sự kiện học vị / chức danh / chức vụ. Luôn ở trạng thái chờ xác minh. */
@@ -1684,11 +1713,19 @@ function validatePub_(x) {
  * - Ngày tải lên lần đầu không đổi khi sửa hay thay file (thống kê theo kỳ).
  * - Sửa nội dung bài đã xác minh → quay lại "Chờ duyệt".
  */
-function api_savePublication(token, p, action) {
+function api_savePublication(token, p, action) { return savePub_(token, p, action, false); }
+/** soft (chỉ dùng khi nhập CV, luôn lưu nháp): bài thiếu năm/nơi đăng/tác giả vẫn lưu, gắn metaStatus "needs_fix". */
+function savePub_(token, p, action, soft) {
   const c = expert_(token);
   p = p || {};
   const x = cleanPub_(p, c.email);
-  const errs = validatePub_(x);
+  let errs = validatePub_(x);
+  if (soft && errs.length && x.title) {
+    if (x.sourceUrl && !/^https:\/\/[^\s]+$/.test(x.sourceUrl)) x.sourceUrl = '';
+    if (x.doi && !SL.isDoi(x.doi)) x.doi = '';
+    p = Object.assign({}, p, { metaStatus: 'needs_fix', metaNote: 'Cần bổ sung: ' + errs.join(' ') });
+    action = 'draft'; errs = [];
+  }
   if (errs.length) throw new Error(errs.join(' '));
   const saved = tx_(() => {
     const all = T_('Publications');
@@ -1708,6 +1745,7 @@ function api_savePublication(token, p, action) {
     else if (cur.status === 'verified' && changed) row.status = 'pending';
     if (!row.status) row.status = 'draft';
     if (p.metaStatus) { row.metaStatus = clip_(p.metaStatus, 20); row.metaNote = clip_(p.metaNote, 500); }
+    else if (row.metaStatus === 'needs_fix') { row.metaStatus = ''; row.metaNote = ''; }   // đã bổ sung đủ khi lưu chặt
     if (changed) { row.aiStatus=''; row.aiNote=''; row.aiRun=''; row.reviewedBy=''; row.reviewedAt=''; }
     row.updatedAt = now_();
     upsert_('Publications', row);
@@ -2023,63 +2061,83 @@ function mergeAI_(draft, ai, existingPubs) {
  * plan = { fields:{k:v}, languages:[], work:{mode,rows}, projects:{mode,rows}, awards:{mode,rows},
  *          pubs:[{action:'add'|'merge'|'skip', data, dupId}], credentials:[...] }
  */
+/**
+ * Nhập CV "duyệt thoải mái": KHÔNG chặn cả lần nhập vì một mục chưa đủ/chưa hợp lệ.
+ * - Trường hồ sơ sai định dạng: bỏ qua trường đó, giữ phần còn lại.
+ * - Công tác / đề tài / giải thưởng thiếu thông tin: vẫn lưu, gắn ghi chú cần bổ sung (fixNote).
+ * - Công bố thiếu năm/nơi đăng/tác giả: lưu nháp, gắn cờ cần bổ sung.
+ * - Học vị/chức danh không hợp lệ (ngoài danh mục, thiếu ngày): chưa tạo yêu cầu xác minh, gợi ý thêm tay.
+ * Trả về issues = [{sec, item, note}] để giao diện đề xuất điều chỉnh.
+ */
 function api_importCV(token, plan) {
   const c = expert_(token);
   plan = plan || {};
-  const ownerProfile=T_('Profiles').find(r=>r.email===c.email) || {};
-  if(plan.fields || plan.languages) FXRules.profile(Object.assign({},plan.fields || {},plan.languages?{languages:plan.languages}:{}),ownerProfile,today_());
-  ['work','projects','awards'].forEach(k=>{
-    const part=plan[k];if(!part || !part.rows)return;
-    if(k==='projects')part.rows=part.rows.map(r=>FXRules.project(Object.assign({acceptance:'unknown'},r),today_()));
-    if(k==='work')part.rows.forEach(r=>{if(r.from)FXRules.year(r.from,'Từ năm',today_());if(r.to && r.to!=='nay')FXRules.year(r.to,'Đến năm',today_());if(r.from && r.to && r.to!=='nay' && +r.to<+r.from)throw new Error('Năm công tác kết thúc trước năm bắt đầu.');});
-    if(k==='awards')part.rows.forEach(r=>{if(r.year)FXRules.year(r.year,'Năm giải thưởng',today_());});
-  });
-  (plan.pubs || []).filter(it=>it && it.action!=='skip').forEach(it=>{const e=validatePub_(cleanPub_(it.data || {},c.email));if(e.length)throw new Error(e.join(' '));});
-  (plan.credentials || []).forEach(x=>FXRules.credential(Object.assign({},x,{source:'cv'}),today_(),degreeList_(catalog_()).map(x=>x.label),titleList_(catalog_()).map(x=>x.label)));
+  const issues = [], today = today_(), msg = e => String(e && e.message || e);
+  const ownerProfile = T_('Profiles').find(r => r.email === c.email) || {};
+  const label = k => (SL.PROFILE_FIELDS.find(f => f.key === k) || {}).label || k;
+  // 1) Hồ sơ: nhận từng trường hợp lệ; trường lỗi được bỏ qua và báo lại
   if (plan.fields && Object.keys(plan.fields).length || plan.languages) {
-    const pf = Object.assign({}, plan.fields || {});
-    if (plan.languages) pf.languages = plan.languages;
-    api_saveProfile(token, pf);
+    const ok = {};
+    Object.keys(plan.fields || {}).forEach(k => {
+      try { FXRules.profile(Object.assign({}, ok, { [k]: plan.fields[k] }), ownerProfile, today); ok[k] = plan.fields[k]; }
+      catch (e) { issues.push({ sec: 'profile', item: label(k) + ': ' + clip_(plan.fields[k], 80), note: msg(e) }); }
+    });
+    if (plan.languages) {
+      try { FXRules.profile(Object.assign({}, ok, { languages: plan.languages }), ownerProfile, today); ok.languages = plan.languages; }
+      catch (e) { issues.push({ sec: 'profile', item: 'Ngoại ngữ', note: msg(e) }); }
+    }
+    if (Object.keys(ok).length) {
+      try { api_saveProfile(token, ok); } catch (e) { issues.push({ sec: 'profile', item: 'Thông tin cá nhân', note: 'Chưa lưu được: ' + msg(e) }); }
+    }
   }
+  // 2) Danh sách: dòng chưa đủ vẫn lưu, kèm việc cần bổ sung
   ['work', 'projects', 'awards'].forEach(k => {
     const part = plan[k];
     if (!part || !part.rows || !part.rows.length) return;
     MEMO_ = {};
+    const rows = k === 'projects' ? part.rows.map(r => Object.assign({ acceptance: 'unknown' }, r)) : part.rows;
     const cur = T_(LIST_DEF[k].sheet).filter(r => r.email === c.email);
     const key = r => SL.fold([r.from, r.place, r.name, r.year].join('|')).replace(/[^a-z0-9|]/g, '');
-    const have = new Set(cur.map(key));
-    api_saveList(token, k, part.mode === 'replace' ? part.rows : cur.concat(part.rows.filter(r => !have.has(key(r)))));
+    const have = new Set(cur.map(key)), fresh = [];
+    const all = part.mode === 'replace' ? rows : cur.concat(rows.filter(r => !have.has(key(r))));
+    try { saveList_(c, k, all, fresh); } catch (e) { issues.push({ sec: k, item: 'Danh sách', note: 'Chưa lưu được: ' + msg(e) }); }
+    // Chỉ báo các dòng vừa nhập; dòng cũ còn thiếu đã có ghi chú riêng trong hồ sơ
+    const oldNames = new Set(part.mode === 'replace' ? [] : cur.map(r => r.name || r.place));
+    fresh.forEach(it => { if (!oldNames.has(it.item)) issues.push(it); });
   });
+  // 3) Công bố: luôn lưu nháp; bài thiếu thông tin gắn cờ cần bổ sung
   let added = 0, merged = 0;
   (plan.pubs || []).forEach(it => {
     if (!it || it.action === 'skip') return;
     MEMO_ = {};
-    if (it.action === 'merge' && it.dupId) {
-      tx_(() => {
-        const cur = T_('Publications').find(r => r.id === it.dupId && r.email === c.email);
-        if (!cur) return;
-        const x = cleanPub_(it.data || {}, c.email);
-        ['authors', 'venue', 'doi', 'issn', 'volume', 'pages', 'keywords', 'month'].forEach(k => { if (!cur[k] && x[k]) cur[k] = x[k]; });
-        cur.updatedAt = now_();
-        upsert_('Publications', cur);
-        merged++;
-      });
-    } else {
-      const r = api_savePublication(token, Object.assign({}, it.data, { source: 'cv', confirmDup: true }), 'draft');
-      if (r.ok) added++;
-    }
+    try {
+      if (it.action === 'merge' && it.dupId) {
+        tx_(() => {
+          const cur = T_('Publications').find(r => r.id === it.dupId && r.email === c.email);
+          if (!cur) return;
+          const x = cleanPub_(it.data || {}, c.email);
+          ['authors', 'venue', 'doi', 'issn', 'volume', 'pages', 'keywords', 'month'].forEach(k => { if (!cur[k] && x[k]) cur[k] = x[k]; });
+          cur.updatedAt = now_();
+          upsert_('Publications', cur);
+          merged++;
+        });
+      } else {
+        const r = savePub_(token, Object.assign({}, it.data, { source: 'cv', confirmDup: true }), 'draft', true);
+        if (r.ok) { added++; if (r.pub && r.pub.metaStatus === 'needs_fix') issues.push({ sec: 'pubs', item: r.pub.title, note: r.pub.metaNote, id: r.pub.id }); }
+      }
+    } catch (e) { issues.push({ sec: 'pubs', item: clip_((it.data || {}).title || 'Công bố', 120), note: 'Chưa lưu: ' + msg(e) }); }
   });
+  // 4) Học vị / chức danh / chức vụ: tạo yêu cầu xác minh khi hợp lệ, còn lại gợi ý thêm tay
+  const KIND = { degree: 'Học vị', title: 'Chức danh', position: 'Chức vụ' };
   (plan.credentials || []).forEach(x => {
     MEMO_ = {};
-    // Đã có mục cùng loại + giá trị (đang chờ hoặc đã xác minh) thì không tạo yêu cầu trùng
     if (T_('Credentials').some(r => r.email === c.email && r.kind === x.kind && SL.fold(r.value) === SL.fold(x.value) && r.status !== 'rejected')) return;
-    try { api_addCredential(token, Object.assign({}, x, { source: 'cv', date: x.date || '' })); } catch (e) {
-      if (x.kind !== 'position') throw e;   // chức vụ thiếu ngày: bỏ qua, nhắc ở giao diện
-    }
+    try { api_addCredential(token, Object.assign({}, x, { source: 'cv', date: x.date || '' })); }
+    catch (e) { issues.push({ sec: 'credentials', item: (KIND[x.kind] || 'Mục') + ': ' + clip_(x.value, 80), note: msg(e) + ' Thêm lại ở Hồ sơ → Học vị & chức danh.' }); }
   });
-  log_(c.email, 'cv_import', plan.fileId || '', 'thêm ' + added + ' công bố, gộp ' + merged);
+  log_(c.email, 'cv_import', plan.fileId || '', 'thêm ' + added + ' công bố, gộp ' + merged + (issues.length ? ', ' + issues.length + ' mục cần bổ sung' : ''));
   MEMO_ = {};
-  return { ok: true, added: added, merged: merged, data: api_bootstrap(token, 'expert') };
+  return { ok: true, added: added, merged: merged, issues: issues.slice(0, 100), data: api_bootstrap(token, 'expert') };
 }
 
 /**

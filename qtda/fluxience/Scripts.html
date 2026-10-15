@@ -942,7 +942,8 @@ var FXRules = (function () {
   function project(r, today) {
     var x = Object.assign({}, r);
     if (!SL.trim(x.name)) throw new Error('Đề tài: cần tên đề tài (không dùng mã số thay tên).');
-    ['from', 'level', 'role'].forEach(function(k){ if(!SL.trim(x[k])) throw new Error('Đề tài: cần năm bắt đầu, cấp đề tài và trách nhiệm.'); });
+    var miss = [['from', 'năm bắt đầu'], ['level', 'cấp đề tài'], ['role', 'trách nhiệm tham gia']].filter(function(k){ return !SL.trim(x[k[0]]); }).map(function(k){ return k[1]; });
+    if (miss.length) throw new Error('Đề tài: cần ' + miss.join(', ') + '.');
     year(x.from, 'Năm bắt đầu', today);
     if (x.to) { year(x.to, 'Năm hoàn thành', today); if (+x.to < +x.from) throw new Error('Năm hoàn thành không được trước năm bắt đầu.'); }
     if (['unknown', 'ongoing', 'awaiting', 'accepted', 'failed'].indexOf(x.acceptance || '') < 0) throw new Error('Chọn tình trạng thực hiện/nghiệm thu.');
@@ -1028,6 +1029,7 @@ const uid = p => (p || '') + Date.now().toString(36).toUpperCase() + Math.floor(
 const clone = o => JSON.parse(JSON.stringify(o));
 function badge(text, tone) { return `<span class="badge ${tone || ''}">${esc(text)}</span>`; }
 function pubBadge(p) {
+  if (p.metaStatus === 'needs_fix') return badge('Cần bổ sung thông tin', 'warning');
   if (p.status === 'draft' && !p.fileId) return badge('Cần bổ sung', 'warning');
   if (p.status === 'pending' && p.metaStatus === 'mismatch') return badge('Cần đối chiếu', 'warning');
   const s = SL.PUB_STATUS[p.status] || SL.PUB_STATUS.draft;
@@ -1338,11 +1340,19 @@ const MockAPI = (function () {
       log(u.email, 'profile_save', u.email, Object.keys(out).join(', '));
       return { ok: true, profile: row };
     }, 'expert'),
-    saveList: guard((u, kind, rows) => {
+    saveList: guard((u, kind, rows, issues) => {
       const defs = { work: ['Work', ['from', 'to', 'place', 'role'], 'place'], projects: ['Projects', ['name','from','to','level','role','code','acceptance','acceptanceDate','acceptanceRule','acceptanceResult','acceptanceBasis','evidenceUrl','fileId','fileName'], 'name'], awards: ['Awards', ['name', 'year', 'org', 'note'], 'name'] };
       const d = defs[kind]; if (!d) throw new Error('Danh sách không hợp lệ.');
       const clean = (rows || []).map((r, i) => { const x = { id: r.id || uid(kind[0].toUpperCase()), email: u.email, order: String(i) }; d[1].forEach(k => { x[k] = clip(r[k], 400); }); return x; }).filter(x => x[d[2]]);
-      if(kind==='projects')clean.forEach(x=>Object.assign(x,FXRules.project(x,todayISO())));
+      clean.forEach(x => {
+        x.fixNote = '';
+        if (issues && kind === 'projects' && !x.acceptance) x.acceptance = 'unknown';
+        try {
+          if (kind === 'projects') { try { Object.assign(x, FXRules.project(x, todayISO())); } catch (e) { throw new Error('Đề tài "' + x.name.slice(0, 60) + '": ' + e.message.replace(/^Đề tài:\s*/, '')); } }
+          if (kind === 'work') { if (x.from) FXRules.year(x.from, 'Từ năm', todayISO()); if (x.to && x.to !== 'nay') FXRules.year(x.to, 'Đến năm', todayISO()); }
+          if (kind === 'awards' && x.year) FXRules.year(x.year, 'Năm giải thưởng', todayISO());
+        } catch (e) { if (!issues) throw e; x.fixNote = e.message; if (kind === 'projects' && !x.acceptance) x.acceptance = 'unknown'; issues.push({ sec: kind, item: x.name || x.place, note: e.message }); }
+      });
       db[d[0]] = db[d[0]].filter(r => r.email !== u.email).concat(clean);
       log(u.email, 'list_save', kind, clean.length + ' dòng');
       return { ok: true, rows: clean };
@@ -1387,12 +1397,13 @@ const MockAPI = (function () {
       const row = { id: uid('S'), email: u.email, subject: clip(s, 150), body: clip(b, 3000), status: 'open', reply: '', createdAt: nowStr(), repliedAt: '', repliedBy: '' };
       db.Support.push(row); log(u.email, 'support_open', row.id, row.subject); return { ok: true, support: row };
     }),
-    savePublication: guard((u, p, action) => {
-      const x = cleanPub(p, u.email), e = [];
+    savePublication: guard((u, p, action, soft) => {
+      const x = cleanPub(p, u.email); let e = [];
       if(!x.authors)e.push('Nhập tác giả công bố.');
       if (!x.title) e.push('Nhập tên bài báo / công trình.'); if (!x.year) e.push('Nhập năm xuất bản.');
       if (!x.venue) e.push(x.type === 'book' || x.type === 'textbook' ? 'Nhập nhà xuất bản.' : 'Nhập tên tạp chí / hội nghị.');
       if (x.doi && !SL.isDoi(x.doi)) e.push('DOI có dạng 10.xxxx/....');
+      if (soft && e.length && x.title) { if (x.doi && !SL.isDoi(x.doi)) x.doi = ''; p = Object.assign({}, p, { metaStatus: 'needs_fix', metaNote: 'Cần bổ sung: ' + e.join(' ') }); action = 'draft'; e = []; }
       if (e.length) throw new Error(e.join(' '));
       const cur = p.id ? db.Publications.find(r => r.id === p.id && r.email === u.email) : null;
       const dup = SL.findDup(Object.assign({ id: p.id }, x), db.Publications.filter(r => r.email === u.email));
@@ -1404,6 +1415,7 @@ const MockAPI = (function () {
       else if (!cur) row.status = 'draft'; else if (cur.status === 'verified' && changed) row.status = 'pending';
       if (!row.status) row.status = 'draft';
       if (p.metaStatus) { row.metaStatus = p.metaStatus; row.metaNote = clip(p.metaNote); }
+      else if (row.metaStatus === 'needs_fix') { row.metaStatus = ''; row.metaNote = ''; }
       row.updatedAt = nowStr(); upsert('Publications', row); log(u.email, cur ? 'pub_update' : 'pub_add', row.id, row.title + ' → ' + row.status);
       return { ok: true, pub: row };
     }, 'expert'),
@@ -1462,23 +1474,34 @@ const MockAPI = (function () {
     },
     reparseCV: async id => { const im = impState(); if (!im.file) throw new Error('Bản demo không lưu nội dung file: chọn lại file để đọc.'); return api.parseCV(im.file); },
     importCV: async plan => {
-      load(); const u = me(); let added = 0, merged = 0;
-      if (plan.fields && Object.keys(plan.fields).length || plan.languages) await api.saveProfile(Object.assign({}, plan.fields, plan.languages ? { languages: plan.languages } : {}));
+      // Giống máy chủ: không chặn cả lần nhập; mục chưa đủ vẫn lưu và được đề xuất bổ sung
+      load(); const u = me(); let added = 0, merged = 0; const issues = [], msg = e => String(e && e.message || e);
+      const label = k => (SL.PROFILE_FIELDS.find(f => f.key === k) || {}).label || k;
+      if (plan.fields && Object.keys(plan.fields).length || plan.languages) {
+        const prof = db.Profiles.find(r => r.email === u.email) || {}, ok = {};
+        Object.keys(plan.fields || {}).forEach(k => { try { FXRules.profile(Object.assign({}, ok, { [k]: plan.fields[k] }), prof, todayISO()); ok[k] = plan.fields[k]; } catch (e) { issues.push({ sec: 'profile', item: label(k) + ': ' + String(plan.fields[k]).slice(0, 80), note: msg(e) }); } });
+        if (plan.languages) ok.languages = plan.languages;
+        if (Object.keys(ok).length) try { await api.saveProfile(ok); } catch (e) { issues.push({ sec: 'profile', item: 'Thông tin cá nhân', note: 'Chưa lưu được: ' + msg(e) }); }
+      }
       if(plan.projects && plan.projects.rows)plan.projects.rows=plan.projects.rows.map(r=>Object.assign({acceptance:'unknown'},r));
       for (const k of ['work', 'projects', 'awards']) {
         const part = plan[k]; if (!part || !part.rows || !part.rows.length) continue;
         const sheet = { work: 'Work', projects: 'Projects', awards: 'Awards' }[k];
-        const cur = db[sheet].filter(r => r.email === u.email), key = r => SL.fold([r.from, r.place, r.name, r.year].join('|')).replace(/[^a-z0-9|]/g, ''), have = new Set(cur.map(key));
-        await api.saveList(k, part.mode === 'replace' ? part.rows : cur.concat(part.rows.filter(r => !have.has(key(r)))));
+        const cur = db[sheet].filter(r => r.email === u.email), key = r => SL.fold([r.from, r.place, r.name, r.year].join('|')).replace(/[^a-z0-9|]/g, ''), have = new Set(cur.map(key)), fresh = [];
+        try { await api.saveList(k, part.mode === 'replace' ? part.rows : cur.concat(part.rows.filter(r => !have.has(key(r)))), fresh); } catch (e) { issues.push({ sec: k, item: 'Danh sách', note: 'Chưa lưu được: ' + msg(e) }); }
+        const old = new Set(cur.map(r => r.name || r.place)); fresh.forEach(it => { if (!old.has(it.item)) issues.push(it); });
       }
       for (const it of plan.pubs || []) {
         if (!it || it.action === 'skip') continue;
-        if (it.action === 'merge' && it.dupId) { const cur = db.Publications.find(r => r.id === it.dupId && r.email === u.email); if (cur) { const x = cleanPub(it.data, u.email); ['authors', 'venue', 'doi', 'issn', 'keywords', 'month'].forEach(k => { if (!cur[k] && x[k]) cur[k] = x[k]; }); merged++; } }
-        else { const r = await api.savePublication(Object.assign({}, it.data, { source: 'cv', confirmDup: true }), 'draft'); if (r.ok) added++; }
+        try {
+          if (it.action === 'merge' && it.dupId) { const cur = db.Publications.find(r => r.id === it.dupId && r.email === u.email); if (cur) { const x = cleanPub(it.data, u.email); ['authors', 'venue', 'doi', 'issn', 'keywords', 'month'].forEach(k => { if (!cur[k] && x[k]) cur[k] = x[k]; }); merged++; } }
+          else { const r = await api.savePublication(Object.assign({}, it.data, { source: 'cv', confirmDup: true }), 'draft', true); if (r.ok) { added++; if (r.pub.metaStatus === 'needs_fix') issues.push({ sec: 'pubs', item: r.pub.title, note: r.pub.metaNote, id: r.pub.id }); } }
+        } catch (e) { issues.push({ sec: 'pubs', item: (it.data || {}).title || 'Công bố', note: 'Chưa lưu: ' + msg(e) }); }
       }
-      for (const x of plan.credentials || []) { if (db.Credentials.some(r => r.email === u.email && r.kind === x.kind && SL.fold(r.value) === SL.fold(x.value) && r.status !== 'rejected')) continue; try { await api.addCredential(Object.assign({}, x, { source: 'cv' })); } catch (e) { if (x.kind !== 'position') throw e; } }
-      log(u.email, 'cv_import', plan.fileId || '', 'thêm ' + added + ' công bố, gộp ' + merged); save();
-      return { ok: true, added, merged, data: await boot('expert') };
+      const KIND = { degree: 'Học vị', title: 'Chức danh', position: 'Chức vụ' };
+      for (const x of plan.credentials || []) { if (db.Credentials.some(r => r.email === u.email && r.kind === x.kind && SL.fold(r.value) === SL.fold(x.value) && r.status !== 'rejected')) continue; try { await api.addCredential(Object.assign({}, x, { source: 'cv' })); } catch (e) { issues.push({ sec: 'credentials', item: (KIND[x.kind] || 'Mục') + ': ' + x.value, note: msg(e) + ' Thêm lại ở Hồ sơ → Học vị & chức danh.' }); } }
+      log(u.email, 'cv_import', plan.fileId || '', 'thêm ' + added + ' công bố, gộp ' + merged + (issues.length ? ', ' + issues.length + ' mục cần bổ sung' : '')); save();
+      return { ok: true, added, merged, issues, data: await boot('expert') };
     },
     renderDoc: () => fail('Bản demo không có máy chủ Google Docs: dùng "Tải Word (.doc)" hoặc "In / Lưu PDF".'),
     logExport: guard((u, m) => { log(u.email, 'export', m.email || u.email, [m.name, m.format, m.template].filter(Boolean).join(' · ')); return { ok: true }; }),
@@ -1689,7 +1712,7 @@ const NAV = {
     ['files', 'file', 'Kho tài liệu'], ['accounts', 'key', 'Tài khoản & quyền'], ['logs', 'list', 'Nhật ký & hỗ trợ']
   ]
 };
-const SUBPAGES = { import: 'profile', pub: 'pubs', expert: 'experts' };
+const SUBPAGES = { import: 'profile', 'import-fix': 'profile', pub: 'pubs', expert: 'experts' };
 
 function parseHash(hash) {
   const h = (typeof hash === 'string' ? hash : location.hash).replace(/^#\/?/, '');
@@ -2793,19 +2816,19 @@ function listEditor(kind) {
   if(kind==='projects') return projectEditor();
   const defs=kind==='work'?{title:'Quá trình công tác chuyên môn',cols:[['from','Từ năm'],['to','Đến năm / nay'],['place','Nơi công tác'],['role','Công việc đảm nhiệm']]}:{title:'Giải thưởng, khen thưởng',cols:[['name','Tên giải thưởng'],['year','Năm'],['org','Cơ quan trao tặng']]};
   const rows=starterRows(kind);S.drafts[kind]=rows;const filled=rows.filter(r=>!isBlankRow(r)).length;
-  return `<div class="collection-editor"><div class="collection-heading"><h3 class="h2">${defs.title} <span class="collection-count">${filled}</span></h3><button type="button" class="btn sm" data-act="list-add" data-kind="${kind}">${icon('plus','sm')}Thêm ${kind==='work'?'công tác':'giải thưởng'}</button></div><form data-form="list" data-kind="${kind}">${filled>1?listSortControl(kind):''}<div class="record-list ${kind}-records">${rows.map((r,i)=>`<article class="record-row" data-list-row data-row-index="${i}" data-id="${esc(r.id || '')}"><div class="record-order"><span class="record-number">${String(i+1).padStart(2,'0')}</span>${moveButtons(kind,i,rows.length)}</div><div class="record-fields ${kind}-fields">${defs.cols.map(([key,label])=>`<label class="field record-${key}"><span>${label}${key===(kind==='work'?'place':'name')?reqMark():''}</span>${['place','role','name','org'].includes(key)?`<x-ta name="${key}" rows="2" maxlength="400" ${key===(kind==='work'?'place':'name')?'required':''}>${esc(r[key] || '')}</x-ta>`:`<input name="${key}" value="${esc(r[key] || '')}" inputmode="numeric" maxlength="12" placeholder="${key==='to'?'Năm / nay':'yyyy'}">`}</label>`).join('')}</div></article>`).join('') || emptyState('list',kind==='work'?'Chưa có quá trình công tác.':'Chưa có giải thưởng.')}</div>${rows.length || S.structuredDirty[kind]?`<div class="collection-footer"><span class="caption">${filled?filled+' '+(kind==='work'?'mục công tác':'giải thưởng'):'Điền vào ô trống rồi bấm Lưu; dòng để trống sẽ không được lưu.'}</span><button class="btn primary">${icon('check','sm')}Lưu danh sách</button></div>`:''}</form></div>`;
+  return `<div class="collection-editor"><div class="collection-heading"><h3 class="h2">${defs.title} <span class="collection-count">${filled}</span></h3><button type="button" class="btn sm" data-act="list-add" data-kind="${kind}">${icon('plus','sm')}Thêm ${kind==='work'?'công tác':'giải thưởng'}</button></div><form data-form="list" data-kind="${kind}">${filled>1?listSortControl(kind):''}<div class="record-list ${kind}-records">${rows.map((r,i)=>`<article class="record-row" data-list-row data-row-index="${i}" data-id="${esc(r.id || '')}"><div class="record-order"><span class="record-number">${String(i+1).padStart(2,'0')}</span>${moveButtons(kind,i,rows.length)}</div><div class="record-fields ${kind}-fields">${defs.cols.map(([key,label])=>`<label class="field record-${key}"><span>${label}${key===(kind==='work'?'place':'name')?reqMark():''}</span>${['place','role','name','org'].includes(key)?`<x-ta name="${key}" rows="2" maxlength="400" ${key===(kind==='work'?'place':'name')?'required':''}>${esc(r[key] || '')}</x-ta>`:`<input name="${key}" value="${esc(r[key] || '')}" inputmode="numeric" maxlength="12" placeholder="${key==='to'?'Năm / nay':'yyyy'}">`}</label>`).join('')}</div>${r.fixNote?`<p class="fix-note">${icon('alert','sm')}<span><b>Cần bổ sung:</b> ${esc(r.fixNote)}</span></p>`:''}</article>`).join('') || emptyState('list',kind==='work'?'Chưa có quá trình công tác.':'Chưa có giải thưởng.')}</div>${rows.length || S.structuredDirty[kind]?`<div class="collection-footer"><span class="caption">${filled?filled+' '+(kind==='work'?'mục công tác':'giải thưởng'):'Điền vào ô trống rồi bấm Lưu; dòng để trống sẽ không được lưu.'}</span><button class="btn primary">${icon('check','sm')}Lưu danh sách</button></div>`:''}</form></div>`;
 }
 function moveButtons(kind,i,total) { return `<div class="record-actions"><button type="button" class="iconbtn move-up" data-act="list-move" data-kind="${kind}" data-i="${i}" data-step="-1" aria-label="Đưa mục ${i+1} lên" title="Đưa lên" ${i===0?'disabled':''}>${icon('arrow','sm')}</button><button type="button" class="iconbtn move-down" data-act="list-move" data-kind="${kind}" data-i="${i}" data-step="1" aria-label="Đưa mục ${i+1} xuống" title="Đưa xuống" ${i===total-1?'disabled':''}>${icon('arrow','sm')}</button><button type="button" class="iconbtn record-delete" data-act="list-del" data-kind="${kind}" data-i="${i}" aria-label="Xóa mục ${i+1}" title="Xóa mục">${icon('trash','sm')}</button></div>`; }
 function listSortControl(kind) { return `<label class="field list-sort"><span>Sắp xếp</span><select data-list-sort="${kind}">${[['manual','Theo thứ tự bạn chọn'],['desc','Năm mới nhất trước'],['asc','Năm cũ nhất trước']].map(([value,label])=>`<option value="${value}" ${(S.ui.listSort || {})[kind]===value?'selected':''}>${label}</option>`).join('')}</select></label>`; }
 function projectEditor() {
   const rows=starterRows('projects');S.drafts.projects=rows;const filled=rows.filter(r=>!isBlankRow(r)).length;
   const ctl=(r,k,label,list,required)=>`<label class="field ${k==='name'?'c12':'c6'}"><span>${label}${required?reqMark():''}</span>${k==='name'?`<x-ta name="name" rows="2" required maxlength="400">${esc(r.name || '')}</x-ta>`:list?combo(k,r[k],list,{free:true,required}):`<input name="${k}" value="${esc(k==='acceptanceDate'?SL.fmtDate(r[k]):r[k] || '')}" ${required?'required':''} ${k==='acceptanceDate'?`placeholder="dd/mm/yyyy" inputmode="numeric"`:['from','to'].includes(k)?'inputmode="numeric" maxlength="4"':''}>`}</label>`;
-  return `<div class="collection-editor"><div class="collection-heading"><h3 class="h2">Đề tài nghiên cứu <span class="collection-count">${filled}</span></h3><button type="button" class="btn sm" data-act="list-add" data-kind="projects">${icon('plus','sm')}Thêm đề tài</button></div><form data-form="list" data-kind="projects">${filled>1?listSortControl('projects'):''}<div class="project-list">${rows.map((r,i)=>`<article class="project-row" data-list-row data-row-index="${i}" data-id="${esc(r.id || '')}"><div class="project-summary"><button type="button" class="project-toggle" data-act="project-toggle" data-i="${i}" aria-expanded="${S.ui.projectOpen===i}" aria-controls="project-fields-${i}"><span class="record-number">${String(i+1).padStart(2,'0')}</span><span class="project-summary-copy"><strong data-project-title>${esc(r.name || 'Đề tài mới')}</strong><span class="project-meta" data-project-meta>${projectMeta(r)}</span></span><span class="project-chevron">${icon('arrow','sm')}</span></button>${moveButtons('projects',i,rows.length)}</div><div id="project-fields-${i}" class="project-fields" ${S.ui.projectOpen===i?'':'hidden'}><div class="fgrid">${ctl(r,'name','Tên đầy đủ của đề tài',null,true)}${ctl(r,'code','Mã đề tài (nếu có)')}${ctl(r,'from','Năm bắt đầu',null,true)}${ctl(r,'to','Năm hoàn thành')}${ctl(r,'level','Cấp đề tài',E.projectLevels(),true)}${ctl(r,'role','Trách nhiệm tham gia',SL.PROJECT_ROLES,true)}<label class="field c12"><span>Tình trạng thực hiện${reqMark()}</span><select name="acceptance" data-project-state required><option value="">— Chọn —</option>${PROJECT_STATES.map(([value,label])=>`<option value="${value}" ${(r.acceptance || 'unknown')===value?'selected':''}>${label}</option>`).join('')}</select></label><div class="c12 fgrid conditional" data-acceptance-body ${r.acceptance==='accepted'?'':'hidden'}>${ctl(r,'acceptanceDate','Ngày nghiệm thu',null,true)}<label class="field c6"><span>Quy chế xếp loại${reqMark()}</span><select name="acceptanceRule" data-project-rule required><option value="">Chọn theo quy chế / biên bản</option><option value="three_levels" ${r.acceptanceRule==='three_levels'?'selected':''}>3 mức: Xuất sắc / Đạt / Không đạt</option><option value="institution" ${r.acceptanceRule==='institution'?'selected':''}>Quy chế trường / đơn vị / cấp quản lý khác</option></select></label><label class="field c6"><span>Kết quả theo biên bản${reqMark()}</span><input name="acceptanceResult" value="${esc(r.acceptanceResult || '')}" list="fx-acceptance-results" required></label>${ctl(r,'acceptanceBasis','Số/tên quy chế hoặc biên bản',null,true)}<p class="caption c12">Xếp loại theo quy chế của đề tài; “Không đạt” vẫn là một kết quả nghiệm thu.</p></div><div class="c12 fgrid conditional" data-failed-body ${r.acceptance==='failed'?'':'hidden'}><div class="callout bad c12">${icon('alert','sm')}<div>Đề tài <b>không được nghiệm thu</b>. Vẫn được lưu trong hồ sơ để theo dõi; có thể ghi ngày họp và số biên bản nếu có.</div></div><label class="field c6"><span>Ngày họp nghiệm thu</span><input name="failDate" value="${esc(r.acceptance==='failed'?SL.fmtDate(r.acceptanceDate):'')}" placeholder="dd/mm/yyyy" inputmode="numeric"></label><label class="field c6"><span>Số biên bản / lý do</span><input name="failBasis" value="${esc(r.acceptance==='failed'?(r.acceptanceBasis || ''):'')}" maxlength="300"></label></div></div><details class="project-evidence" ${r.fileId || r.evidenceUrl?'open':''}><summary>${icon('file','sm')}Minh chứng ${r.fileId?badge('Đã đính kèm','success'):''}</summary><div class="fgrid">${ctl(r,'evidenceUrl','Link minh chứng (https://)')}<div class="field c6"><span>Biên bản / quyết định nghiệm thu</span><div class="evidence-actions">${r.fileId?`<button type="button" class="btn sm" data-act="open-file" data-id="${esc(r.fileId)}">${icon('eye','sm')}Xem minh chứng</button>`:''}<label class="btn sm ${r.id?'':'is-disabled'}">${icon('upload','sm')}Tải minh chứng<input type="file" hidden accept=".pdf,.png,.jpg,.jpeg" data-project-file="${i}" ${r.id?'':'disabled'}></label></div><span class="hint">${r.id?'Quản trị viên xem được minh chứng.':'Lưu đề tài trước khi tải file.'}</span>${r.fileName?`<span class="caption evidence-name">${esc(r.fileName)}</span>`:''}</div>${aiStatusHTML(r)}${r.fileId?`<div class="c12">${badge('Minh chứng: '+(r.evidenceStatus==='verified'?'đã xác minh':r.evidenceStatus==='needs_info'?'cần bổ sung':'đang xử lý'),r.evidenceStatus==='verified'?'success':'warning')}<button type="button" class="btn sm" data-act="ai-retry" data-kind="project" data-id="${esc(r.id)}">Đối chiếu AI</button></div>`:''}</div></details><input type="hidden" name="fileId" value="${esc(r.fileId || '')}"><input type="hidden" name="fileName" value="${esc(r.fileName || '')}"><div class="project-edit-footer"><button type="button" class="btn sm" data-act="project-toggle" data-i="${i}">${icon('check','sm')}Thu gọn</button></div></div></article>`).join('') || emptyState('list','Chưa có đề tài nghiên cứu.')}</div><datalist id="fx-acceptance-results">${['Xuất sắc','Đạt','Không đạt','Tốt','Khá','Trung bình'].map(x=>`<option value="${x}">`).join('')}</datalist>${rows.length || S.structuredDirty['projects']?`<div class="collection-footer"><span class="caption">${filled?filled+' đề tài đã và đang tham gia':'Điền vào ô trống rồi bấm Lưu; dòng để trống sẽ không được lưu.'}</span><button class="btn primary">${icon('check','sm')}Lưu đề tài nghiên cứu</button></div>`:''}</form></div>`;
+  return `<div class="collection-editor"><div class="collection-heading"><h3 class="h2">Đề tài nghiên cứu <span class="collection-count">${filled}</span></h3><button type="button" class="btn sm" data-act="list-add" data-kind="projects">${icon('plus','sm')}Thêm đề tài</button></div><form data-form="list" data-kind="projects">${filled>1?listSortControl('projects'):''}<div class="project-list">${rows.map((r,i)=>`<article class="project-row" data-list-row data-row-index="${i}" data-id="${esc(r.id || '')}"><div class="project-summary"><button type="button" class="project-toggle" data-act="project-toggle" data-i="${i}" aria-expanded="${S.ui.projectOpen===i}" aria-controls="project-fields-${i}"><span class="record-number">${String(i+1).padStart(2,'0')}</span><span class="project-summary-copy"><strong data-project-title>${esc(r.name || 'Đề tài mới')}</strong><span class="project-meta" data-project-meta>${projectMeta(r)}</span></span><span class="project-chevron">${icon('arrow','sm')}</span></button>${moveButtons('projects',i,rows.length)}</div><div id="project-fields-${i}" class="project-fields" ${S.ui.projectOpen===i?'':'hidden'}>${r.fixNote?`<p class="fix-note">${icon('alert','sm')}<span><b>Cần bổ sung:</b> ${esc(r.fixNote)}</span></p>`:''}<div class="fgrid">${ctl(r,'name','Tên đầy đủ của đề tài',null,true)}${ctl(r,'code','Mã đề tài (nếu có)')}${ctl(r,'from','Năm bắt đầu',null,true)}${ctl(r,'to','Năm hoàn thành')}${ctl(r,'level','Cấp đề tài',E.projectLevels(),true)}${ctl(r,'role','Trách nhiệm tham gia',SL.PROJECT_ROLES,true)}<label class="field c12"><span>Tình trạng thực hiện${reqMark()}</span><select name="acceptance" data-project-state required><option value="">— Chọn —</option>${PROJECT_STATES.map(([value,label])=>`<option value="${value}" ${(r.acceptance || 'unknown')===value?'selected':''}>${label}</option>`).join('')}</select></label><div class="c12 fgrid conditional" data-acceptance-body ${r.acceptance==='accepted'?'':'hidden'}>${ctl(r,'acceptanceDate','Ngày nghiệm thu',null,true)}<label class="field c6"><span>Quy chế xếp loại${reqMark()}</span><select name="acceptanceRule" data-project-rule required><option value="">Chọn theo quy chế / biên bản</option><option value="three_levels" ${r.acceptanceRule==='three_levels'?'selected':''}>3 mức: Xuất sắc / Đạt / Không đạt</option><option value="institution" ${r.acceptanceRule==='institution'?'selected':''}>Quy chế trường / đơn vị / cấp quản lý khác</option></select></label><label class="field c6"><span>Kết quả theo biên bản${reqMark()}</span><input name="acceptanceResult" value="${esc(r.acceptanceResult || '')}" list="fx-acceptance-results" required></label>${ctl(r,'acceptanceBasis','Số/tên quy chế hoặc biên bản',null,true)}<p class="caption c12">Xếp loại theo quy chế của đề tài; “Không đạt” vẫn là một kết quả nghiệm thu.</p></div><div class="c12 fgrid conditional" data-failed-body ${r.acceptance==='failed'?'':'hidden'}><div class="callout bad c12">${icon('alert','sm')}<div>Đề tài <b>không được nghiệm thu</b>. Vẫn được lưu trong hồ sơ để theo dõi; có thể ghi ngày họp và số biên bản nếu có.</div></div><label class="field c6"><span>Ngày họp nghiệm thu</span><input name="failDate" value="${esc(r.acceptance==='failed'?SL.fmtDate(r.acceptanceDate):'')}" placeholder="dd/mm/yyyy" inputmode="numeric"></label><label class="field c6"><span>Số biên bản / lý do</span><input name="failBasis" value="${esc(r.acceptance==='failed'?(r.acceptanceBasis || ''):'')}" maxlength="300"></label></div></div><details class="project-evidence" ${r.fileId || r.evidenceUrl?'open':''}><summary>${icon('file','sm')}Minh chứng ${r.fileId?badge('Đã đính kèm','success'):''}</summary><div class="fgrid">${ctl(r,'evidenceUrl','Link minh chứng (https://)')}<div class="field c6"><span>Biên bản / quyết định nghiệm thu</span><div class="evidence-actions">${r.fileId?`<button type="button" class="btn sm" data-act="open-file" data-id="${esc(r.fileId)}">${icon('eye','sm')}Xem minh chứng</button>`:''}<label class="btn sm ${r.id?'':'is-disabled'}">${icon('upload','sm')}Tải minh chứng<input type="file" hidden accept=".pdf,.png,.jpg,.jpeg" data-project-file="${i}" ${r.id?'':'disabled'}></label></div><span class="hint">${r.id?'Quản trị viên xem được minh chứng.':'Lưu đề tài trước khi tải file.'}</span>${r.fileName?`<span class="caption evidence-name">${esc(r.fileName)}</span>`:''}</div>${aiStatusHTML(r)}${r.fileId?`<div class="c12">${badge('Minh chứng: '+(r.evidenceStatus==='verified'?'đã xác minh':r.evidenceStatus==='needs_info'?'cần bổ sung':'đang xử lý'),r.evidenceStatus==='verified'?'success':'warning')}<button type="button" class="btn sm" data-act="ai-retry" data-kind="project" data-id="${esc(r.id)}">Đối chiếu AI</button></div>`:''}</div></details><input type="hidden" name="fileId" value="${esc(r.fileId || '')}"><input type="hidden" name="fileName" value="${esc(r.fileName || '')}"><div class="project-edit-footer"><button type="button" class="btn sm" data-act="project-toggle" data-i="${i}">${icon('check','sm')}Thu gọn</button></div></div></article>`).join('') || emptyState('list','Chưa có đề tài nghiên cứu.')}</div><datalist id="fx-acceptance-results">${['Xuất sắc','Đạt','Không đạt','Tốt','Khá','Trung bình'].map(x=>`<option value="${x}">`).join('')}</datalist>${rows.length || S.structuredDirty['projects']?`<div class="collection-footer"><span class="caption">${filled?filled+' đề tài đã và đang tham gia':'Điền vào ô trống rồi bấm Lưu; dòng để trống sẽ không được lưu.'}</span><button class="btn primary">${icon('check','sm')}Lưu đề tài nghiên cứu</button></div>`:''}</form></div>`;
 }
 const PROJECT_STATES=[['unknown','Chưa có thông tin nghiệm thu'],['ongoing','Đang thực hiện'],['awaiting','Hoàn thành, chờ nghiệm thu'],['accepted','Đã có kết quả nghiệm thu'],['failed','Không được nghiệm thu']];
 function projectMeta(r) {
   const state=(PROJECT_STATES.find(([value])=>value===(r.acceptance || 'unknown')) || PROJECT_STATES[0])[1];
-  return [r.code,[r.from,r.to].filter(Boolean).join(' - '),r.level,r.role,state].filter(Boolean).map(x=>`<span>${esc(x)}</span>`).join('');
+  return [r.code,[r.from,r.to].filter(Boolean).join(' - '),r.level,r.role,state].filter(Boolean).map(x=>`<span>${esc(x)}</span>`).join('')+(r.fixNote?`<span class="fix-tag">Cần bổ sung</span>`:'');
 }
 function setProjectOpen(index,focus) {
   S.ui.projectOpen=index;
@@ -3066,7 +3089,7 @@ ACT['imp-skip-flagged'] = () => { const im = impState(); impItems().forEach(it =
 ACT['imp-next'] = () => {
   const im = impState();
   const bad = impItems().filter(it => it.kind === 'cred' && im.sel[it.id] && it.c.kind !== 'position' && !SL.parseDate((im.edits || {})[it.id + '#date'] != null ? im.edits[it.id + '#date'] : it.date).ok);
-  if (bad.length) { toast('Nhập ngày đạt (dd/mm/yyyy) cho ' + bad.map(b => b.value).join(', ') + ' hoặc bỏ chọn mục đó.', 'error'); return; }
+  if (bad.length) toast('Chưa có ngày đạt cho ' + bad.map(b => b.value).join(', ') + ': vẫn tiếp tục được; mục này sẽ nằm trong danh sách cần bổ sung sau khi lưu.', 'info', 8000);
   im.step = 3; go('import');
 };
 ACT['imp-back'] = () => { impState().step = 2; go('import'); };
@@ -3083,9 +3106,45 @@ ACT['imp-save'] = async el => {
   });
   const r = await call(API.importCV(plan), el);
   S.imp = { step: 1 };
-  toast('Đã lưu hồ sơ: thêm ' + r.added + ' công bố, gộp ' + r.merged + '.', 'ok');
-  S.data = r.data; renderShell();
-  go('pubs', { src: 'cv' });
+  // Dữ liệu hồ sơ vừa đổi: bỏ bản nháp biểu mẫu/danh sách cũ để không hiện (và không lưu đè) bản trước khi nhập
+  S.formDrafts = {}; S.drafts = {}; S.structuredDirty = {};
+  S.data = r.data; WS.key = ''; renderShell();
+  const issues = r.issues || [];
+  S.ui.importIssues = issues.length ? issues : null;
+  if (!issues.length) { toast('Đã lưu hồ sơ: thêm ' + r.added + ' công bố, gộp ' + r.merged + '.', 'ok'); go('pubs', { src: 'cv' }); return; }
+  toast('Đã lưu hồ sơ. ' + issues.length + ' mục cần bổ sung, xem gợi ý điều chỉnh.', 'info', 7000);
+  go('import-fix');
+};
+/* ---------- Sau khi nhập CV: danh sách mục cần bổ sung, mỗi mục có nút đi tới đúng chỗ sửa ---------- */
+const FIX_SECS = { profile: ['Thông tin cá nhân', 'basic'], credentials: ['Học vị & chức danh', 'cred'], work: ['Quá trình công tác', 'work'], projects: ['Đề tài nghiên cứu', 'projects'], awards: ['Giải thưởng', 'awards'], pubs: ['Công bố khoa học', ''] };
+function fixTarget(it) {
+  if (it.sec === 'pubs') return it.id ? `data-act="go" data-page="pub" data-q='${esc(JSON.stringify({ id: it.id }))}'` : `data-act="go" data-page="pubs"`;
+  return `data-act="fix-go" data-tab="${esc((FIX_SECS[it.sec] || FIX_SECS.profile)[1])}" data-item="${esc(it.item)}"`;
+}
+/** Mở đúng thẻ hồ sơ, rồi mở + cuộn tới dòng cần bổ sung (đề tài / công tác / giải thưởng). */
+ACT['fix-go'] = el => {
+  const tab = el.dataset.tab, item = SL.fold(el.dataset.item || '');
+  go('profile', { tab });
+  setTimeout(() => {
+    const rows = $$('#profile-' + tab + ' [data-list-row]');
+    const i = rows.findIndex(row => [...row.querySelectorAll('[data-project-title],[name=name],[name=place]')].some(e => SL.fold(e.value || e.textContent || '') === item));
+    if (i < 0) return;
+    if (tab === 'projects') setProjectOpen(i, true); else { rows[i].scrollIntoView({ block: 'center' }); const f = $('[name=place],[name=name]', rows[i]); if (f) f.focus({ preventScroll: true }); }
+    rows[i].classList.add('fix-flash'); setTimeout(() => rows[i].classList.remove('fix-flash'), 2400);
+  }, 450);
+};
+VIEWS.expert['import-fix'] = {
+  crumb: () => 'Không gian chuyên gia / Hồ sơ của tôi / Cần bổ sung sau khi nhập CV',
+  render() {
+    const list = S.ui.importIssues || [];
+    if (!list.length) return emptyState('check', 'Không còn mục nào cần bổ sung từ lần nhập CV gần nhất.', `<button type="button" class="btn primary" data-act="go" data-page="profile">Về hồ sơ</button>`);
+    const groups = Object.keys(FIX_SECS).map(k => [k, list.filter(it => it.sec === k)]).filter(g => g[1].length);
+    return pageHead('Đã lưu · cần bổ sung ' + list.length + ' mục', 'Toàn bộ dữ liệu hợp lệ đã vào hồ sơ. Các mục dưới đây được lưu tạm (hoặc chưa lưu được) và cần bạn điền thêm; bấm "Bổ sung" để tới đúng chỗ.',
+      `<button type="button" class="btn" data-act="go" data-page="pubs">${icon('file')}Công bố khoa học</button><button type="button" class="btn primary" data-act="go" data-page="profile">${icon('user')}Về hồ sơ</button>`) +
+      `<div class="stack">${groups.map(([k, items]) => `<div class="card"><div class="row between" style="margin-bottom:8px"><div class="h3">${esc(FIX_SECS[k][0])} <span class="collection-count">${items.length}</span></div></div>
+        ${items.map(it => `<div class="rev-item fix-item"><span class="fix-ic">${icon('alert', 'sm')}</span><div><b class="strong">${esc(it.item)}</b><div class="caption fix-note-text">${esc(it.note)}</div></div><button type="button" class="btn sm" ${fixTarget(it)}>${icon('arrow', 'sm')}Bổ sung</button></div>`).join('')}</div>`).join('')}
+      <div class="callout">${icon('info', 'sm')}<div>Mục lưu tạm được đánh dấu <b>Cần bổ sung</b> ngay trong hồ sơ và danh sách công bố. Khi bạn điền đủ và bấm Lưu, dấu này tự mất. Công bố còn thiếu thông tin chưa gửi xác minh được.</div></div></div>`;
+  }
 };
 
 /* ---------- Công bố khoa học ---------- */
@@ -3164,6 +3223,7 @@ VIEWS.expert.pub = {
     return pageHead(p ? 'Công bố & minh chứng' : 'Thêm công bố & minh chứng', p && p.source === 'cv' ? 'Dữ liệu từ CV được điền sẵn. Bổ sung file và kiểm tra trước khi gửi.' : 'Nhập thông tin, đối chiếu metadata và tải file minh chứng.',
       `${p && !locked ? `<button type="button" class="btn danger" data-act="pub-del" data-id="${esc(p.id)}">${icon('trash')}Xóa</button>` : ''}<button type="button" class="btn" data-act="pub-save" data-a="draft">Lưu bản nháp</button><button type="button" class="btn primary" data-act="pub-save" data-a="submit">${icon('check')}Gửi xác minh</button>`) +
       `<div class="grid2"><form class="card" id="pubForm" novalidate><div class="row" style="margin-bottom:16px">${p ? pubBadge(p) : ''}${p && p.source === 'cv' ? badge('Công bố nhập từ CV', 'info') : ''}${p ? `<span class="caption">Tải lên lần đầu ${esc(fmtDT(p.uploadedAt))}</span>` : ''}</div>
+        ${p && p.metaStatus === 'needs_fix' ? `<div class="callout warn" style="margin-bottom:16px">${icon('alert', 'sm')}<div><b>Nhập từ CV, còn thiếu thông tin.</b> ${esc(String(p.metaNote || '').replace(/^Cần bổ sung:\s*/, ''))} Điền đủ rồi bấm Lưu bản nháp; dấu "Cần bổ sung" sẽ tự mất.</div></div>` : ''}
         ${p && p.reviewNote ? `<div class="callout ${p.status === 'rejected' ? 'bad' : 'warn'}" style="margin-bottom:16px">${icon('alert', 'sm')}<div><b>Ghi chú của người duyệt:</b> ${esc(p.reviewNote)}</div></div>` : ''}
         ${locked ? `<div class="callout ok" style="margin-bottom:16px">${icon('check', 'sm')}<div>Đã xác minh. Sửa tên, tác giả, năm, nơi đăng, DOI hoặc hạng Q sẽ đưa bài về "Chờ duyệt".</div></div>` : ''}
         <div class="fgrid">
@@ -4543,6 +4603,8 @@ boot();
 </script>
 
 <style id="fx-collections">
+.fix-note{display:flex;gap:8px;align-items:flex-start;margin:8px 0 0;padding:8px 12px;border-radius:10px;background:var(--sl-warning-subtle,#fef3c7);color:var(--sl-warning-strong,#92400e);font-size:13px;line-height:20px}.fix-note .ic{flex:none;margin-top:2px}.project-fields>.fix-note{margin:0 0 12px}.fix-tag{color:#b45309!important;font-weight:600}.fix-item{align-items:center}.fix-item .fix-ic{color:#b45309;display:flex}.fix-note-text{color:var(--sl-text-secondary)}[data-list-row].fix-flash{box-shadow:0 0 0 3px rgba(245,158,11,.55);transition:box-shadow .4s}
+:root[data-theme="dark"] .fix-note{background:#422006;color:#fde68a}:root[data-theme="dark"] .fix-tag,:root[data-theme="dark"] .fix-item .fix-ic{color:#fbbf24!important}
 .q-badge{font-weight:700;letter-spacing:.02em;margin-left:6px;vertical-align:1px}.q-badge.q1{background:#dcfce7;color:#166534}.q-badge.q2{background:#dbeafe;color:#1e40af}.q-badge.q3{background:#fef3c7;color:#92400e}.q-badge.q4{background:#f3f4f6;color:#374151}
 :root[data-theme="dark"] .q-badge.q1{background:#14532d;color:#bbf7d0}:root[data-theme="dark"] .q-badge.q2{background:#1e3a8a;color:#bfdbfe}:root[data-theme="dark"] .q-badge.q3{background:#78350f;color:#fde68a}:root[data-theme="dark"] .q-badge.q4{background:#374151;color:#e5e7eb}
 /* v1.57 · Công tác / Đề tài / Giải thưởng: mỗi mục là một thẻ có khung, mỗi dòng là một ô viền như bản 1.5x */
