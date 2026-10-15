@@ -58,7 +58,7 @@ var SL = (function () {
   var PROJECT_LEVELS = ['Nhà nước', 'Bộ', 'Ngành', 'Tỉnh/Thành phố', 'Trường', 'Cơ sở', 'Hợp tác doanh nghiệp'];
   var PROJECT_ROLES = ['Chủ nhiệm', 'Thư ký', 'Thành viên chính', 'Thành viên'];
 
-  /* Mục I–II của mẫu LLKH (TT 08/2011/TT-BGDĐT, Phụ lục V). key = cột trong sheet Profiles */
+  /* Mục I–II của mẫu LLKH (Phụ lục III, TT 09/2017/TT-BGDĐT; tương thích TT 08/2011). key = cột trong sheet Profiles */
   var PROFILE_FIELDS = [
     { key: 'idType', label: 'Loại giấy tờ', sec: 'X', sensitive: true },
     { key: 'mapLat', label: 'Vĩ độ', sec: 'X', contact: true },
@@ -106,6 +106,7 @@ var SL = (function () {
     { key: 'msMajor', label: 'Thạc sĩ chuyên ngành', sec: 'II' },
     { key: 'msYear', label: 'Năm cấp bằng thạc sĩ', sec: 'II' },
     { key: 'msPlace', label: 'Nơi đào tạo thạc sĩ', sec: 'II' },
+    { key: 'msThesis', label: 'Tên luận văn', sec: 'II' },
     { key: 'phdMajor', label: 'Tiến sĩ chuyên ngành', sec: 'II' },
     { key: 'phdYear', label: 'Năm cấp bằng tiến sĩ', sec: 'II' },
     { key: 'phdPlace', label: 'Nơi đào tạo tiến sĩ', sec: 'II' },
@@ -387,16 +388,17 @@ var SL = (function () {
     ['_title', 'Chức danh khoa học cao nhất'], ['_titleYear', 'Năm bổ nhiệm'],
     ['position', 'Chức vụ (hiện tại hoặc trước khi nghỉ hưu)'], ['unit', 'Đơn vị công tác (hiện tại hoặc trước khi nghỉ hưu)'],
     ['address', 'Chỗ ở riêng hoặc địa chỉ liên lạc'], ['_phone', 'Điện thoại liên hệ'], ['phoneOffice', 'CQ'], ['phoneHome', 'NR'], ['mobile', 'DĐ'],
-    ['fax', 'Fax'], ['contactEmail', 'E-mail'], ['idNumber', 'Số CMND'], ['idDate', 'Ngày cấp'], ['idPlace', 'Nơi cấp'],
+    ['fax', 'Fax'], ['contactEmail', 'E-mail|Email'], ['idNumber', 'Số CMND'], ['idDate', 'Ngày cấp'], ['idPlace', 'Nơi cấp'],
     ['_sec2', 'QUÁ TRÌNH ĐÀO TẠO'], ['_ug', 'Đại học'],
     ['ugSystem', 'Hệ đào tạo'], ['ugPlace', 'Nơi đào tạo'], ['ugMajor', 'Ngành học'], ['ugCountry', 'Nước đào tạo'], ['ugYear', 'Năm tốt nghiệp'],
     ['ug2Major', 'Bằng đại học 2'], ['ug2Year', 'Năm tốt nghiệp'], ['_pg', 'Sau đại học'],
-    ['msMajor', 'Thạc sĩ chuyên ngành'], ['msYear', 'Năm cấp bằng'], ['msPlace', 'Nơi đào tạo'],
+    ['msMajor', 'Thạc sĩ ngành/chuyên ngành|Thạc sĩ chuyên ngành'], ['msYear', 'Năm cấp bằng'], ['msPlace', 'Nơi đào tạo'], ['msThesis', 'Tên luận văn'],
     ['phdMajor', 'Tiến sĩ chuyên ngành'], ['phdYear', 'Năm cấp bằng'], ['phdPlace', 'Nơi đào tạo'],
     ['thesis', 'Tên luận án'], ['_lang', 'Ngoại ngữ'], ['_sec3', 'QUÁ TRÌNH CÔNG TÁC CHUYÊN MÔN']
   ];
+  /** Nhãn có thể có nhiều cách viết, ngăn bằng "|" (VD: mẫu TT 09/2017 ghi "Email", TT 08/2011 ghi "E-mail"). */
   function labelRe(label) {
-    var body = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+').replace(/,/g, '\\s*,');
+    var body = '(?:' + label.split('|').map(function (x) { return x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+').replace(/,/g, '\\s*,'); }).join('|') + ')';
     var pre = label.length <= 3 ? '(?:^|[\\s:;,.])' : '';   // nhãn ngắn (CQ, NR, DĐ) phải đứng riêng
     return new RegExp(pre + body + (label.length <= 3 ? '(?=\\s*:)' : ''), 'i');
   }
@@ -407,7 +409,7 @@ var SL = (function () {
   }
   function headerKind(row) {
     var h = fold(row.join(' | '));
-    if (/thoi gian/.test(h) && /noi cong tac/.test(h)) return 'work';
+    if (/thoi gian/.test(h) && /(noi|don vi) cong tac/.test(h)) return 'work';
     if (/ten de tai/.test(h)) return 'projects';
     if (/ten cong trinh|cong trinh khoa hoc|ten bai bao/.test(h)) return 'pubs';
     if (/ten sach|giao trinh/.test(h)) return 'books';
@@ -594,7 +596,8 @@ var SL = (function () {
       parseFreeCV(doc, extra, ctx);
       Object.keys(extra.fields).forEach(function (k) {
         var v = extra.fields[k] && extra.fields[k].value;
-        if (v && !out.fields[k] && !/[^:\n]{2,40}:/.test(v)) out.fields[k] = extra.fields[k];
+        // Mẫu Bộ đã có nhãn rõ ràng: không lấy các ô "suy ra" (lĩnh vực, đơn vị) từ bộ tách tự do
+        if (v && !out.fields[k] && !/[^:\n]{2,40}:/.test(v) && !/^Suy ra/.test(extra.fields[k].flag || '')) out.fields[k] = extra.fields[k];
       });
       var em0 = text.match(/[\w.+-]+@[\w-]+\.[\w.]+/);
       if (em0 && !out.fields.contactEmail) set('contactEmail', em0[0]);
@@ -799,6 +802,8 @@ var SL = (function () {
       }
       if (sec === 'research' && line.length > 15) { researchRow(yearOf(line), line, ''); return; }
       if (sec === 'edu' && !eduDone) {
+        // Nhãn trống của mẫu ("Đại học:", "Nơi đào tạo:") và tiêu đề bậc học ("Sau đại học") không phải tên trường
+        if (/:\s*$/.test(trim(line)) || /^(\d+[.)]\s*)?(dai hoc|sau dai hoc|thac si|tien si)\s*:?$/.test(fold(line))) return;
         var em = line.split(/\s+·\s+|\s+\|\s+/), sp2 = em[0].split(/\s+[—–]\s+/);
         if (sp2.length >= 2 || /truong|dai hoc|university|hoc vien/.test(fold(line))) addEdu(splitPeriod(line), cleanVal(sp2[0]), cleanVal(sp2[1] || ''));
       }
@@ -910,6 +915,7 @@ var FXRules = (function () {
       if (!(g[0] in p)) return;
       var on = p[g[0]] === true || String(p[g[0]]) === 'true';
       out[g[0]] = String(on);
+      if (!on && g[0] === 'hasMaster') out.msThesis = '';
       g[1].forEach(function (k) { if (!on) out[k] = ''; else if (!SL.trim(row[k])) throw new Error((SL.PROFILE_FIELDS.find(function(f){return f.key===k;}) || {}).label + ': bắt buộc khi đã có bằng.'); });
     });
     if ('ugStatus' in p && ['studying', 'graduated'].indexOf(p.ugStatus) < 0) throw new Error('Chọn trạng thái đào tạo đại học: Đang học hoặc Đã tốt nghiệp.');
@@ -2310,7 +2316,7 @@ try { const t = localStorage.getItem('sl-theme'); if (t) document.documentElemen
    xem trước · in/lưu PDF · tải Word (.doc) · chuyển Google Docs → .docx/.pdf ở máy chủ
    ===================================================================== */
 const CV_TEMPLATES = [
-  { code: 'bgd', group: 'form', label: 'Lý lịch khoa học · mẫu Bộ GD&ĐT (TT 08/2011, Phụ lục V)', sections: ['I', 'II', 'III', 'IV'] },
+  { code: 'bgd', group: 'form', label: 'Lý lịch khoa học · mẫu Bộ GD&ĐT (Phụ lục III, Thông tư 09/2017/TT-BGDĐT)', sections: ['I', 'II', 'III', 'IV'] },
   { code: 'v2', group: 'form', label: 'Mẫu đơn vị · bản minh họa v2 (I–VI)', sections: ['I', 'II', 'III', 'IV', 'V', 'VI'] },
   { code: 'cv', group: 'cv', label: 'CV học thuật rút gọn', sections: ['I', 'II', 'III', 'IV', 'V', 'VI'] },
   { code: 'intro', group: 'intro', label: 'Hồ sơ giới thiệu (1 trang, luôn ẩn liên hệ)', sections: ['I', 'IV'] }
@@ -2347,8 +2353,9 @@ function cvFileName(m, tpl) {
 function honor(d) { return [d.title === 'Giáo sư' ? 'GS.' : d.title === 'Phó Giáo sư' ? 'PGS.' : '', d.degree === 'Tiến sĩ khoa học' ? 'TSKH.' : d.degree === 'Tiến sĩ' ? 'TS.' : d.degree === 'Thạc sĩ' ? 'ThS.' : ''].filter(Boolean).join(' '); }
 
 /* ---------- Mảnh ghép (inline style để Word / Google Docs giữ nguyên định dạng) ---------- */
+const CV_FONT = (pt, lh) => `font-family:'Times New Roman',Times,serif;font-size:${pt}pt;line-height:${lh};color:#000`;
 const CV = {
-  F: "font-family:'Times New Roman',Times,serif;font-size:13pt;line-height:1.4;color:#000",
+  F: CV_FONT(13, 1.4), full: false, rowPad: '2pt 6pt 2pt 0',
   dots: n => '.'.repeat(n || 40),
   /** Ô trống: chỉ mẫu trống (để điền tay) mới in dòng chấm; bản xuất thật để trống cho gọn. */
   blank: false,
@@ -2358,16 +2365,25 @@ const CV = {
    * Word và Google Docs giữ đúng bố cục nhờ thuộc tính width/colspan (không dựa vào CSS).
    * rows: [{ pairs:[[nhãn, giá trị, số chấm]], w:[%...] } | { head:'1. Đại học:' }]
    */
-  grid(rows) {
-    const cols = Array.from({ length: 20 }, () => '<col width="5%">').join('');
-    const td = (inner, span, extra) => `<td colspan="${span}" width="${span * 5}%" valign="top" style="${CV.F};padding:2pt 6pt 2pt 0;vertical-align:top;${extra || ''}">${inner}</td>`;
-    return `<table width="100%" style="width:100%;border-collapse:collapse;margin:0" cellpadding="0" cellspacing="0" border="0"><colgroup>${cols}</colgroup>` + rows.map(r => {
-      if (r.head) return `<tr>${td(esc(r.head), 20, 'font-weight:bold;padding-top:6pt')}</tr>`;
-      const w = r.w || [100];
-      let used = 0;
-      const spans = w.map((x, i) => { const n = i === w.length - 1 ? 20 - used : Math.max(1, Math.round(x / 5)); used += n; return n; });
-      if (r.note) return `<tr>${td('<i>' + esc(r.pairs[0][0]) + '</i>', 20)}</tr>`;
-      return `<tr>${r.pairs.map((pr, i) => td(r.lang && i === 0 ? (CV.blank && !/\S\.\s\S/.test(pr[0]) ? esc(pr[0]) + CV.dots(20) : esc(pr[0])) : `${esc(pr[0])}: ${CV.v(pr[1], pr[2])}`, spans[i])).join('')}</tr>`;
+  grid(rows) { return CV.grid3(rows); },
+  /**
+   * Bảng 2 cột thật (không lưới nhiều cột) để Word, Google Docs, LibreOffice đều giữ đúng độ rộng.
+   * Tỉ lệ cột lấy từ dòng 2 cặp đầu tiên (54/46 hoặc 47/53 theo vị trí tab của file mẫu); dòng 1 cặp gộp 2 cột,
+   * dòng 3 cặp (CQ/NR/DĐ) in liền trên một ô.
+   */
+  grid3(rows) {
+    const first = rows.find(r => r.pairs && r.pairs.length === 2), L = first ? first.w[0] : 54, W = [L, 100 - L];
+    // Thuộc tính width theo px (khổ chữ 16,4 cm ≈ 620 px): trình nhập Word/Docs/LibreOffice không tự co cột khi có chuỗi dài (email).
+    const PX = 620, px = w => Math.round(PX * w / 100);
+    const td = (inner, i, span, extra) => { const w = span === 2 ? 100 : W[i]; return `<td${span === 2 ? ' colspan="2"' : ''} width="${px(w)}" valign="top" style="${CV.F};width:${w}%;padding:${CV.rowPad};vertical-align:top;${extra || ''}">${inner}</td>`; };
+    const pr = x => `${esc(x[0])}: ${CV.v(x[1], x[2])}`;
+    return `<table width="${PX}" style="width:100%;border-collapse:collapse;margin:0" cellpadding="0" cellspacing="0" border="0"><colgroup><col width="${px(W[0])}"><col width="${px(W[1])}"></colgroup>` + rows.map(r => {
+      if (r.head) return `<tr>${td(esc(r.head), 0, 2, 'font-weight:bold')}</tr>`;
+      if (r.note) return `<tr>${td('<i>' + esc(r.pairs[0][0]) + '</i>', 0, 2)}</tr>`;
+      if (r.lang) return `<tr>${td(CV.blank && !/\S\.\s\S/.test(r.pairs[0][0]) ? esc(r.pairs[0][0]) + CV.dots(20) : esc(r.pairs[0][0]), 0, 1)}${td(pr(r.pairs[1]), 1, 1)}</tr>`;
+      if (r.pairs.length === 1) return `<tr>${td(pr(r.pairs[0]), 0, 2)}</tr>`;
+      if (r.pairs.length > 2) return `<tr>${td(r.pairs.map(pr).join('&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'), 0, 2)}</tr>`;
+      return `<tr>${td(pr(r.pairs[0]), 0, 1)}${td(pr(r.pairs[1]), 1, 1)}</tr>`;
     }).join('') + '</table>';
   },
   line(pairs, widths) {
@@ -2391,44 +2407,93 @@ const CV = {
     return parts.filter(Boolean).join('. ').replace(/\.\s*\(/, ' (') + (x.doi ? '. https://doi.org/' + esc(x.doi) : '') + '.';
   }
 };
+/** Ngày theo thể thức văn bản (NĐ 30/2020): ngày < 10 và tháng 1, 2 thêm số 0. */
+function cvDateText(st) {
+  if (st.BLANK) return 'ngày …… tháng …… năm ………';
+  const d = new Date(), dd = d.getDate(), mm = d.getMonth() + 1;
+  return `ngày ${dd < 10 ? '0' + dd : dd} tháng ${mm < 3 ? '0' + mm : mm} năm ${d.getFullYear()}`;
+}
+/** Đầu văn bản. Mẫu Bộ = Phụ lục III, Thông tư 09/2017/TT-BGDĐT (ngày 04/4/2017). */
 function cvHeader(m, opts, st) {
+  if (opts.tpl === 'bgd') {
+    const cell = (w, inner) => `<td width="${w}%" valign="top" align="center" style="${CV.F};width:${w}%;text-align:center;vertical-align:top;border-bottom:1px solid #000;padding:0 0 6pt">${inner}</td>`;
+    const ctr = (t, x) => `<p style="${CV.F};text-align:center;margin:0;${x || ''}">${t}</p>`;
+    const school = SL.trim(st.SCHOOL_NAME);
+    return CV.p('<b>BỘ GIÁO DỤC VÀ ĐÀO TẠO</b>', 'margin:0 0 12pt') +
+      CV.center('Phụ lục III', 'font-weight:bold') +
+      CV.center('LÝ LỊCH KHOA HỌC', 'font-weight:bold') +
+      CV.center('(Kèm theo Thông tư số: 09/2017/TT-BGDĐT ngày 04 tháng 4 năm 2017 của<br>Bộ trưởng Bộ Giáo dục và Đào tạo)', 'font-style:italic;margin:0 0 12pt') +
+      `<table width="100%" border="0" style="width:100%;border-collapse:collapse;margin:0" cellpadding="0" cellspacing="0"><tr>` +
+      cell(45, (CV.blank || !school ? ctr('BỘ, NGÀNH (Cơ quan chủ quản nếu có)') + ctr('<b>TÊN CƠ SỞ ĐÀO TẠO</b>') : ctr('BỘ GIÁO DỤC VÀ ĐÀO TẠO') + ctr('<b>' + esc(school.toUpperCase()) + '</b>')) + ctr('———————', 'line-height:1')) +
+      cell(55, ctr('<b>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</b>') + ctr('<b>Độc lập - Tự do - Hạnh phúc</b>') + ctr('————————————', 'line-height:1') +
+        ctr(`<i>${esc(st.CITY || '…….')}, ${cvDateText(st)}</i>`, 'margin-top:4pt')) +
+      `</tr></table>` + CV.center('LÝ LỊCH KHOA HỌC', 'font-weight:bold;margin:12pt 0 0');
+  }
   const code = st.FORM_CODE ? `<p style="${CV.F};font-size:11pt;font-style:italic;margin:0 0 6pt">${esc(st.FORM_CODE)}</p>` : '';
   return code +
     CV.center('CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', 'font-weight:bold') +
     CV.center('Độc lập – Tự do – Hạnh phúc', 'font-weight:bold;text-decoration:underline') +
     CV.center('LÝ LỊCH KHOA HỌC', 'font-weight:bold;font-size:15pt;margin-top:16pt') +
-    CV.center(opts.tpl === 'bgd' ? '(Mẫu Phụ lục V, Thông tư số 08/2011/TT-BGDĐT ngày 17/02/2011 của Bộ trưởng Bộ GDĐT)' : '(Mẫu đơn vị · bản minh họa v2 — thay bằng biểu mẫu chính thức của đơn vị khi áp dụng)', 'font-style:italic;font-size:11pt;margin:2pt 0 12pt');
+    CV.center('(Mẫu đơn vị · bản minh họa v2 — thay bằng biểu mẫu chính thức của đơn vị khi áp dụng)', 'font-style:italic;font-size:11pt;margin:2pt 0 12pt');
 }
-function cvSign(m, st) {
-  const d = new Date();
-  return `<p style="${CV.F};text-align:right;font-style:italic;margin:18pt 0 6pt">${esc(st.CITY || (st.BLANK ? '……………' : 'TP. Hồ Chí Minh'))}, ${st.BLANK ? 'ngày …… tháng …… năm ………' : `ngày ${SL.pad(d.getDate())} tháng ${SL.pad(d.getMonth() + 1)} năm ${d.getFullYear()}`}</p>
+function cvSign(m, st, tpl) {
+  const name = esc([honor(m.d), m.p.fullName].filter(Boolean).join(' '));
+  if (tpl === 'bgd') {
+    const td = (w, inner, x) => `<td width="${w}%" valign="top" align="center" style="${CV.F};width:${w}%;text-align:center;vertical-align:top;${x || ''}">${inner}</td>`;
+    return `<p style="${CV.F};margin:0">&nbsp;</p><table width="100%" border="0" style="width:100%;border-collapse:collapse" cellpadding="0" cellspacing="0">` +
+      `<tr>${td(39, '&nbsp;')}${td(61, `<i>${esc(st.CITY || '……….')}, ${cvDateText(st)}</i>`)}</tr>` +
+      `<tr>${td(39, '<b>Xác nhận của cơ quan</b>', 'padding-top:6pt')}${td(61, `<b>Người khai kí tên</b><br><i>(Ghi rõ chức danh, học vị)</i><br><br><br><br>${name ? '<b>' + name + '</b>' : ''}`, 'padding-top:6pt')}</tr></table>`;
+  }
+  return `<p style="${CV.F};text-align:right;font-style:italic;margin:18pt 0 6pt">${esc(st.CITY || (st.BLANK ? '……………' : 'TP. Hồ Chí Minh'))}, ${cvDateText(st)}</p>
   <table width="100%" border="0" style="width:100%;border-collapse:collapse" cellpadding="0" cellspacing="0"><tr>
   <td width="50%" valign="top" align="center" style="${CV.F};width:50%;text-align:center;vertical-align:top;font-weight:bold">Xác nhận của cơ quan</td>
-  <td width="50%" valign="top" align="center" style="${CV.F};width:50%;text-align:center;vertical-align:top"><b>Người khai ký tên</b><br><i>(Ghi rõ chức danh, học vị)</i><br><br><br><br><b>${esc([honor(m.d), m.p.fullName].filter(Boolean).join(' '))}</b></td></tr></table>`;
+  <td width="50%" valign="top" align="center" style="${CV.F};width:50%;text-align:center;vertical-align:top"><b>Người khai ký tên</b><br><i>(Ghi rõ chức danh, học vị)</i><br><br><br><br><b>${name}</b></td></tr></table>`;
 }
 /** Mục I theo mẫu Bộ. Bố cục cột cố định (2 cột 60/40, 3 cột 40/30/30) để chữ thẳng hàng.
     Bản xuất thật: dòng không có dữ liệu được ẩn; liên hệ chỉ in khi chọn "Kèm thông tin liên hệ". Mẫu trống: in đủ mọi dòng. */
 const CV_W2 = [60, 40], CV_W3 = [40, 30, 30];
-function cvRows(rows) { return rows.filter(r => r.head || CV.blank || !r.opt || r.pairs.some(pr => SL.trim(pr[1]))); }
+function cvRows(rows) { return rows.filter(r => r.head || CV.blank || CV.full || !r.opt || r.pairs.some(pr => SL.trim(pr[1]))); }
 function cvSecI(m, opts, title) {
-  const p = m.p, d = m.d, c = opts.contact || CV.blank;
+  const p = m.p, d = m.d, c = opts.contact || CV.blank, bgd = opts.tpl === 'bgd', W2 = bgd ? [54, 46] : CV_W2;
   const year = s => SL.yearOf(s);
   const rows = [
-    { pairs: [['Họ và tên', p.fullName, 40], ['Giới tính', p.gender, 12]], w: CV_W2 },
-    { pairs: [['Ngày, tháng, năm sinh', SL.fmtDate(p.dob), 18], ['Nơi sinh', p.birthPlace, 22]], w: CV_W2 },
-    { pairs: [['Quê quán', p.hometown, 36], ['Dân tộc', p.ethnicity, 14]], w: CV_W2 },
-    { pairs: [['Học vị cao nhất', d.degree, 24], ['Năm, nước nhận học vị', [year(d.degreeDate), m.degCountry].filter(Boolean).join(', '), 16]], w: CV_W2, opt: true },
-    { pairs: [['Chức danh khoa học cao nhất', d.title, 16], ['Năm bổ nhiệm', year(d.titleDate), 12]], w: CV_W2, opt: true },
+    { pairs: [['Họ và tên', p.fullName, 40], ['Giới tính', p.gender, 12]], w: W2 },
+    { pairs: [['Ngày, tháng, năm sinh', SL.fmtDate(p.dob), 18], ['Nơi sinh', p.birthPlace, 22]], w: W2 },
+    { pairs: [['Quê quán', p.hometown, 36], ['Dân tộc', p.ethnicity, 14]], w: W2 },
+    { pairs: [['Học vị cao nhất', d.degree, 24], ['Năm, nước nhận học vị', [year(d.degreeDate), m.degCountry].filter(Boolean).join(', '), 16]], w: W2, opt: true },
+    { pairs: [['Chức danh khoa học cao nhất', d.title, 16], ['Năm bổ nhiệm', year(d.titleDate), 12]], w: W2, opt: true },
     { pairs: [['Chức vụ (hiện tại hoặc trước khi nghỉ hưu)', p.position || d.position, 40]], w: [100], opt: true },
     { pairs: [['Đơn vị công tác (hiện tại hoặc trước khi nghỉ hưu)', p.unit, 30]], w: [100] }
   ];
   if (c) rows.push(
     { pairs: [['Chỗ ở riêng hoặc địa chỉ liên lạc', contactAddress(p), 50]], w: [100], opt: true },
-    { pairs: [['Điện thoại liên hệ: CQ', p.phoneOffice, 10], ['NR', p.phoneHome, 12], ['DĐ', p.mobile, 14]], w: CV_W3, opt: true },
-    { pairs: [['Fax', p.fax, 18], ['E-mail', p.contactEmail, 26]], w: CV_W2, opt: true },
-    { pairs: [['Số CMND/CCCD', p.idNumber, 14], ['Ngày cấp', SL.fmtDate(p.idDate), 12], ['Nơi cấp', p.idPlace, 14]], w: CV_W3, opt: true });
+    { pairs: [['Điện thoại liên hệ: CQ', p.phoneOffice, bgd ? 14 : 10], ['NR', p.phoneHome, 14], ['DĐ', p.mobile, 16]], w: bgd ? [39, 23, 38] : CV_W3, opt: true },
+    { pairs: [['Fax', p.fax, 18], [bgd ? 'Email' : 'E-mail', p.contactEmail, 26]], w: W2, opt: true });
+  // Phụ lục III (TT 09/2017) không có dòng CMND/CCCD; mẫu đơn vị v2 vẫn giữ.
+  if (c && !bgd) rows.push({ pairs: [['Số CMND/CCCD', p.idNumber, 14], ['Ngày cấp', SL.fmtDate(p.idDate), 12], ['Nơi cấp', p.idPlace, 14]], w: CV_W3, opt: true });
   if (opts.tpl === 'v2') rows.push({ pairs: [['Lĩnh vực chuyên môn', [p.field, p.keywords].filter(Boolean).join(' · '), 50]], w: [100], opt: true }, { pairs: [['ORCID', p.orcid, 20]], w: [100], opt: true });
   return CV.h(title) + CV.grid(cvRows(rows));
+}
+/** Mục II theo Phụ lục III (TT 09/2017): in đủ các dòng của mẫu, kể cả dòng chưa có dữ liệu. */
+function cvSecIIBgd(m) {
+  const p = m.p, W = [54, 46], W3 = [47, 53];
+  const ugYear = SL.ugState(p) === 'studying' ? 'Đang học' + (p.ugExpectedYear ? ' (dự kiến ' + p.ugExpectedYear + ')' : '') : p.ugYear;
+  const rows = [{ head: '1. Đại học:' },
+    { pairs: [['Hệ đào tạo', p.ugSystem, 30]], w: [100] }, { pairs: [['Nơi đào tạo', p.ugPlace, 50]], w: [100] }, { pairs: [['Ngành học', p.ugMajor, 40]], w: [100] },
+    { pairs: [['Nước đào tạo', p.ugCountry, 22], ['Năm tốt nghiệp', ugYear, 12]], w: W },
+    { pairs: [['Bằng đại học 2', p.ug2Major, 22], ['Năm tốt nghiệp', p.ug2Year, 12]], w: W },
+    { head: '2. Sau đại học' },
+    { pairs: [['- Thạc sĩ ngành/chuyên ngành', p.msMajor, 40]], w: [100] },
+    { pairs: [['Năm cấp bằng', p.msYear, 12], ['Nơi đào tạo', p.msPlace, 30]], w: W3 },
+    { pairs: [['- Tên luận văn', p.msThesis, 60]], w: [100] },
+    { pairs: [['- Tiến sĩ chuyên ngành', p.phdMajor, 40]], w: [100] },
+    { pairs: [['Năm cấp bằng', p.phdYear, 12], ['Nơi đào tạo', p.phdPlace, 30]], w: W3 },
+    { pairs: [['- Tên luận án', p.thesis, 60]], w: [100] }];
+  const langs = m.langs.filter(l => SL.trim(l.name)).slice(0, 5);
+  const td = (w, inner, x) => `<td width="${w}%" valign="top" style="${CV.F};width:${w}%;padding:6pt 6pt 0 0;vertical-align:top;${x || ''}">${inner}</td>`;
+  const lang = (langs.length ? langs : [{}]).map((l, i) => `<tr>${td(21, i ? '' : '<b>3. Ngoại ngữ:</b>')}${td(33, (i + 1) + '. ' + esc(l.name || (CV.blank ? CV.dots(20) : '')))}${td(46, 'Mức độ sử dụng: ' + CV.v(l.level, 18))}</tr>`).join('');
+  const k = rows.findIndex(r => r.head === '2. Sau đại học');
+  return CV.h('II. QUÁ TRÌNH ĐÀO TẠO') + CV.grid(rows.slice(0, k)) + CV.grid(rows.slice(k)) + `<table width="100%" border="0" style="width:100%;border-collapse:collapse;margin:0" cellpadding="0" cellspacing="0">${lang}</table>`;
 }
 function cvSecII(m, title) {
   const p = m.p, has = (...k) => k.some(x => SL.trim(p[x]));
@@ -2452,13 +2517,13 @@ function cvSecII(m, title) {
   langs.slice(0, 5).forEach((l, i) => rows.push({ pairs: [[(i + 1) + '. ' + (l.name || ''), '', 0], ['Mức độ sử dụng', l.level, 18]], w: CV_W2, lang: true }));
   return CV.h(title) + CV.grid(cvRows(rows));
 }
-function cvSecIII(m, title) {
-  return CV.h(title) + CV.table(['Thời gian', 'Nơi công tác', 'Công việc đảm nhiệm'],
-    m.work.map(w => [esc([w.from, w.to].filter(Boolean).join(' – ')), esc(w.place), esc(w.role)]), ['22%', '40%', '38%'], 3);
+function cvSecIII(m, title, bgd) {
+  return CV.h(title) + CV.table(['Thời gian', bgd ? 'Đơn vị công tác' : 'Nơi công tác', 'Công việc đảm nhiệm'],
+    m.work.map(w => [esc([w.from, w.to].filter(Boolean).join(' – ')), esc(w.place), esc(w.role)]), bgd ? ['27%', '35%', '38%'] : ['22%', '40%', '38%'], 3);
 }
-function cvProjects(m, label) {
-  return CV.p(label) + CV.table(['TT', 'Tên đề tài nghiên cứu', 'Năm bắt đầu/Năm hoàn thành', 'Đề tài cấp (NN, Bộ, ngành, trường)', 'Trách nhiệm tham gia trong đề tài'],
-    m.projects.map((x, i) => [String(i + 1), esc(x.name), esc([x.from, x.to].filter(Boolean).join('/')), esc(x.level), esc(x.role)]), ['8%', '40%', '17%', '17%', '18%'], 3);
+function cvProjects(m, label, bgd) {
+  return CV.p(label, bgd ? 'text-align:justify;margin-top:6pt' : '') + CV.table(['TT', 'Tên đề tài nghiên cứu', 'Năm bắt đầu/Năm hoàn thành', 'Đề tài cấp (NN, Bộ, ngành, trường)', 'Trách nhiệm tham gia trong đề tài'],
+    m.projects.map((x, i) => [String(i + 1), esc(x.name), esc([x.from, x.to].filter(Boolean).join('/')), esc(x.level), esc(x.role)]), bgd ? ['7%', '32%', '17%', '21%', '23%'] : ['8%', '40%', '17%', '17%', '18%'], 3);
 }
 function cvBooks(m) {
   return CV.table(['TT', 'Tên sách / giáo trình', 'Loại', 'Nhà xuất bản', 'Năm'], m.books.map((x, i) => [String(i + 1), esc(x.title) + (x.authors ? `<br><i style="font-size:11pt">${esc(x.authors)}</i>` : ''), esc(pubType(x.type)), esc(x.venue), esc(x.year)]), ['7%', '45%', '16%', '22%', '10%'], 2);
@@ -2466,26 +2531,29 @@ function cvBooks(m) {
 function cvAwards(m) {
   return CV.table(['TT', 'Tên giải thưởng / khen thưởng', 'Năm', 'Cơ quan trao tặng'], m.awards.map((x, i) => [String(i + 1), esc(x.name), esc(x.year), esc(x.org)]), ['7%', '53%', '12%', '28%'], 2);
 }
-function cvPubTable(list, label) {
-  return CV.p(label) + CV.table(['TT', 'Tên công trình', 'Năm công bố', 'Tên tạp chí'],
-    list.map((x, i) => [String(i + 1), esc(x.title) + (x.authors ? `<br><i style="font-size:11pt">${esc(x.authors)}</i>` : ''), esc(x.year), esc(x.venue) + (x.doi ? `<br><span style="font-size:10.5pt">DOI: ${esc(x.doi)}</span>` : '')]),
-    ['8%', '49%', '13%', '30%'], 3);
+function cvPubTable(list, label, bgd) {
+  return CV.p(label, bgd ? 'text-align:justify;margin-top:6pt' : '') + CV.table(['TT', 'Tên công trình', 'Năm công bố', 'Tên tạp chí'],
+    list.map((x, i) => [String(i + 1), esc(x.title) + (x.authors ? `<br><i style="font-size:11pt">${esc(x.authors)}</i>` : ''), esc(x.year), esc(x.venue) + (x.volume ? ', ' + esc(x.volume) + (x.pages ? ', ' + esc(x.pages) : '') : '') + (x.doi ? `<br><span style="font-size:10.5pt">DOI: ${esc(x.doi)}</span>` : '')]),
+    bgd ? ['7%', '41%', '18%', '34%'] : ['8%', '49%', '13%', '30%'], 3);
 }
 
 /** HTML phần thân của văn bản. */
 function cvBody(src, opts, st) {
   CV.blank = !!(st && st.BLANK);
+  const bgd = opts.tpl === 'bgd';
+  // Phụ lục III (TT 09/2017): Times New Roman 12pt, giãn trước đoạn 6pt; in đủ mọi dòng của mẫu.
+  CV.F = CV_FONT(bgd ? 12 : 13, bgd ? 1.15 : 1.4); CV.full = bgd; CV.rowPad = bgd ? '6pt 6pt 0 0' : '2pt 6pt 2pt 0';
   const m = cvModel(src, opts), on = k => opts.sections[k] !== false, L = SECTION_LABELS[opts.tpl];
-  if (opts.tpl === 'bgd' || opts.tpl === 'v2') {
+  if (bgd || opts.tpl === 'v2') {
     let h = cvHeader(m, opts, st);
-    if (on('I')) h += cvSecI(m, opts, opts.tpl === 'bgd' ? 'I. LÝ LỊCH SƠ LƯỢC' : 'I. THÔNG TIN CÁ NHÂN & HỌC THUẬT');
-    if (on('II')) h += cvSecII(m, 'II. QUÁ TRÌNH ĐÀO TẠO');
-    if (on('III')) h += cvSecIII(m, opts.tpl === 'bgd' ? 'III. QUÁ TRÌNH CÔNG TÁC CHUYÊN MÔN' : 'III. QUÁ TRÌNH CÔNG TÁC');
+    if (on('I')) h += cvSecI(m, opts, bgd ? 'I. LÝ LỊCH SƠ LƯỢC' : 'I. THÔNG TIN CÁ NHÂN & HỌC THUẬT');
+    if (on('II')) h += bgd ? cvSecIIBgd(m) : cvSecII(m, 'II. QUÁ TRÌNH ĐÀO TẠO');
+    if (on('III')) h += cvSecIII(m, bgd ? 'III. QUÁ TRÌNH CÔNG TÁC CHUYÊN MÔN' : 'III. QUÁ TRÌNH CÔNG TÁC', bgd);
     if (on('IV')) {
-      h += CV.h(opts.tpl === 'bgd' ? 'IV. QUÁ TRÌNH NGHIÊN CỨU KHOA HỌC' : 'IV. CÔNG BỐ KHOA HỌC & ĐỀ TÀI');
-      h += cvProjects(m, '1. Các đề tài nghiên cứu khoa học đã và đang tham gia:');
+      h += CV.h(bgd ? 'IV. QUÁ TRÌNH NGHIÊN CỨU KHOA HỌC' : 'IV. CÔNG BỐ KHOA HỌC & ĐỀ TÀI');
+      h += cvProjects(m, bgd ? '1. Các đề tài nghiên cứu khoa học đã và đang tham gia (thuộc danh mục Hội đồng Chức danh giáo sư nhà nước quy định):' : '1. Các đề tài nghiên cứu khoa học đã và đang tham gia:', bgd);
       const ex = opts.extra || {};
-      h += cvPubTable(opts.tpl === 'bgd' && !ex.books ? m.allPubs : m.articles, '2. Các công trình khoa học đã công bố:');
+      h += cvPubTable(bgd && !ex.books ? m.allPubs : m.articles, bgd ? '2. Các công trình khoa học đã công bố (thuộc danh mục Hội đồng Chức danh giáo sư nhà nước quy định): Tên công trình, năm công bố, nơi công bố.' : '2. Các công trình khoa học đã công bố:', bgd);
     }
     if (opts.tpl === 'bgd') {
       const ex = opts.extra || {};
@@ -2495,7 +2563,7 @@ function cvBody(src, opts, st) {
     }
     if (opts.tpl === 'v2' && on('V')) h += CV.h('V. SÁCH / GIÁO TRÌNH') + CV.table(['TT', 'Tên sách / giáo trình', 'Loại', 'Nhà xuất bản', 'Năm'], m.books.map((x, i) => [String(i + 1), esc(x.title) + (x.authors ? `<br><i style="font-size:11pt">${esc(x.authors)}</i>` : ''), esc(pubType(x.type)), esc(x.venue), esc(x.year)]), ['7%', '45%', '15%', '21%', '12%'], 2);
     if (opts.tpl === 'v2' && on('VI')) h += CV.h('VI. GIẢI THƯỞNG') + CV.table(['TT', 'Tên giải thưởng / khen thưởng', 'Năm', 'Cơ quan trao tặng'], m.awards.map((x, i) => [String(i + 1), esc(x.name), esc(x.year), esc(x.org)]), ['7%', '53%', '12%', '28%'], 2);
-    return h + cvSign(m, st);
+    return h + cvSign(m, st, opts.tpl);
   }
   const p = m.p, d = m.d, name = [honor(d), p.fullName].filter(Boolean).join(' ');
   const H = t => `<p style="${CV.F};font-weight:bold;font-size:12pt;letter-spacing:.5pt;text-transform:uppercase;border-bottom:1px solid #000;padding-bottom:2pt;margin:14pt 0 6pt">${esc(t)}</p>`;
@@ -2544,9 +2612,10 @@ function shortlistBody(round, rows, st) {
     CV.p(`<i>Danh sách không kèm email, số điện thoại, địa chỉ liên hệ và số định danh. Liên hệ chuyên gia qua ${esc(st.ORG_NAME || 'đơn vị quản lý')}. Lập ngày ${SL.pad(d.getDate())}/${SL.pad(d.getMonth() + 1)}/${d.getFullYear()}.</i>`, 'font-size:11pt;margin-top:8pt');
 }
 /** Bọc thân văn bản thành file Word (.doc dạng HTML: Word mở trực tiếp, đúng khổ A4 và lề). */
-function wordDoc(body, title) {
+function wordDoc(body, title, tpl) {
+  const official = tpl === 'bgd' || tpl === 'blank';
   return '﻿<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><\u0074itle>' + esc(title) +
-    '<\/\u0074itle><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument><\/xml><![endif]--><\u0073tyle>@page WordSection1{size:21cm 29.7cm;margin:2cm 2cm 2cm 3cm;mso-header-margin:1cm;mso-footer-margin:1cm}div.WordSection1{page:WordSection1}body{font-family:"Times New Roman";font-size:13pt}table{border-collapse:collapse}p{margin:0}<\/\u0073tyle><\/head><body><div class="WordSection1">' + body + '</div><\/body><\/html>';
+    '<\/\u0074itle><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument><\/xml><![endif]--><\u0073tyle>@page WordSection1{size:21cm 29.7cm;' + (official ? 'margin:2cm 1.8cm 0.8cm 2.8cm;mso-header-margin:1.27cm;mso-footer-margin:1.27cm;mso-header:fxh' : 'margin:2cm 2cm 2cm 3cm;mso-header-margin:1cm;mso-footer-margin:1cm') + '}div.WordSection1{page:WordSection1}body{font-family:"Times New Roman";font-size:' + (official ? 12 : 13) + 'pt}table{border-collapse:collapse}p{margin:0}<\/\u0073tyle><\/head><body><div class="WordSection1">' + body + (official ? '<table style="margin-left:50in"><tr><td><div style="mso-element:header" id="fxh"><p align="center" style="text-align:center;margin:0"><span style="mso-field-code:\' PAGE \'"><span style="mso-no-proof:yes">1</span></span></p></div></td></tr></table>' : '') + '</div><\/body><\/html>';
 }
 function gdocHtml(body, title) { return '<html><head><meta charset="utf-8"><\u0074itle>' + esc(title) + '<\/\u0074itle><\/head><body>' + body + '<\/body><\/html>'; }
 function printBody(body) {
@@ -2705,7 +2774,7 @@ function fieldInput(key, opts) {
 }
 function toggleBlock(key,label,fields) {
   const p=E.profile(), on=p[key]===undefined?fields.some(k=>p[k]):String(p[key])==='true';
-  return `<div class="edu-gate"><label class="check"><input type="checkbox" name="${key}" data-gate="${key}" ${on?'checked':''}><span>${esc(label)}</span></label><div class="fgrid conditional" data-gate-body="${key}" ${on?'':'hidden'}>${fields.map(k=>fieldInput(k,{c:/Year$/.test(k)?'c3':'c9',required:true})).join('')}</div></div>`;
+  return `<div class="edu-gate"><label class="check"><input type="checkbox" name="${key}" data-gate="${key}" ${on?'checked':''}><span>${esc(label)}</span></label><div class="fgrid conditional" data-gate-body="${key}" ${on?'':'hidden'}>${fields.map(k=>fieldInput(k,{c:/Year$/.test(k)?'c3':'c9',required:k!=='msThesis'})).join('')}</div></div>`;
 }
 function mapCard() {
   const p=E.profile();
@@ -2762,7 +2831,7 @@ function academicSummary() {
 function renderProfileSection(tab) {
   const d=S.data,p=E.profile();
   if(tab==='basic') return `<div class="grid2"><form data-form="profile" class="stack" id="basicProfileForm"><div class="card profile-card"><h2 class="h2">Thông tin cá nhân</h2><p class="caption">${reqMark()} Trường bắt buộc cho hồ sơ. Căn cước là thông tin bổ sung theo mẫu.</p><div class="identity-grid">${fieldInput('fullName')}${fieldInput('dob',{label:'Ngày sinh'})}${fieldInput('gender',{select:['Nam','Nữ']})}</div><div class="category-grid">${fieldInput('ethnicity',{list:ETHNIC,free:true})}${fieldInput('nationality',{list:COUNTRIES,free:true})}${fieldInput('birthPlace',{list:PROVINCES,free:true})}</div><hr class="div"><h3 class="h3">Thông tin liên hệ</h3><div class="contact-grid">${fieldInput('contactEmail',{label:'Email liên hệ'})}${fieldInput('mobile',{label:'Di động Việt Nam',hint:'10 chữ số (03/05/07/08/09), hoặc +84 thay số 0.'})}</div><div class="category-grid">${fieldInput('addressCountry',{list:COUNTRIES,free:true})}${fieldInput('province',{list:PROVINCES,free:true,hint:'Địa chỉ hiện tại hoặc tên trên giấy tờ; giữ được địa danh cũ.'})}${fieldInput('ward',{label:'Phường / xã',list:[...new Set((d.profiles || [p]).map(x=>x.ward).filter(Boolean))],free:true})}</div>${fieldInput('address',{c:'c12',label:'Địa chỉ chi tiết'})}${mapCard()}</div><details class="card profile-more"><summary>Thông tin khác của lý lịch</summary><div class="fgrid">${fieldInput('hometown',{c:'c4',list:PROVINCES,free:true})}${fieldInput('position',{c:'c4'})}${fieldInput('unit',{c:'c4'})}${fieldInput('phoneOffice',{c:'c4'})}${fieldInput('phoneHome',{c:'c4'})}${fieldInput('fax',{c:'c4'})}<label class="field c12"><span>Loại giấy tờ</span><select name="idType" data-id-type>${[['identity','Thẻ căn cước (mẫu từ 01/07/2024)'],['cccd','Căn cước công dân (CCCD)'],['legacy','CMND — chỉ lưu lịch sử']].map(x=>`<option value="${x[0]}" ${(p.idType || (/^\d{9}$/.test(p.idNumber || '')?'legacy':'cccd'))===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select><span class="hint">CCCD/căn cước: đúng 12 chữ số. CMND hết giá trị sử dụng sau 31/12/2024.</span></label>${fieldInput('idNumber',{c:'c4',label:'Số căn cước / CMND lịch sử'})}<div class="c8 fgrid conditional" data-id-details>${fieldInput('idDate',{c:'c6',required:true})}${fieldInput('idPlace',{c:'c6',required:true,list:['Bộ Công an','Cục Cảnh sát quản lý hành chính về trật tự xã hội','Cục Cảnh sát đăng ký quản lý cư trú và dữ liệu quốc gia về dân cư'],free:true,hint:'Gợi ý theo mẫu thẻ; đối chiếu và ghi đúng cơ quan trên giấy tờ.'})}</div></div></details><details class="card profile-more"><summary>Chuyên môn & hồ sơ học thuật</summary><div class="fgrid">${fieldInput('field',{list:E.fields(),free:true})}${fieldInput('keywords',{hint:'Ngăn bằng dấu chấm phẩy'})}${fieldInput('orcid')}${fieldInput('scholarUrl')}${fieldInput('bio',{c:'c12',area:true})}</div></details><div class="row profile-save-row"><span class="caption">Cập nhật: ${esc(fmtDT(p.updatedAt) || '—')}</span><button class="btn primary">Lưu thay đổi</button></div></form><aside class="stack profile-context"><div class="card"><h3 class="h2">Hồ sơ học thuật</h3><p>Học vị: ${esc(d.derived.degree || 'Chưa xác minh')}<br>Chức danh: ${esc(d.derived.title || 'Chưa có')}</p><a class="btn" href="#/profile?tab=cred">Xem lịch sử xác minh</a></div><div class="card"><h3 class="h3">Thông tin riêng tư</h3><p class="muted">Chủ hồ sơ và quản trị viên được xem tài liệu, gồm PDF đã xuất. Bản xuất cho đối tác tùy theo lựa chọn kèm thông tin liên hệ.</p></div></aside></div>`;
-  if(tab==='edu') return `<div class="stack">${academicSummary()}<form data-form="profile" class="stack" id="academicProfileForm"><div class="card"><h3 class="h2">1. Đại học</h3><div class="fgrid"><label class="field c12"><span>Trạng thái đào tạo${reqMark()}</span><select name="ugStatus" data-ug-status>${(()=>{const st=SL.ugState(p) || (S.data.derived.degree?'graduated':'studying');return [['studying','Đang học — sinh viên chưa tốt nghiệp'],['graduated','Đã tốt nghiệp']].map(o=>`<option value="${o[0]}" ${st===o[0]?'selected':''}>${o[1]}</option>`).join('');})()}</select><span class="hint">Sinh viên chưa tốt nghiệp chọn "Đang học": không cần năm tốt nghiệp, lý lịch in "Đang học".</span></label>${fieldInput('ugSystem',{list:['Chính quy','Vừa làm vừa học','Liên thông','Văn bằng 2','Từ xa'],free:true})}${fieldInput('ugPlace')}${fieldInput('ugMajor')}${fieldInput('ugCountry',{list:COUNTRIES,free:true})}<div data-ug-year class="c12">${fieldInput('ugYear',{c:'c6',required:true})}</div><div data-ug-expected class="c12 conditional">${fieldInput('ugExpectedYear',{c:'c6',required:false,hint:'Không bắt buộc. VD: 2029.'})}</div></div>${toggleBlock('hasUg2','Đã có bằng đại học thứ hai',['ug2Major','ug2Year'])}</div><div class="card"><h3 class="h2">2. Sau đại học</h3>${toggleBlock('hasMaster','Đã có bằng thạc sĩ',['msMajor','msYear','msPlace'])}${toggleBlock('hasPhd','Đã có bằng tiến sĩ',['phdMajor','phdYear','phdPlace','thesis'])}<p class="caption">Thông tin đào tạo phục vụ bản in. Bằng cấp và chức danh dùng xét điều kiện được gửi xác minh riêng phía dưới. Không bắt buộc có thạc sĩ trước tiến sĩ.</p></div><div class="card"><div class="row between"><h3 class="h2">3. Ngoại ngữ</h3><button type="button" class="btn sm" data-act="lang-add">Thêm ngoại ngữ</button></div><div class="stack" style="margin-top:12px">${(S.drafts.langs || (S.drafts.langs=(()=>{try{return JSON.parse(p.languages || '[]');}catch(e){return [];}})())).map((l,i)=>`<div class="fgrid" data-lang="${i}"><label class="field c6"><span>Ngoại ngữ</span>${combo('lang-name',l.name,['Tiếng Anh','Tiếng Pháp','Tiếng Đức','Tiếng Nhật','Tiếng Hàn','Tiếng Trung'],{free:true})}</label><label class="field c6"><span>Mức độ sử dụng</span><div class="row"><input name="lang-level" value="${esc(l.level || '')}" placeholder="B2 / IELTS 7.0 / thành thạo"><button type="button" class="iconbtn" data-act="lang-del" data-i="${i}" aria-label="Xóa">${icon('trash','sm')}</button></div></label></div>`).join('')}</div></div><button class="btn primary">Lưu đào tạo</button></form></div>`;
+  if(tab==='edu') return `<div class="stack">${academicSummary()}<form data-form="profile" class="stack" id="academicProfileForm"><div class="card"><h3 class="h2">1. Đại học</h3><div class="fgrid"><label class="field c12"><span>Trạng thái đào tạo${reqMark()}</span><select name="ugStatus" data-ug-status>${(()=>{const st=SL.ugState(p) || (S.data.derived.degree?'graduated':'studying');return [['studying','Đang học — sinh viên chưa tốt nghiệp'],['graduated','Đã tốt nghiệp']].map(o=>`<option value="${o[0]}" ${st===o[0]?'selected':''}>${o[1]}</option>`).join('');})()}</select><span class="hint">Sinh viên chưa tốt nghiệp chọn "Đang học": không cần năm tốt nghiệp, lý lịch in "Đang học".</span></label>${fieldInput('ugSystem',{list:['Chính quy','Vừa làm vừa học','Liên thông','Văn bằng 2','Từ xa'],free:true})}${fieldInput('ugPlace')}${fieldInput('ugMajor')}${fieldInput('ugCountry',{list:COUNTRIES,free:true})}<div data-ug-year class="c12">${fieldInput('ugYear',{c:'c6',required:true})}</div><div data-ug-expected class="c12 conditional">${fieldInput('ugExpectedYear',{c:'c6',required:false,hint:'Không bắt buộc. VD: 2029.'})}</div></div>${toggleBlock('hasUg2','Đã có bằng đại học thứ hai',['ug2Major','ug2Year'])}</div><div class="card"><h3 class="h2">2. Sau đại học</h3>${toggleBlock('hasMaster','Đã có bằng thạc sĩ',['msMajor','msYear','msPlace','msThesis'])}${toggleBlock('hasPhd','Đã có bằng tiến sĩ',['phdMajor','phdYear','phdPlace','thesis'])}<p class="caption">Thông tin đào tạo phục vụ bản in. Bằng cấp và chức danh dùng xét điều kiện được gửi xác minh riêng phía dưới. Không bắt buộc có thạc sĩ trước tiến sĩ.</p></div><div class="card"><div class="row between"><h3 class="h2">3. Ngoại ngữ</h3><button type="button" class="btn sm" data-act="lang-add">Thêm ngoại ngữ</button></div><div class="stack" style="margin-top:12px">${(S.drafts.langs || (S.drafts.langs=(()=>{try{return JSON.parse(p.languages || '[]');}catch(e){return [];}})())).map((l,i)=>`<div class="fgrid" data-lang="${i}"><label class="field c6"><span>Ngoại ngữ</span>${combo('lang-name',l.name,['Tiếng Anh','Tiếng Pháp','Tiếng Đức','Tiếng Nhật','Tiếng Hàn','Tiếng Trung'],{free:true})}</label><label class="field c6"><span>Mức độ sử dụng</span><div class="row"><input name="lang-level" value="${esc(l.level || '')}" placeholder="B2 / IELTS 7.0 / thành thạo"><button type="button" class="iconbtn" data-act="lang-del" data-i="${i}" aria-label="Xóa">${icon('trash','sm')}</button></div></label></div>`).join('')}</div></div><button class="btn primary">Lưu đào tạo</button></form></div>`;
   if(tab==='cred') {
     const cs=d.credentials.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)));
     return `<div class="grid2"><div class="card"><h3 class="h2">Lịch sử học vị, chức danh, chức vụ</h3><p class="caption">Học vị/chức danh cao nhất chỉ tính từ mục đã xác minh. AI đối chiếu nội dung; quản trị viên xử lý mục chưa rõ.</p>${cs.length?`<div class="stack">${cs.map(x=>`<article class="credential-row"><div class="row between"><b>${esc(x.value)}</b>${credBadge(x)}</div><p class="caption">${esc(SL.labelOf(SL.CRED_KINDS,x.kind))} · ${esc(SL.fmtDate(x.date))} · ${esc(x.issuer || x.country || '')}${x.recognitionDate?'<br>Công nhận đạt tiêu chuẩn: '+esc(SL.fmtDate(x.recognitionDate)):''}${x.decisionNo?'<br>Quyết định: '+esc(x.decisionNo):''}</p>${x.fileId?`<button type="button" class="btn sm" data-act="open-file" data-id="${esc(x.fileId)}">Xem ${esc(x.fileName)}</button>`:`<label class="btn sm">Tải minh chứng<input type="file" hidden accept=".pdf,.png,.jpg,.jpeg" data-cred-file="${esc(x.id)}"></label>`}${aiStatusHTML(x)}${x.reviewNote?`<p class="caption">${esc(x.reviewNote)}</p>`:''}${x.fileId&&x.status!=='verified'?`<button type="button" class="btn sm" data-act="ai-retry" data-kind="cred" data-id="${esc(x.id)}">Kiểm tra lại AI</button>`:''}${x.status!=='verified'?`<button type="button" class="btn sm" data-act="cred-edit" data-id="${esc(x.id)}">Bổ sung thông tin</button><button type="button" class="btn sm" data-act="cred-del" data-id="${esc(x.id)}">Rút yêu cầu</button>`:''}</article>`).join('')}</div>`:emptyState('shield','Chưa có mục nào.')}</div><form class="card" data-form="cred" id="credentialForm"><h3 class="h3">Thêm mục cần xác minh</h3><input type="hidden" name="id"><div class="stack" style="margin-top:12px"><label class="field"><span>Loại${reqMark()}</span><select name="kind" data-act-change="cred-kind">${SL.CRED_KINDS.map(k=>`<option value="${k.code}">${k.label}</option>`).join('')}</select></label><label class="field" id="credValue"><span>Giá trị${reqMark()}</span><select name="value" required><option value="">— Chọn —</option>${E.degrees().map(x=>`<option>${esc(x)}</option>`).join('')}</select></label><label class="field"><span id="credentialDateLabel">Ngày cấp bằng${reqMark()}</span><input name="date" placeholder="dd/mm/yyyy" inputmode="numeric" required></label><div class="stack conditional" data-title-extra hidden><label class="field"><span>Ngày công nhận đạt tiêu chuẩn (nếu có)</span><input name="recognitionDate" placeholder="dd/mm/yyyy" inputmode="numeric"></label><label class="field"><span>Số quyết định bổ nhiệm${reqMark()}</span><input name="decisionNo" required></label></div><label class="field"><span>Nước nhận bằng / bổ nhiệm${reqMark()}</span>${combo('country','Việt Nam',COUNTRIES,{free:true,required:true})}</label><label class="field"><span>Cơ quan cấp bằng / quyết định${reqMark()}</span><input name="issuer" required></label><label class="field"><span>File minh chứng (PDF, ảnh)${reqMark()}</span><input type="file" name="file" required accept=".pdf,.png,.jpg,.jpeg"><span class="hint">AI nhận tối đa 12 MB. Minh chứng được gửi Gemini để đối chiếu thông tin đã khai.</span></label><label class="field"><span>Ghi chú cho người duyệt</span><x-ta name="note" rows="2"></x-ta></label><button class="btn primary">Gửi xác minh</button><p class="caption">Lỗi AI hoặc nội dung chưa rõ sẽ được báo cụ thể, giữ trong hàng chờ quản trị viên.</p></div></form></div>`;
@@ -2890,7 +2959,7 @@ VIEWS.expert.import = {
         `<div class="grid2"><div class="stack"><div class="card"><div class="h2">Bắt đầu từ file của bạn</div>
           <div class="drop" id="cvDrop" tabindex="0" role="button" aria-label="Chọn file CV">${icon('upload')}<b class="h3">Kéo thả file CV vào đây</b><span class="caption">DOC, DOCX, PDF · tối đa 20 MB</span><input type="file" hidden accept=".doc,.docx,.pdf"></div>
           <div class="row" style="margin-top:16px"><button type="button" class="btn primary" data-act="cv-pick">${icon('upload')}Chọn file từ máy</button><button type="button" class="btn" data-act="exp-blank">${icon('file')}Tải mẫu trống để điền</button></div>
-          <p class="caption" style="margin:12px 0 0">DOC, DOCX hoặc PDF. Đọc tốt nhất với lý lịch theo mẫu Bộ GD&ĐT (TT 08/2011). ${API.demo ? 'Bản demo đọc .docx ngay trên trình duyệt; bản chạy thật đọc thêm .doc/.pdf qua Google Drive.' : 'File scan có thể cần OCR và kiểm tra thêm.'}</p>
+          <p class="caption" style="margin:12px 0 0">DOC, DOCX hoặc PDF. Đọc tốt nhất với lý lịch theo mẫu Bộ GD&ĐT (Phụ lục III, TT 09/2017 hoặc TT 08/2011). ${API.demo ? 'Bản demo đọc .docx ngay trên trình duyệt; bản chạy thật đọc thêm .doc/.pdf qua Google Drive.' : 'File scan có thể cần OCR và kiểm tra thêm.'}</p>
           ${im.error ? `<div class="callout bad" style="margin-top:16px">${icon('alert', 'sm')}<div><b>File chưa đọc được.</b> ${esc(im.error)}<br>File đã chọn vẫn được giữ: thử lại hoặc lưu sang .docx.</div></div>` : ''}
         </div>
         ${cvFilesCard()}
@@ -3370,7 +3439,7 @@ function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 
 function expSig(src, st) { return hashStr(JSON.stringify([st.tpl, st.sections, st.contact, st.pubFilter, st.extra, src])); }
 function expOpts(st) { return { tpl: st.tpl, sections: st.sections, contact: st.tpl === 'intro' ? false : st.contact, pubFilter: st.pubFilter, extra: st.tpl === 'bgd' ? (st.extra || {}) : {} }; }
 const EXP_SCOPES = [
-  ['std', 'Mẫu chuẩn', 'Đúng Thông tư 08/2011 · mục I–IV', {}],
+  ['std', 'Mẫu chuẩn', 'Đúng Phụ lục III, Thông tư 09/2017 · mục I–IV', {}],
   ['books', 'Mẫu chuẩn + Sách, giáo trình', 'Thêm mục V: sách chuyên khảo, giáo trình, chương sách', { books: true }],
   ['awards', 'Mẫu chuẩn + Giải thưởng', 'Thêm mục giải thưởng, khen thưởng', { awards: true }],
   ['all', 'Mẫu chuẩn + Sách, giáo trình + Giải thưởng', 'Đầy đủ nhất', { books: true, awards: true }]
@@ -3407,9 +3476,9 @@ const exportView = {
         <div class="fgrid"><label class="field c12"><span>Mẫu xuất</span><select data-exp="tpl">${CV_TEMPLATES.filter(t => t.group === st.tab).map(t => `<option value="${t.code}" ${t.code === st.tpl ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select></label></div>
         <div class="h3" style="margin:20px 0 4px">Các mục trong bản xuất</div>
         ${tpl.sections.map(s => `<label class="check"><input type="checkbox" data-exp-sec="${s}" ${st.sections[s] !== false ? 'checked' : ''}> <span>${esc(labels[s])}</span></label>`).join('')}
-        ${st.tpl === 'bgd' ? (() => { const ex = st.extra || {}, nb = m.books.length, na = m.awards.length; return `<label class="check"><input type="checkbox" data-exp-extra="books" ${ex.books ? 'checked' : ''}> <span>V. Sách, giáo trình <span class="caption">(${nb} mục)</span></span></label><label class="check"><input type="checkbox" data-exp-extra="awards" ${ex.awards ? 'checked' : ''}> <span>VI. Giải thưởng, khen thưởng <span class="caption">(${na} mục)</span></span></label><p class="caption" style="margin:6px 0 0">Mục I–IV theo Phụ lục V, Thông tư 08/2011. Tích thêm V, VI nếu muốn kèm sách, giáo trình và giải thưởng (chỉ chọn VI thì trong bản xuất mục này được đánh số V cho liền mạch).</p>`; })() : ''}
+        ${st.tpl === 'bgd' ? (() => { const ex = st.extra || {}, nb = m.books.length, na = m.awards.length; return `<label class="check"><input type="checkbox" data-exp-extra="books" ${ex.books ? 'checked' : ''}> <span>V. Sách, giáo trình <span class="caption">(${nb} mục)</span></span></label><label class="check"><input type="checkbox" data-exp-extra="awards" ${ex.awards ? 'checked' : ''}> <span>VI. Giải thưởng, khen thưởng <span class="caption">(${na} mục)</span></span></label><p class="caption" style="margin:6px 0 0">Mục I–IV đúng Phụ lục III, Thông tư 09/2017/TT-BGDĐT. V, VI không có trong mẫu Bộ: chỉ tích khi đơn vị yêu cầu kèm sách, giáo trình, giải thưởng (chỉ chọn VI thì mục này được đánh số V cho liền mạch).</p>`; })() : ''}
         <div class="scope-now"><div><span class="label">Học hàm · học vị cao nhất (tự chọn)</span><div>${esc([src.derived.title && src.derived.title + (src.derived.titleDate ? ' (' + SL.yearOf(src.derived.titleDate) + ')' : ''), src.derived.degree && src.derived.degree + (src.derived.degreeDate ? ' (' + SL.yearOf(src.derived.degreeDate) + ')' : '')].filter(Boolean).join(' · ') || 'Chưa có mục đã xác minh')}</div></div></div>
-        <hr class="div"><label class="check"><input type="checkbox" data-exp="contact" ${st.contact && st.tpl !== 'intro' ? 'checked' : ''} ${st.tpl === 'intro' ? 'disabled' : ''}> <span>Kèm thông tin liên hệ & số định danh${st.tpl === 'intro' ? ' (hồ sơ giới thiệu luôn ẩn)' : ''}</span></label>
+        <hr class="div"><label class="check"><input type="checkbox" data-exp="contact" ${st.contact && st.tpl !== 'intro' ? 'checked' : ''} ${st.tpl === 'intro' ? 'disabled' : ''}> <span>${st.tpl === 'bgd' ? 'Kèm địa chỉ, điện thoại, fax, email (các dòng liên hệ của mẫu Bộ)' : 'Kèm thông tin liên hệ & số định danh'}${st.tpl === 'intro' ? ' (hồ sơ giới thiệu luôn ẩn)' : ''}</span></label>
         <label class="field" style="margin-top:12px"><span>Công bố đưa vào bản xuất</span><select data-exp="pubFilter">${PUB_FILTERS.map(f => `<option value="${f[0]}" ${f[0] === st.pubFilter ? 'selected' : ''}>${f[1]}</option>`).join('')}</select></label>
         <p class="caption" style="margin:12px 0 0">Đổi mẫu hoặc nội dung thì xem trước lại trước khi tải.</p>
       </div>
@@ -3421,7 +3490,7 @@ const exportView = {
         ${comp.missing.filter(x => x.sec === 'I' || x.sec === 'II').length ? `<div class="callout warn" style="margin-top:12px">${icon('alert', 'sm')}<div>Còn trống: ${esc(comp.missing.filter(x => x.sec === 'I' || x.sec === 'II').map(x => x.label).join(', '))}. Ô trống in thành dòng chấm để điền tay.</div></div>` : ''}
         ${ok ? `<div class="caption" style="margin-top:14px">Tải lại nhanh bản vừa xem:</div><div class="row" style="margin-top:8px">${expFormats().map(f => `<button type="button" class="btn sm" data-act="exp-download" data-f="${f[0]}">${icon(f[0] === 'print' ? 'print' : 'download', 'sm')}${esc(f[2])}</button>`).join('')}</div>` : ''}
       </div>
-      <div class="callout">${icon('info', 'sm')}<div>Mẫu Bộ GD&ĐT theo Thông tư 08/2011/TT-BGDĐT, Phụ lục V.${S.ws === 'expert' ? ` Muốn điền tay? Dùng nút <b>Tải mẫu trống</b> ở trên, điền trong Word rồi tải lên ở <button type="button" class="linkbtn" data-act="go" data-page="import">Nhập từ CV</button>.` : ''}</div></div></div></div>`;
+      <div class="callout">${icon('info', 'sm')}<div>Mẫu Bộ GD&ĐT theo Phụ lục III, Thông tư 09/2017/TT-BGDĐT (khổ A4, Times New Roman 12, đánh số trang giữa lề trên).${S.ws === 'expert' ? ` Muốn điền tay? Dùng nút <b>Tải mẫu trống</b> ở trên, điền trong Word rồi tải lên ở <button type="button" class="linkbtn" data-act="go" data-page="import">Nhập từ CV</button>.` : ''}</div></div></div></div>`;
   },
   mount() {
     $$('[data-exp]').forEach(el => el.addEventListener('change', () => {
@@ -3467,22 +3536,22 @@ function expPicker() {
     `<div class="card">${ex.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Chuyên gia</th><th>Đơn vị</th><th>Học hàm · học vị</th><th>Hoàn thiện</th><th></th></tr></thead><tbody>${ex.map(x => `<tr class="click" data-act="go" data-page="export" data-q='${esc(JSON.stringify({ e: x.email }))}'><td><b>${esc(x.name || x.email)}</b><div class="caption">${esc(x.email)}</div></td><td>${esc(x.unit || '—')}</td><td>${esc([x.der.title, x.der.degree].filter(Boolean).join(' · ') || '—')}</td><td>${x.comp.pct}%</td><td><span class="btn sm">${icon('download', 'sm')}Xuất</span></td></tr>`).join('')}</tbody></table></div>`
       : emptyState('user', 'Chưa có tài khoản chuyên gia. Cấp tài khoản ở mục Tài khoản & quyền.')}</div>`;
 }
-/** Mẫu lý lịch trống (mẫu Bộ, đủ mục I–VI): người dùng điền tay rồi tải lên ở "Nhập từ CV". */
+/** Mẫu lý lịch trống (Phụ lục III, TT 09/2017, mục I–IV): người dùng điền tay rồi tải lên ở "Nhập từ CV". */
 ACT['exp-blank'] = async el => {
   const src = { email: '', profile: {}, derived: {}, credentials: [], work: [], projects: [], pubs: [], awards: [], needs: {} };
-  const body = cvBody(src, { tpl: 'bgd', sections: {}, contact: true, pubFilter: 'all', extra: { books: true, awards: true } }, Object.assign({}, S.data.settings || {}, { CITY: '', BLANK: true }));
+  const body = cvBody(src, { tpl: 'bgd', sections: {}, contact: true, pubFilter: 'all', extra: {} }, Object.assign({}, S.data.settings || {}, { CITY: '', BLANK: true }));
   const name = 'Mau_trong_Ly_lich_khoa_hoc', meta = { template: 'blank', name, format: 'docx' };
   if (!API.demo) {
     try { const r = await call(API.renderDoc(gdocHtml(body, name), name, 'docx', meta), el instanceof Element ? el : null); downloadB64(r.name, r.mime, r.data); return; } catch (e) {}
   }
-  downloadBlob(name + '.doc', new Blob([wordDoc(body, name)], { type: 'application/msword' }));
+  downloadBlob(name + '.doc', new Blob([wordDoc(body, name, 'blank')], { type: 'application/msword' }));
 };
 ACT['exp-download'] = async el => {
   const q = S.route.q, st = expState(), src = expSrc(q.e);
   if (st.confirmed !== expSig(src, st)) { toast('Bản xem trước đã thay đổi. Xem lại và xác nhận trước khi xuất.', 'error'); S.ui.keepScroll = true; route(); return; }
   const fmt = el.dataset.f || st.format, body = expBody(q), m = cvModel(src, expOpts(st)), name = cvFileName(m, st.tpl), btn = el instanceof Element ? el : null;
   const meta = { email: src.email, template: st.tpl, sections: Object.keys(st.sections).filter(k => st.sections[k] === false).map(k => '-' + k).join(' '), name, format: fmt };
-  if (fmt === 'doc') { downloadBlob(name + '.doc', new Blob([wordDoc(body, name)], { type: 'application/msword' })); API.logExport(meta).catch(() => {}); return; }
+  if (fmt === 'doc') { downloadBlob(name + '.doc', new Blob([wordDoc(body, name, st.tpl)], { type: 'application/msword' })); API.logExport(meta).catch(() => {}); return; }
   if (fmt === 'print') { API.logExport(Object.assign({},meta,{format:'print_request'})).catch(() => {}); printBody(body); toast('Đã mở lệnh in. Muốn lưu PDF vào kho quản trị, dùng nút PDF.','info'); return; }
   try {
     const r = await call(API.renderDoc(gdocHtml(body, name), name, fmt, meta), btn);

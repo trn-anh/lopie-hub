@@ -109,7 +109,7 @@ var SL = (function () {
   var PROJECT_LEVELS = ['Nhà nước', 'Bộ', 'Ngành', 'Tỉnh/Thành phố', 'Trường', 'Cơ sở', 'Hợp tác doanh nghiệp'];
   var PROJECT_ROLES = ['Chủ nhiệm', 'Thư ký', 'Thành viên chính', 'Thành viên'];
 
-  /* Mục I–II của mẫu LLKH (TT 08/2011/TT-BGDĐT, Phụ lục V). key = cột trong sheet Profiles */
+  /* Mục I–II của mẫu LLKH (Phụ lục III, TT 09/2017/TT-BGDĐT; tương thích TT 08/2011). key = cột trong sheet Profiles */
   var PROFILE_FIELDS = [
     { key: 'idType', label: 'Loại giấy tờ', sec: 'X', sensitive: true },
     { key: 'mapLat', label: 'Vĩ độ', sec: 'X', contact: true },
@@ -157,6 +157,7 @@ var SL = (function () {
     { key: 'msMajor', label: 'Thạc sĩ chuyên ngành', sec: 'II' },
     { key: 'msYear', label: 'Năm cấp bằng thạc sĩ', sec: 'II' },
     { key: 'msPlace', label: 'Nơi đào tạo thạc sĩ', sec: 'II' },
+    { key: 'msThesis', label: 'Tên luận văn', sec: 'II' },
     { key: 'phdMajor', label: 'Tiến sĩ chuyên ngành', sec: 'II' },
     { key: 'phdYear', label: 'Năm cấp bằng tiến sĩ', sec: 'II' },
     { key: 'phdPlace', label: 'Nơi đào tạo tiến sĩ', sec: 'II' },
@@ -438,16 +439,17 @@ var SL = (function () {
     ['_title', 'Chức danh khoa học cao nhất'], ['_titleYear', 'Năm bổ nhiệm'],
     ['position', 'Chức vụ (hiện tại hoặc trước khi nghỉ hưu)'], ['unit', 'Đơn vị công tác (hiện tại hoặc trước khi nghỉ hưu)'],
     ['address', 'Chỗ ở riêng hoặc địa chỉ liên lạc'], ['_phone', 'Điện thoại liên hệ'], ['phoneOffice', 'CQ'], ['phoneHome', 'NR'], ['mobile', 'DĐ'],
-    ['fax', 'Fax'], ['contactEmail', 'E-mail'], ['idNumber', 'Số CMND'], ['idDate', 'Ngày cấp'], ['idPlace', 'Nơi cấp'],
+    ['fax', 'Fax'], ['contactEmail', 'E-mail|Email'], ['idNumber', 'Số CMND'], ['idDate', 'Ngày cấp'], ['idPlace', 'Nơi cấp'],
     ['_sec2', 'QUÁ TRÌNH ĐÀO TẠO'], ['_ug', 'Đại học'],
     ['ugSystem', 'Hệ đào tạo'], ['ugPlace', 'Nơi đào tạo'], ['ugMajor', 'Ngành học'], ['ugCountry', 'Nước đào tạo'], ['ugYear', 'Năm tốt nghiệp'],
     ['ug2Major', 'Bằng đại học 2'], ['ug2Year', 'Năm tốt nghiệp'], ['_pg', 'Sau đại học'],
-    ['msMajor', 'Thạc sĩ chuyên ngành'], ['msYear', 'Năm cấp bằng'], ['msPlace', 'Nơi đào tạo'],
+    ['msMajor', 'Thạc sĩ ngành/chuyên ngành|Thạc sĩ chuyên ngành'], ['msYear', 'Năm cấp bằng'], ['msPlace', 'Nơi đào tạo'], ['msThesis', 'Tên luận văn'],
     ['phdMajor', 'Tiến sĩ chuyên ngành'], ['phdYear', 'Năm cấp bằng'], ['phdPlace', 'Nơi đào tạo'],
     ['thesis', 'Tên luận án'], ['_lang', 'Ngoại ngữ'], ['_sec3', 'QUÁ TRÌNH CÔNG TÁC CHUYÊN MÔN']
   ];
+  /** Nhãn có thể có nhiều cách viết, ngăn bằng "|" (VD: mẫu TT 09/2017 ghi "Email", TT 08/2011 ghi "E-mail"). */
   function labelRe(label) {
-    var body = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+').replace(/,/g, '\\s*,');
+    var body = '(?:' + label.split('|').map(function (x) { return x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+').replace(/,/g, '\\s*,'); }).join('|') + ')';
     var pre = label.length <= 3 ? '(?:^|[\\s:;,.])' : '';   // nhãn ngắn (CQ, NR, DĐ) phải đứng riêng
     return new RegExp(pre + body + (label.length <= 3 ? '(?=\\s*:)' : ''), 'i');
   }
@@ -458,7 +460,7 @@ var SL = (function () {
   }
   function headerKind(row) {
     var h = fold(row.join(' | '));
-    if (/thoi gian/.test(h) && /noi cong tac/.test(h)) return 'work';
+    if (/thoi gian/.test(h) && /(noi|don vi) cong tac/.test(h)) return 'work';
     if (/ten de tai/.test(h)) return 'projects';
     if (/ten cong trinh|cong trinh khoa hoc|ten bai bao/.test(h)) return 'pubs';
     if (/ten sach|giao trinh/.test(h)) return 'books';
@@ -645,7 +647,8 @@ var SL = (function () {
       parseFreeCV(doc, extra, ctx);
       Object.keys(extra.fields).forEach(function (k) {
         var v = extra.fields[k] && extra.fields[k].value;
-        if (v && !out.fields[k] && !/[^:\n]{2,40}:/.test(v)) out.fields[k] = extra.fields[k];
+        // Mẫu Bộ đã có nhãn rõ ràng: không lấy các ô "suy ra" (lĩnh vực, đơn vị) từ bộ tách tự do
+        if (v && !out.fields[k] && !/[^:\n]{2,40}:/.test(v) && !/^Suy ra/.test(extra.fields[k].flag || '')) out.fields[k] = extra.fields[k];
       });
       var em0 = text.match(/[\w.+-]+@[\w-]+\.[\w.]+/);
       if (em0 && !out.fields.contactEmail) set('contactEmail', em0[0]);
@@ -850,6 +853,8 @@ var SL = (function () {
       }
       if (sec === 'research' && line.length > 15) { researchRow(yearOf(line), line, ''); return; }
       if (sec === 'edu' && !eduDone) {
+        // Nhãn trống của mẫu ("Đại học:", "Nơi đào tạo:") và tiêu đề bậc học ("Sau đại học") không phải tên trường
+        if (/:\s*$/.test(trim(line)) || /^(\d+[.)]\s*)?(dai hoc|sau dai hoc|thac si|tien si)\s*:?$/.test(fold(line))) return;
         var em = line.split(/\s+·\s+|\s+\|\s+/), sp2 = em[0].split(/\s+[—–]\s+/);
         if (sp2.length >= 2 || /truong|dai hoc|university|hoc vien/.test(fold(line))) addEdu(splitPeriod(line), cleanVal(sp2[0]), cleanVal(sp2[1] || ''));
       }
@@ -961,6 +966,7 @@ var FXRules = (function () {
       if (!(g[0] in p)) return;
       var on = p[g[0]] === true || String(p[g[0]]) === 'true';
       out[g[0]] = String(on);
+      if (!on && g[0] === 'hasMaster') out.msThesis = '';
       g[1].forEach(function (k) { if (!on) out[k] = ''; else if (!SL.trim(row[k])) throw new Error((SL.PROFILE_FIELDS.find(function(f){return f.key===k;}) || {}).label + ': bắt buộc khi đã có bằng.'); });
     });
     if ('ugStatus' in p && ['studying', 'graduated'].indexOf(p.ugStatus) < 0) throw new Error('Chọn trạng thái đào tạo đại học: Đang học hoặc Đã tốt nghiệp.');
@@ -1899,7 +1905,7 @@ function parseStoredCV_(c, up, started) {
    Bật bằng cách thêm GEMINI_API_KEY vào Script Properties (khóa miễn phí tại aistudio.google.com).
    Bộ tách theo mẫu chạy trước; AI chỉ BỔ SUNG mục còn trống, mọi mục từ AI đều gắn cờ để người dùng kiểm tra. */
 const AI_FIELDS = ['fullName', 'gender', 'dob', 'birthPlace', 'hometown', 'ethnicity', 'position', 'unit', 'address', 'mobile', 'phoneOffice', 'contactEmail',
-  'ugSystem', 'ugPlace', 'ugMajor', 'ugCountry', 'ugYear', 'msMajor', 'msYear', 'msPlace', 'phdMajor', 'phdYear', 'phdPlace', 'thesis', 'field', 'keywords'];
+  'ugSystem', 'ugPlace', 'ugMajor', 'ugCountry', 'ugYear', 'msMajor', 'msYear', 'msPlace', 'msThesis', 'phdMajor', 'phdYear', 'phdPlace', 'thesis', 'field', 'keywords'];
 /** Gọi Gemini; tự thử model kế tiếp khi model bị ngừng (404). Model chạy được được nhớ lại. */
 const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-flash-lite-latest'];
 /** deadline (mốc ms, tùy chọn): hết giờ thì dừng thử lại, trả mã 408 để nơi gọi dùng kết quả không có AI. */
@@ -2092,21 +2098,59 @@ function api_renderDoc(token, html, name, format, meta) {
   try {
     const d = DocumentApp.openById(tmp.id);
     const b = d.getBody();
-    // A4, lề theo thể thức văn bản hành chính: trên/dưới 2 cm, trái 3 cm, phải 2 cm
-    b.setPageWidth(595.3).setPageHeight(841.9).setMarginTop(56.7).setMarginBottom(56.7).setMarginLeft(85).setMarginRight(56.7);
+    const official = meta.template === 'bgd' || meta.template === 'blank';
+    // A4. Mẫu Bộ (Phụ lục III, TT 09/2017): lề trên 2 cm, dưới 0,8 cm, trái 2,8 cm, phải 1,8 cm như file mẫu.
+    // Mẫu khác: thể thức văn bản hành chính (trên/dưới 2 cm, trái 3 cm, phải 2 cm).
+    if (official) b.setPageWidth(595.3).setPageHeight(841.9).setMarginTop(56.7).setMarginBottom(22.7).setMarginLeft(79.4).setMarginRight(51.05);
+    else b.setPageWidth(595.3).setPageHeight(841.9).setMarginTop(56.7).setMarginBottom(56.7).setMarginLeft(85).setMarginRight(56.7);
     d.saveAndClose();
-    const res = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + tmp.id + '/export?mimeType=' + encodeURIComponent(mimes[fmt]), {
+    const exportAs = (id, mime) => UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + id + '/export?mimeType=' + encodeURIComponent(mime), {
       headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true
     });
+    let res = exportAs(tmp.id, official ? mimes.docx : mimes[fmt]);
     if (res.getResponseCode() !== 200) throw new Error('Google Docs không xuất được file (HTTP ' + res.getResponseCode() + ').');
     const fileName = clip_(name, 120).replace(/[\\/:*?"<>|]+/g, '-') + '.' + fmt;
     log_(c.email, 'export', meta.email || c.email, fileName + ' · ' + (meta.template || '') + ' · ' + (meta.sections || ''));
-    const blob=res.getBlob();
+    let blob = res.getBlob();
+    if (official) {
+      // Đánh số trang giữa lề trên như mẫu: chèn trường PAGE vào .docx; PDF được dựng lại từ chính file .docx đó.
+      try { blob = docxPageNumbers_(blob, fileName); } catch (e) {}
+      if (fmt === 'pdf') {
+        const tmp2 = Drive.Files.create({ name: 'tmp-export-pdf-' + Date.now(), mimeType: MimeType.GOOGLE_DOCS, parents: [rootFolder_().getId()] }, blob.setContentType(mimes.docx));
+        try { res = exportAs(tmp2.id, mimes.pdf); if (res.getResponseCode() !== 200) throw new Error('Google Docs không xuất được PDF (HTTP ' + res.getResponseCode() + ').'); blob = res.getBlob(); }
+        finally { try { DriveApp.getFileById(tmp2.id).setTrashed(true); } catch (e) {} }
+      }
+    }
     const archive=fmt==='pdf' && meta.template!=='blank' && meta.template!=='shortlist' ? persistExport_(c,blob,fileName,meta) : null;
     return { name: fileName, mime: mimes[fmt], data: Utilities.base64Encode(blob.getBytes()), archive:archive };
   } finally {
     try { DriveApp.getFileById(tmp.id).setTrashed(true); } catch (e) {}
   }
+}
+/** Thêm số trang (trường PAGE, căn giữa) vào đầu trang của file .docx. Thao tác trên chuỗi XML, có kiểm thử riêng. */
+function docxPatchPageNumbers_(parts) {
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main', R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  let doc = parts['word/document.xml'], rels = parts['word/_rels/document.xml.rels'], types = parts['[Content_Types].xml'];
+  if (!doc || !rels || !types || !/<w:sectPr\b/.test(doc)) throw new Error('docx không đúng cấu trúc.');
+  if (!/xmlns:r=/.test(doc.slice(0, 2000))) doc = doc.replace(/<w:document\b/, '<w:document xmlns:r="' + R + '"');
+  doc = doc.replace(/<w:headerReference\b[^>]*w:type="default"[^>]*\/>/g, '');
+  // headerReference phải là phần tử đầu tiên trong w:sectPr cuối (section của thân văn bản).
+  const i = doc.lastIndexOf('<w:sectPr'), j = doc.indexOf('>', i), ref = '<w:headerReference w:type="default" r:id="rIdFxPage"/>';
+  doc = doc.charAt(j - 1) === '/' ? doc.slice(0, j - 1) + '>' + ref + '</w:sectPr>' + doc.slice(j + 1) : doc.slice(0, j + 1) + ref + doc.slice(j + 1);
+  if (rels.indexOf('rIdFxPage') < 0) rels = rels.replace('</Relationships>', '<Relationship Id="rIdFxPage" Type="' + R + '/header" Target="header_fx.xml"/></Relationships>');
+  if (types.indexOf('/word/header_fx.xml') < 0) types = types.replace('</Types>', '<Override PartName="/word/header_fx.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/></Types>');
+  const run = x => '<w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="24"/></w:rPr>' + x + '</w:r>';
+  const hdr = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="' + W + '" xmlns:r="' + R + '"><w:p><w:pPr><w:jc w:val="center"/></w:pPr>' +
+    run('<w:fldChar w:fldCharType="begin"/>') + run('<w:instrText xml:space="preserve"> PAGE </w:instrText>') + run('<w:fldChar w:fldCharType="separate"/>') + run('<w:t>1</w:t>') + run('<w:fldChar w:fldCharType="end"/>') + '</w:p></w:hdr>';
+  return Object.assign({}, parts, { 'word/document.xml': doc, 'word/_rels/document.xml.rels': rels, '[Content_Types].xml': types, 'word/header_fx.xml': hdr });
+}
+function docxPageNumbers_(blob, name) {
+  const files = Utilities.unzip(blob.setContentType('application/zip')), keys = ['word/document.xml', 'word/_rels/document.xml.rels', '[Content_Types].xml'], parts = {};
+  files.forEach(f => { if (keys.indexOf(f.getName()) >= 0) parts[f.getName()] = f.getDataAsString('UTF-8'); });
+  const out = docxPatchPageNumbers_(parts);
+  const rest = files.filter(f => keys.indexOf(f.getName()) < 0 && f.getName() !== 'word/header_fx.xml');
+  const all = rest.concat(Object.keys(out).filter(k => keys.indexOf(k) >= 0 || k === 'word/header_fx.xml').map(k => Utilities.newBlob(out[k], 'application/xml', k)));
+  return Utilities.zip(all, name).setContentType('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
 }
 /** Ghi nhật ký cho bản xuất làm ở trình duyệt (.doc, in PDF, CSV). */
 function api_logExport(token, meta) {
