@@ -2161,54 +2161,29 @@ function api_renderDoc(token, html, name, format, meta) {
     // Mẫu khác: thể thức văn bản hành chính (trên/dưới 2 cm, trái 3 cm, phải 2 cm).
     if (official) b.setPageWidth(595.3).setPageHeight(841.9).setMarginTop(56.7).setMarginBottom(22.7).setMarginLeft(79.4).setMarginRight(51.05);
     else b.setPageWidth(595.3).setPageHeight(841.9).setMarginTop(56.7).setMarginBottom(56.7).setMarginLeft(85).setMarginRight(56.7);
+    // Google Docs có thể bỏ qua font-family trong HTML → ép toàn bộ chữ (kể cả trong bảng) về Times New Roman
+    docFont_(b, 'Times New Roman');
     d.saveAndClose();
     const exportAs = (id, mime) => UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + id + '/export?mimeType=' + encodeURIComponent(mime), {
       headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true
     });
-    let res = exportAs(tmp.id, official ? mimes.docx : mimes[fmt]);
+    // Xuất thẳng từ Google Docs (không sửa lại file nén, không chuyển đổi vòng) để file luôn hợp lệ và giữ đúng font
+    const res = exportAs(tmp.id, mimes[fmt]);
     if (res.getResponseCode() !== 200) throw new Error('Google Docs không xuất được file (HTTP ' + res.getResponseCode() + ').');
     const fileName = clip_(name, 120).replace(/[\\/:*?"<>|]+/g, '-') + '.' + fmt;
     log_(c.email, 'export', meta.email || c.email, fileName + ' · ' + (meta.template || '') + ' · ' + (meta.sections || ''));
-    let blob = res.getBlob();
-    if (official) {
-      // Đánh số trang giữa lề trên như mẫu: chèn trường PAGE vào .docx; PDF được dựng lại từ chính file .docx đó.
-      try { blob = docxPageNumbers_(blob, fileName); } catch (e) {}
-      if (fmt === 'pdf') {
-        const tmp2 = Drive.Files.create({ name: 'tmp-export-pdf-' + Date.now(), mimeType: MimeType.GOOGLE_DOCS, parents: [rootFolder_().getId()] }, blob.setContentType(mimes.docx));
-        try { res = exportAs(tmp2.id, mimes.pdf); if (res.getResponseCode() !== 200) throw new Error('Google Docs không xuất được PDF (HTTP ' + res.getResponseCode() + ').'); blob = res.getBlob(); }
-        finally { try { DriveApp.getFileById(tmp2.id).setTrashed(true); } catch (e) {} }
-      }
-    }
+    const blob = res.getBlob();
     const archive=fmt==='pdf' && meta.template!=='blank' && meta.template!=='shortlist' ? persistExport_(c,blob,fileName,meta) : null;
     return { name: fileName, mime: mimes[fmt], data: Utilities.base64Encode(blob.getBytes()), archive:archive };
   } finally {
     try { DriveApp.getFileById(tmp.id).setTrashed(true); } catch (e) {}
   }
 }
-/** Thêm số trang (trường PAGE, căn giữa) vào đầu trang của file .docx. Thao tác trên chuỗi XML, có kiểm thử riêng. */
-function docxPatchPageNumbers_(parts) {
-  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main', R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
-  let doc = parts['word/document.xml'], rels = parts['word/_rels/document.xml.rels'], types = parts['[Content_Types].xml'];
-  if (!doc || !rels || !types || !/<w:sectPr\b/.test(doc)) throw new Error('docx không đúng cấu trúc.');
-  if (!/xmlns:r=/.test(doc.slice(0, 2000))) doc = doc.replace(/<w:document\b/, '<w:document xmlns:r="' + R + '"');
-  doc = doc.replace(/<w:headerReference\b[^>]*w:type="default"[^>]*\/>/g, '');
-  // headerReference phải là phần tử đầu tiên trong w:sectPr cuối (section của thân văn bản).
-  const i = doc.lastIndexOf('<w:sectPr'), j = doc.indexOf('>', i), ref = '<w:headerReference w:type="default" r:id="rIdFxPage"/>';
-  doc = doc.charAt(j - 1) === '/' ? doc.slice(0, j - 1) + '>' + ref + '</w:sectPr>' + doc.slice(j + 1) : doc.slice(0, j + 1) + ref + doc.slice(j + 1);
-  if (rels.indexOf('rIdFxPage') < 0) rels = rels.replace('</Relationships>', '<Relationship Id="rIdFxPage" Type="' + R + '/header" Target="header_fx.xml"/></Relationships>');
-  if (types.indexOf('/word/header_fx.xml') < 0) types = types.replace('</Types>', '<Override PartName="/word/header_fx.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/></Types>');
-  const run = x => '<w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="24"/></w:rPr>' + x + '</w:r>';
-  const hdr = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="' + W + '" xmlns:r="' + R + '"><w:p><w:pPr><w:jc w:val="center"/></w:pPr>' +
-    run('<w:fldChar w:fldCharType="begin"/>') + run('<w:instrText xml:space="preserve"> PAGE </w:instrText>') + run('<w:fldChar w:fldCharType="separate"/>') + run('<w:t>1</w:t>') + run('<w:fldChar w:fldCharType="end"/>') + '</w:p></w:hdr>';
-  return Object.assign({}, parts, { 'word/document.xml': doc, 'word/_rels/document.xml.rels': rels, '[Content_Types].xml': types, 'word/header_fx.xml': hdr });
-}
-function docxPageNumbers_(blob, name) {
-  const files = Utilities.unzip(blob.setContentType('application/zip')), keys = ['word/document.xml', 'word/_rels/document.xml.rels', '[Content_Types].xml'], parts = {};
-  files.forEach(f => { if (keys.indexOf(f.getName()) >= 0) parts[f.getName()] = f.getDataAsString('UTF-8'); });
-  const out = docxPatchPageNumbers_(parts);
-  const rest = files.filter(f => keys.indexOf(f.getName()) < 0 && f.getName() !== 'word/header_fx.xml');
-  const all = rest.concat(Object.keys(out).filter(k => keys.indexOf(k) >= 0 || k === 'word/header_fx.xml').map(k => Utilities.newBlob(out[k], 'application/xml', k)));
-  return Utilities.zip(all, name).setContentType('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+/** Đặt font cho mọi đoạn văn trong tài liệu, kể cả trong ô bảng (Google Docs có thể bỏ qua font-family khi nhập HTML). */
+function docFont_(el, font) {
+  const T = DocumentApp.ElementType, t = el.getType();
+  if (t === T.PARAGRAPH || t === T.LIST_ITEM) { try { if (el.getText()) el.editAsText().setFontFamily(font); } catch (e) {} return; }
+  if (el.getNumChildren) for (let i = 0; i < el.getNumChildren(); i++) docFont_(el.getChild(i), font);
 }
 /** Ghi nhật ký cho bản xuất làm ở trình duyệt (.doc, in PDF, CSV). */
 function api_logExport(token, meta) {

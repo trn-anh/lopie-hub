@@ -2417,7 +2417,7 @@ const CV = {
   dots: n => '.'.repeat(n || 40),
   /** Ô trống: chỉ mẫu trống (để điền tay) mới in dòng chấm; bản xuất thật để trống cho gọn. */
   blank: false,
-  v(val, n) { return val ? `<b style="font-weight:normal">${esc(val)}</b>` : CV.blank ? `<span style="color:#000">${CV.dots(n)}</span>` : ''; },
+  v(val, n) { return val ? `<span>${esc(val)}</span>` : CV.blank ? `<span style="color:#000">${CV.dots(n)}</span>` : ''; },
   /**
    * Nhiều dòng "Nhãn: giá trị" trong MỘT bảng không viền, lưới 20 cột (mỗi cột 5%).
    * Word và Google Docs giữ đúng bố cục nhờ thuộc tính width/colspan (không dựa vào CSS).
@@ -2474,7 +2474,7 @@ function cvDateText(st) {
 /** Đầu văn bản. Mẫu Bộ = Phụ lục III, Thông tư 09/2017/TT-BGDĐT (ngày 04/4/2017). */
 function cvHeader(m, opts, st) {
   if (opts.tpl === 'bgd') {
-    const cell = (w, inner) => `<td width="${w}%" valign="top" align="center" style="${CV.F};width:${w}%;text-align:center;vertical-align:top;border-bottom:1px solid #000;padding:0 0 6pt">${inner}</td>`;
+    const cell = (w, inner) => `<td width="${w}%" valign="top" align="center" style="${CV.F};width:${w}%;text-align:center;vertical-align:top;padding:0 0 4pt">${inner}</td>`;
     const ctr = (t, x) => `<p style="${CV.F};text-align:center;margin:0;${x || ''}">${t}</p>`;
     const school = SL.trim(st.SCHOOL_NAME);
     return CV.p('<b>BỘ GIÁO DỤC VÀ ĐÀO TẠO</b>', 'margin:0 0 12pt') +
@@ -2485,7 +2485,7 @@ function cvHeader(m, opts, st) {
       cell(45, (CV.blank || !school ? ctr('BỘ, NGÀNH (Cơ quan chủ quản nếu có)') + ctr('<b>TÊN CƠ SỞ ĐÀO TẠO</b>') : ctr('BỘ GIÁO DỤC VÀ ĐÀO TẠO') + ctr('<b>' + esc(school.toUpperCase()) + '</b>')) + ctr('———————', 'line-height:1')) +
       cell(55, ctr('<b>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</b>') + ctr('<b>Độc lập - Tự do - Hạnh phúc</b>') + ctr('————————————', 'line-height:1') +
         ctr(`<i>${esc(st.CITY || '…….')}, ${cvDateText(st)}</i>`, 'margin-top:4pt')) +
-      `</tr></table>` + CV.center('LÝ LỊCH KHOA HỌC', 'font-weight:bold;margin:12pt 0 0');
+      `</tr></table><hr style="border:0;border-top:1px solid #000;height:0;margin:4pt 0 0">` + CV.center('LÝ LỊCH KHOA HỌC', 'font-weight:bold;margin:12pt 0 0');
   }
   const code = st.FORM_CODE ? `<p style="${CV.F};font-size:11pt;font-style:italic;margin:0 0 6pt">${esc(st.FORM_CODE)}</p>` : '';
   return code +
