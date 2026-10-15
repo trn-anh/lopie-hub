@@ -1242,7 +1242,7 @@ const MockAPI = (function () {
     const brand = { APP_NAME: st.APP_NAME, ORG_NAME: st.ORG_NAME, SCHOOL_NAME: st.SCHOOL_NAME, CITY: st.CITY, FORM_CODE: st.FORM_CODE, PUB_CRITERIA: st.PUB_CRITERIA };
     const e = who();
     const accounts = db.Users.map(u => ({ email: u.email, name: u.name, unit: u.unit, roles: u.roles, status: u.status }));
-    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.66-demo' });
+    if (!e) return wait({ state: 'login', demo: true, settings: brand, accounts, version: '1.65-demo' });
     const u = db.Users.find(x => x.email === e);
     if (!u) {
       const x = { email: e, name: e.split('@')[0], roles: '', unit: '', status: 'pending', createdAt: nowStr(), createdBy: 'request', lastLogin: nowStr(), requestedRole: 'expert' };
@@ -1253,7 +1253,7 @@ const MockAPI = (function () {
     if (u.status === 'rejected') return wait({ state: 'denied', rejected: true, note: u.reviewNote, email: e, settings: brand, accounts, contact: ADMIN });
     if (u.status !== 'active') return wait({ state: 'disabled', email: e, settings: brand, accounts, contact: ADMIN });
     const rs = roles(u), w = rs.indexOf(ws) >= 0 ? ws : rs.indexOf('admin') >= 0 ? 'admin' : rs[0];
-    const base = { state: 'ok', demo: true, version: '1.66-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
+    const base = { state: 'ok', demo: true, version: '1.65-demo', ws: w, roles: rs, me: { email: u.email, name: u.name, unit: u.unit }, settings: Object.assign({}, brand, w === 'admin' ? st : {}), catalog: catalog(), levelRules: rules(st), today: todayISO() };
     if (w === 'admin') {
       const der = {}; db.Users.forEach(x => { der[x.email] = derived(x.email); });
       return wait(Object.assign(base, { users: db.Users, profiles: db.Profiles, derivedAll: der, credentials: db.Credentials, pubs: db.Publications, needsAll: db.Needs, work: db.Work, projects: db.Projects, awards: db.Awards, rounds: db.Rounds, matchesAll: db.Matches, files: db.Files, supportAll: db.Support }));
@@ -1552,7 +1552,7 @@ const API = IS_GAS ? ServerAPI : MockAPI;
    ===================================================================== */
 /** Vai trò của người đứng tên đối với công bố (khớp PUB_ROLES_ ở Code.gs). */
 const PUB_ROLES = ['Chủ nhiệm đề tài', 'Thành viên thực hiện', 'Giảng viên hướng dẫn'];
-const UI_VERSION = '1.66';
+const UI_VERSION = '1.65';
 { const bi = document.querySelector('.build-info'); if (bi) bi.textContent = 'Fluxience · v' + UI_VERSION; }
 const S = { data: null, ws: '', route: { page: '', q: {} }, busy: 0, ui: {}, drafts: {}, formDrafts: {}, structuredDirty: {} };
 let sessionRevision = 0, refreshRevision = 0;
@@ -3824,6 +3824,20 @@ ACT['acc-do'] = async el => {
 /* ---------- Thống kê công bố ---------- */
 /* v1.64 · Chuyển động: mục mới hiện ra trượt nhẹ + số liệu đếm lên. Tắt hết khi người dùng chọn giảm chuyển động. */
 const REDUCED = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+/* Biểu đồ & thanh xếp hạng: chạy hiệu ứng khi ≥35% khung lọt vào màn hình (không chạy ngầm lúc còn khuất). */
+const chartIO = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); chartIO.unobserve(e.target); } }), { threshold: .35 }) : null;
+function revealCharts(root) {
+  $$('.yc:not(.in), .sum-rank:not(.in)', root || document).forEach(c => { if (!chartIO || REDUCED()) c.classList.add('in'); else { chartIO.unobserve(c); chartIO.observe(c); } });
+}
+// Biểu đồ được vẽ lại (lưu, tải lại dữ liệu…) cũng tự được theo dõi, không bao giờ kẹt ở trạng thái rỗng
+new MutationObserver(ms => { if (ms.some(m => [...m.addedNodes].some(n => n.nodeType === 1 && (n.matches('.yc, .sum-rank') || n.querySelector('.yc, .sum-rank'))))) revealCharts(document.getElementById('main')); }).observe(document.getElementById('main'), { childList: true, subtree: true });
+/* Bấm logo → về Tổng quan của không gian đang dùng */
+document.addEventListener('click', e => {
+  const brand = e.target.closest && e.target.closest('.side .brand'); if (!brand || !S.data || S.data.state !== 'ok') return;
+  e.preventDefault(); closeDrawer && closeDrawer(); document.body.classList.remove('nav-open');
+  if (location.hash === '#/overview') { WS.cur.overview = { page: 'overview', q: {} }; wsRenderSection('overview', 'overview', {}); wsActivate('overview', true); window.scrollTo({ top: 0, behavior: REDUCED() ? 'auto' : 'smooth' }); }
+  else location.hash = '#/overview';
+});
 function animateIn(el) {
   if (!el || REDUCED()) return;
   el.classList.remove('fx-enter'); void el.offsetWidth; el.classList.add('fx-enter');
@@ -3837,7 +3851,8 @@ function animateIn(el) {
     const tick = now => { const k = Math.max(0, Math.min(1, (now - t0) / dur)), e = 1 - Math.pow(1 - k, 3); n.textContent = Math.round(end * e) + rest; if (k < 1) requestAnimationFrame(tick); else { n.textContent = txt; n._counting = false; } };
     requestAnimationFrame(tick);
   });
-  $$('.yc-bar, .sum-row em', el).forEach(b => { b.style.animation = 'none'; void b.offsetWidth; b.style.animation = ''; });
+  $$('.yc, .sum-rank', el).forEach(c => c.classList.remove('in'));   // phát lại khi quay lại trang
+  revealCharts(el);
 }
 /** v1.64 · Biểu đồ cột "Công bố theo năm": một chuỗi, một màu (brand), gốc ở trục 0, đầu cột bo 4px,
     rê chuột/chạm để xem số; chỉ ghi số trên cột cao nhất và năm gần nhất; có bảng số liệu thay thế. */
@@ -3854,7 +3869,7 @@ function yearChart(pubs, title, id) {
   return `<div class="card yc" id="${esc(id || '')}"><div class="row between"><div><div class="h3">${esc(title)}</div><div class="caption">${total} công bố · ${esc(shown[0])}–${esc(last)}${all.length > 12 ? ' (12 năm gần nhất)' : ''}</div></div></div>
     <div class="yc-plot" role="img" aria-label="${esc(title + ': ' + shown.map(y => y + ' có ' + (by[y] || 0)).join(', '))}">
       <div class="yc-grid" aria-hidden="true">${ticks.slice().reverse().map(t => `<div><span>${t}</span></div>`).join('')}</div>
-      <div class="yc-bars">${shown.map((y, i) => { const v = by[y] || 0, h = v / ceil * 100; return `<div class="yc-col" tabindex="0" data-tip="${esc(y + ': ' + v + ' công bố')}"><div class="yc-bar-wrap">${(y === top || y === last) && v ? `<b class="yc-val" style="bottom:calc(${h}% + 4px)">${v}</b>` : ''}<i class="yc-bar" style="height:${h}%;animation-delay:${250 + i * 80}ms"></i></div><small>${esc(y)}</small></div>`; }).join('')}</div>
+      <div class="yc-bars">${shown.map((y, i) => { const v = by[y] || 0, h = v / ceil * 100; return `<div class="yc-col" tabindex="0" data-tip="${esc(y + ': ' + v + ' công bố')}"><div class="yc-bar-wrap">${(y === top || y === last) && v ? `<b class="yc-val" style="bottom:calc(${h}% + 4px);--d:${i * 90 + 650}ms">${v}</b>` : ''}<i class="yc-bar" style="height:${h}%;--d:${i * 90}ms"></i></div><small>${esc(y)}</small></div>`; }).join('')}</div>
     </div>
     <details class="yc-table"><summary>Xem dạng bảng</summary><table class="tbl"><thead><tr><th>Năm</th><th>Số công bố</th></tr></thead><tbody>${shown.slice().reverse().map(y => `<tr><td>${esc(y)}</td><td class="num">${by[y] || 0}</td></tr>`).join('')}</tbody></table></details></div>`;
 }
@@ -4461,6 +4476,8 @@ boot();
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--fx-chart:#3d8fd6;--fx-chart-hover:#5aa0dd}}
 :root[data-theme="dark"]{--fx-chart:#3d8fd6;--fx-chart-hover:#5aa0dd}
 .yc{margin-bottom:16px}
+.side .brand{cursor:pointer;user-select:none}
+.side .brand:hover #appName{color:var(--sl-brand-default)}
 .yc-plot{position:relative;height:220px;margin-top:16px;padding-left:28px}
 .yc-grid{position:absolute;inset:0 0 24px 28px;display:flex;flex-direction:column;justify-content:space-between}
 .yc-grid div{position:relative;border-top:1px solid var(--sl-border-default);height:0}
@@ -4469,14 +4486,20 @@ boot();
 .yc-bars{position:absolute;inset:0 0 0 28px;display:flex;gap:2px;align-items:stretch}
 .yc-col{flex:1;display:flex;flex-direction:column;min-width:0;outline:none;position:relative;cursor:default}
 .yc-bar-wrap{position:relative;flex:1;margin-bottom:6px;display:flex;align-items:flex-end;justify-content:center}
-.yc-bar{display:block;width:min(70%,36px);min-height:0;background:var(--fx-chart);border-radius:4px 4px 0 0;transform-origin:bottom;animation:ycgrow .9s cubic-bezier(.2,.7,.2,1) both}
+/* Cột chỉ mọc khi biểu đồ lọt vào màn hình (.in): lần lượt trái → phải, rồi mới hiện số */
+.yc-bar{display:block;width:min(70%,36px);min-height:0;background:var(--fx-chart);border-radius:4px 4px 0 0;transform-origin:bottom;transform:scaleY(0);transition:transform .85s cubic-bezier(.22,1,.36,1) var(--d,0ms),background-color .15s ease}
+.yc.in .yc-bar{transform:scaleY(1)}
+.yc-grid div{opacity:0;transition:opacity .5s ease}.yc.in .yc-grid div{opacity:1}
 .yc-col:hover .yc-bar,.yc-col:focus-visible .yc-bar{background:var(--fx-chart-hover)}
-.yc-val{position:absolute;left:0;right:0;text-align:center;font-size:12px;font-weight:600;color:var(--sl-text-primary)}
+.yc-val{position:absolute;left:0;right:0;text-align:center;font-size:12px;font-weight:600;color:var(--sl-text-primary);opacity:0;transform:translateY(6px);transition:opacity .4s ease var(--d,0ms),transform .4s ease var(--d,0ms)}
+.yc.in .yc-val{opacity:1;transform:none}
 .yc-col small{height:18px;text-align:center;font-size:11.5px;color:var(--sl-text-secondary);white-space:nowrap;overflow:hidden}
 .yc-col[data-tip]:hover::after,.yc-col[data-tip]:focus-visible::after{content:attr(data-tip);position:absolute;bottom:calc(100% - 8px);left:50%;transform:translateX(-50%);padding:6px 10px;border-radius:8px;background:var(--sl-text-primary);color:var(--sl-bg-surface);font-size:12.5px;white-space:nowrap;box-shadow:var(--sl-shadow);z-index:5;pointer-events:none}
 .yc-table{margin-top:10px}.yc-table summary{cursor:pointer;font-size:13px;color:var(--sl-brand-ink)}.yc-table table{margin-top:8px;max-width:320px}
 @keyframes ycgrow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
-.sum-row em{transform-origin:left;animation:fxbar 1s cubic-bezier(.2,.7,.2,1) .35s both}
+.sum-row em{transform-origin:left;transform:scaleX(0);transition:transform .9s cubic-bezier(.22,1,.36,1)}
+.sum-rank.in .sum-row em{transform:scaleX(1)}
+.sum-rank .sum-row:nth-child(2) em{transition-delay:.05s}.sum-rank .sum-row:nth-child(3) em{transition-delay:.15s}.sum-rank .sum-row:nth-child(4) em{transition-delay:.25s}.sum-rank .sum-row:nth-child(5) em{transition-delay:.35s}.sum-rank .sum-row:nth-child(6) em{transition-delay:.45s}
 @keyframes fxbar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 /* v1.64 · chuyển động giao diện */
 .fx-enter{animation:fxfade .35s ease both}
@@ -4495,7 +4518,7 @@ dialog[open]::backdrop{animation:fxfade .22s ease}
 .toast{animation:fxtoast .28s cubic-bezier(.2,.7,.2,1)}
 @keyframes fxtoast{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 #workLock.show .wl-card{animation:fxdlg .2s ease}
-@media (prefers-reduced-motion: reduce){.fx-card,.fx-enter,.yc-bar,.sum-row em,dialog[open],dialog[open]::backdrop,.toast,#workLock.show .wl-card{animation:none!important}.sum-tile:hover,.kpi:hover,.btn:active{transform:none}}
+@media (prefers-reduced-motion: reduce){.yc-bar,.yc-val,.yc-grid div,.sum-row em{transition:none!important}.fx-card,.fx-enter,dialog[open],dialog[open]::backdrop,.toast,#workLock.show .wl-card{animation:none!important}.sum-tile:hover,.kpi:hover,.btn:active{transform:none}}
 /* Thẻ tài khoản: hiện đủ email (xuống dòng khi dài), vai trò ở dòng riêng */
 #meUnit{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;margin-top:6px!important}
 #meUnit .acct-mail{display:block;margin:0;overflow-wrap:anywhere;word-break:break-all;white-space:normal}
