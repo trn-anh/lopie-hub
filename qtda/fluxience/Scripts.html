@@ -1,4 +1,4 @@
-<script>window.SL_BOOT_TOKEN='__SL_BOOT_TOKEN__';window.SL_PORTAL='__SL_PORTAL__';</script>
+<script>window.SL_BOOT_TOKEN='__SL_BOOT_TOKEN__';window.SL_PORTAL='__SL_PORTAL__';window.FX_LOAD_ERR=[];window.addEventListener('error',function(e){if(!e||e.error&&!(e.error instanceof SyntaxError)&&!/Syntax|Unexpected|Invalid/.test(e.message||''))return;var src='';try{src=(document.documentElement.outerHTML.split('\n')[(e.lineno||1)-1]||'').slice(Math.max(0,(e.colno||1)-90),(e.colno||1)+90);}catch(x){}window.FX_LOAD_ERR.push({msg:String(e.message||''),line:e.lineno,col:e.colno,src:src});},true);</script>
 <script>
 /* ==== SL-SHARED BEGIN ====
  * Quy tắc dùng chung cho máy chủ (Code.gs) và giao diện (Index.html).
@@ -1027,6 +1027,7 @@ const todayISO = () => { const d = new Date(); return d.getFullYear() + '-' + SL
 const nowStr = () => { const d = new Date(); return todayISO() + ' ' + SL.pad(d.getHours()) + ':' + SL.pad(d.getMinutes()) + ':' + SL.pad(d.getSeconds()); };
 const uid = p => (p || '') + Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 1296).toString(36).toUpperCase();
 const clone = o => JSON.parse(JSON.stringify(o));
+function honor(d) { return [d.title === 'Giáo sư' ? 'GS.' : d.title === 'Phó Giáo sư' ? 'PGS.' : '', d.degree === 'Tiến sĩ khoa học' ? 'TSKH.' : d.degree === 'Tiến sĩ' ? 'TS.' : d.degree === 'Thạc sĩ' ? 'ThS.' : ''].filter(Boolean).join(' '); }
 function badge(text, tone) { return `<span class="badge ${tone || ''}">${esc(text)}</span>`; }
 function pubBadge(p) {
   if (p.metaStatus === 'needs_fix') return badge('Cần bổ sung thông tin', 'warning');
@@ -2120,7 +2121,7 @@ function wsRenderSection(root, page, q) {
 }
 function wsError(body, root, e) {
   console.error(e);
-  body.innerHTML = `<div class="card" role="alert"><h2 class="h2">Chưa mở được mục này</h2><p class="muted">${esc(e.message || 'Đã xảy ra lỗi khi tải nội dung.')}</p><button type="button" class="btn primary" data-act="ws-retry" data-root="${esc(root)}">${icon('refresh', 'sm')}Thử lại</button></div>`;
+  body.innerHTML = `<div class="card" role="alert"><h2 class="h2">Chưa mở được mục này</h2><p class="muted">${esc(e.message || 'Đã xảy ra lỗi khi tải nội dung.')}</p>${loadErrHTML()}<button type="button" class="btn primary" data-act="ws-retry" data-root="${esc(root)}">${icon('refresh', 'sm')}Thử lại</button></div>`;
 }
 function wsBuild(target) {
   if (WS.spy) WS.spy();
@@ -2229,9 +2230,14 @@ function route() {
   } catch (e) { reportRouteError(e); }
   finally { S.ui.keepScroll = false; }
 }
+/** Lỗi cú pháp lúc tải mã (VD: Apps Script xử lý sai một đoạn script): in rõ dòng/đoạn mã để chụp gửi người phát triển. */
+function loadErrHTML() {
+  const le = (window.FX_LOAD_ERR || []).map(x => `<li><b>${esc(x.msg)}</b> · dòng ${esc(x.line)}:${esc(x.col)}${x.src ? `<br><code style="font-size:12px;word-break:break-all">${esc(x.src)}</code>` : ''}</li>`).join('');
+  return le ? '<div class="callout warn" style="margin:0 0 16px"><div><b>Lỗi khi tải mã giao diện (chụp màn hình phần này gửi người phát triển):</b><ul style="margin:6px 0 0;padding-left:18px">' + le + '</ul></div></div>' : '';
+}
 function reportRouteError(e) {
   console.error(e);
-  $('#main').innerHTML = '<div class="card" role="alert"><h1 class="h2">Chưa mở được trang này</h1><p class="muted">' + esc(e.message || 'Đã xảy ra lỗi khi tải nội dung.') + '</p><div class="row"><button type="button" class="btn primary" data-act="route-retry">Thử lại</button><button type="button" class="btn" data-act="go" data-page="overview">Về tổng quan</button></div></div>';
+  $('#main').innerHTML = '<div class="card" role="alert"><h1 class="h2">Chưa mở được trang này</h1><p class="muted">' + esc(e.message || 'Đã xảy ra lỗi khi tải nội dung.') + '</p>' + loadErrHTML() + '<div class="row"><button type="button" class="btn primary" data-act="route-retry">Thử lại</button><button type="button" class="btn" data-act="go" data-page="overview">Về tổng quan</button></div></div>';
 }
 function pageHead(title, sub, actions) {
   return `<div class="page-head"><div><h1 class="h1">${esc(title)}</h1>${sub ? `<p>${sub}</p>` : ''}</div>${actions ? `<div class="actions">${actions}</div>` : ''}</div>`;
@@ -2373,7 +2379,6 @@ function cvFileName(m, tpl) {
   const name = SL.fold(m.p.fullName || 'ho-so').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
   return ({ bgd: 'Ly_lich_khoa_hoc', v2: 'Ly_lich_khoa_hoc_v2', cv: 'CV_hoc_thuat', intro: 'Ho_so_gioi_thieu' }[tpl] || 'Ho_so') + '_' + name;
 }
-function honor(d) { return [d.title === 'Giáo sư' ? 'GS.' : d.title === 'Phó Giáo sư' ? 'PGS.' : '', d.degree === 'Tiến sĩ khoa học' ? 'TSKH.' : d.degree === 'Tiến sĩ' ? 'TS.' : d.degree === 'Thạc sĩ' ? 'ThS.' : ''].filter(Boolean).join(' '); }
 
 /* ---------- Mảnh ghép (inline style để Word / Google Docs giữ nguyên định dạng) ---------- */
 const CV_FONT = (pt, lh) => `font-family:'Times New Roman',Times,serif;font-size:${pt}pt;line-height:${lh};color:#000`;
@@ -2638,7 +2643,7 @@ function shortlistBody(round, rows, st) {
 function wordDoc(body, title, tpl) {
   const official = tpl === 'bgd' || tpl === 'blank';
   return '﻿<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><\u0074itle>' + esc(title) +
-    '<\/\u0074itle><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument><\/xml><![endif]--><\u0073tyle>@page WordSection1{size:21cm 29.7cm;' + (official ? 'margin:2cm 1.8cm 0.8cm 2.8cm;mso-header-margin:1.27cm;mso-footer-margin:1.27cm;mso-header:fxh' : 'margin:2cm 2cm 2cm 3cm;mso-header-margin:1cm;mso-footer-margin:1cm') + '}div.WordSection1{page:WordSection1}body{font-family:"Times New Roman";font-size:' + (official ? 12 : 13) + 'pt}table{border-collapse:collapse}p{margin:0}<\/\u0073tyle><\/head><body><div class="WordSection1">' + body + (official ? '<table style="margin-left:50in"><tr><td><div style="mso-element:header" id="fxh"><p align="center" style="text-align:center;margin:0"><span style="mso-field-code:\' PAGE \'"><span style="mso-no-proof:yes">1</span></span></p></div></td></tr></table>' : '') + '</div><\/body><\/html>';
+    '<\/\u0074itle><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument><\/xml><![endif]--><\u0073tyle>@page WordSection1{size:21cm 29.7cm;' + (official ? 'margin:2cm 1.8cm 0.8cm 2.8cm;mso-header-margin:1.27cm;mso-footer-margin:1.27cm;mso-header:fxh' : 'margin:2cm 2cm 2cm 3cm;mso-header-margin:1cm;mso-footer-margin:1cm') + '}div.WordSection1{page:WordSection1}body{font-family:"Times New Roman";font-size:' + (official ? 12 : 13) + 'pt}table{border-collapse:collapse}p{margin:0}<\/\u0073tyle><\/head><body><div class="WordSection1">' + body + (official ? '<table style="margin-left:50in"><tr><td><div style="mso-element:header" id="fxh"><p align="center" style="text-align:center;margin:0"><span style="mso-field-code:&#39; PAGE &#39;"><span style="mso-no-proof:yes">1</span></span></p></div></td></tr></table>' : '') + '</div><\/body><\/html>';
 }
 function gdocHtml(body, title) { return '<html><head><meta charset="utf-8"><\u0074itle>' + esc(title) + '<\/\u0074itle><\/head><body>' + body + '<\/body><\/html>'; }
 function printBody(body) {
