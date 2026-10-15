@@ -989,7 +989,7 @@ var FXRules = (function () {
     ['from', 'level', 'role'].forEach(function(k){ if(!SL.trim(x[k])) throw new Error('Đề tài: cần năm bắt đầu, cấp đề tài và trách nhiệm.'); });
     year(x.from, 'Năm bắt đầu', today);
     if (x.to) { year(x.to, 'Năm hoàn thành', today); if (+x.to < +x.from) throw new Error('Năm hoàn thành không được trước năm bắt đầu.'); }
-    if (['unknown', 'ongoing', 'awaiting', 'accepted'].indexOf(x.acceptance || '') < 0) throw new Error('Chọn tình trạng thực hiện/nghiệm thu.');
+    if (['unknown', 'ongoing', 'awaiting', 'accepted', 'failed'].indexOf(x.acceptance || '') < 0) throw new Error('Chọn tình trạng thực hiện/nghiệm thu.');
     if (x.acceptance === 'accepted') {
       x.acceptanceDate = date(x.acceptanceDate, 'Ngày nghiệm thu', today, true);
       if (!x.to || +x.acceptanceDate.slice(0,4) < +x.from || +x.acceptanceDate.slice(0,4) < +x.to) throw new Error('Đã nghiệm thu: cần năm hoàn thành và ngày nghiệm thu từ năm hoàn thành trở đi.');
@@ -997,6 +997,10 @@ var FXRules = (function () {
       if (x.acceptanceRule === 'three_levels' && results.indexOf(x.acceptanceResult) < 0) throw new Error('Quy chế 3 mức: Xuất sắc / Đạt / Không đạt.');
       if (['three_levels', 'institution'].indexOf(x.acceptanceRule) < 0) throw new Error('Quy chế nghiệm thu không hợp lệ.');
       if (!SL.trim(x.acceptanceBasis)) throw new Error('Cần số/tên quy chế hoặc biên bản làm căn cứ xếp loại.');
+    } else if (x.acceptance === 'failed') {
+      // Không được nghiệm thu: ngày và căn cứ (biên bản) không bắt buộc nhưng nếu có thì phải hợp lệ
+      if (x.acceptanceDate) x.acceptanceDate = date(x.acceptanceDate, 'Ngày họp nghiệm thu', today, true);
+      x.acceptanceRule = ''; x.acceptanceResult = 'Không được nghiệm thu'; x.acceptanceBasis = SL.trim(x.acceptanceBasis || '');
     } else { ['acceptanceDate','acceptanceRule','acceptanceResult','acceptanceBasis'].forEach(function(k){x[k]='';}); }
     if (x.evidenceUrl && !/^https:\/\/[^\s]+$/.test(x.evidenceUrl)) throw new Error('Link minh chứng đề tài cần bắt đầu bằng https://.');
     return x;
@@ -2123,6 +2127,29 @@ function api_saveUser(token, u) {
     upsert_('Users', row, 'email');
     log_(a.email, cur ? 'user_update' : 'user_add', email, row.roles + ' · ' + row.status);
     return { ok: true, user: row };
+  });
+}
+/** Hủy tài khoản: xóa khỏi Users (đăng nhập lại sẽ thành yêu cầu truy cập "chờ duyệt" như người mới).
+    purge = true: xóa luôn dữ liệu hồ sơ (hồ sơ, học vị, công tác, đề tài, công bố, giải thưởng, nhu cầu, đề xuất)
+    và chuyển file của người đó vào thùng rác Drive (khôi phục được trong 30 ngày). Nhật ký vẫn giữ. */
+const USER_DATA_TABLES_ = ['Profiles', 'Credentials', 'Work', 'Projects', 'Publications', 'Awards', 'Needs', 'Matches', 'Files'];
+function api_deleteUser(token, email, purge) {
+  const a = admin_(token);
+  email = String(email || '').trim().toLowerCase();
+  if (email === a.email) throw new Error('Không tự hủy tài khoản của chính mình.');
+  if (email === ownerEmail_()) throw new Error('Không hủy tài khoản chủ hệ thống.');
+  return tx_(() => {
+    const users = T_('Users'), x = users.find(r => r.email === email);
+    if (!x) throw new Error('Không tìm thấy tài khoản ' + email + '.');
+    if (rolesOf_(x).indexOf('admin') >= 0 && users.filter(r => r.status === 'active' && rolesOf_(r).indexOf('admin') >= 0 && r.email !== email).length === 0) throw new Error('Cần giữ ít nhất một quản trị viên đang hoạt động.');
+    save_('Users', users.filter(r => r.email !== email));
+    let removed = 0;
+    if (purge) {
+      T_('Files').filter(f => f.email === email).forEach(f => { try { DriveApp.getFileById(f.id).setTrashed(true); } catch (e) {} });
+      USER_DATA_TABLES_.forEach(name => { const all = T_(name), keep = all.filter(r => r.email !== email); removed += all.length - keep.length; if (keep.length !== all.length) save_(name, keep); });
+    }
+    log_(a.email, 'user_delete', email, purge ? 'Xóa tài khoản và ' + removed + ' bản ghi hồ sơ' : 'Xóa tài khoản, giữ dữ liệu hồ sơ');
+    return { ok: true, removed: removed };
   });
 }
 /** Duyệt yêu cầu truy cập: cấp vai trò (approve) hoặc từ chối kèm lý do (reject). */
